@@ -2,19 +2,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
+from collections import namedtuple
 
 class EpiCompartment:
 
-    def __init__(self, name, initial_count):
+    def __init__(self, name, initial_val):
         self.name = name
-        self.initial_value = initial_count
+        self.initial_value = initial_val
 
-        self.current_count = initial_count  # current day's values
-        self.previous_count = []  # previous day's values
+        self.current_day_val = initial_val  # current day's values
+        self.current_timestep_val = initial_val
+        self.previous_day_val = []  # previous day's values
 
-        self.history_counts_list = []  # historical values
+        self.history_vals_list = []  # historical values
 
-        self.__class__.varnames_dict["name"] = self
+        self.__class__.varnames_dict[name] = self
 
     varnames_dict = {}
 
@@ -33,19 +35,14 @@ class SimulationParams:
 
 class ImmunityTracker:
 
-    def __init__(self, starting_variant_prevance):
-        self.current_variant_prevalence = starting_variant_prevance
-
-
-# class InfluenzaModel:
-#     pass
+    def __init__(self, current_variant_prevalence):
+        self.current_variant_prevalence = current_variant_prevalence
 
 
 def create_basic_compartment_history_plot(sim_model):
     plt.figure(1)
-
-    for name, epi_compartment in sim_model.name_to_epi_compartment_dict.items():
-        plt.plot(epi_compartment.history_counts_list, label=name)
+    for name, compartment in sim_model.name_to_compartment_dict.items():
+        plt.plot(compartment.history_vals_list, label=name)
     plt.legend()
     plt.xlabel("Days")
     plt.xlim([0, 400])
@@ -55,8 +52,8 @@ def create_basic_compartment_history_plot(sim_model):
 
 def create_name_to_object_dict(set_of_objects):
     '''
-    :param set_of_objects (set of objects -- each object must have the attribute "name"):
-    :return: dictionary with each key equal to "name" attribute of object
+    :param set_of_objects (set of objects): each object must have the attribute "name":
+    :return: (dict): with each key equal to "name" attribute of object
         and each value returning the corresponding object itself
     '''
 
@@ -68,7 +65,23 @@ def create_name_to_object_dict(set_of_objects):
     return name_to_object_dict
 
 
-class SEIRModel:
+def create_name_to_val_dict(name_to_object_dict, val_name):
+    '''
+    :param name_to_object_dict (dict): each object must have attribute val_name
+    :param val_name (str): attribute name corresponding to value that is saved in dictionary
+    :return: (dict): with each key equal to "name" attribute of object
+        and each value returning the object's attribute val_name
+    '''
+
+    name_to_val_dict = {}
+
+    for name in name_to_object_dict.keys():
+        name_to_val_dict[name] = name_to_object_dict[val_name]
+
+    return name_to_object_dict
+
+
+class BaseModel:
 
     def __init__(self, epi_params, simulation_params):
 
@@ -76,85 +89,98 @@ class SEIRModel:
         self.simulation_params = simulation_params
 
         self.current_simulation_day = epi_params.starting_simulation_day
+        self.name_to_compartment_dict = EpiCompartment.varnames_dict
 
-        name_to_initial_count_dict = epi_params.name_to_initial_count_dict
+        for name, compartment in self.name_to_compartment_dict.items():
+            setattr(self, name, compartment)
 
-        S = EpiCompartment("S", name_to_initial_count_dict["S"])
-        E = EpiCompartment("E", name_to_initial_count_dict["E"])
-        I = EpiCompartment("I", name_to_initial_count_dict["I"])
-        R = EpiCompartment("R", name_to_initial_count_dict["R"])
+    def set_previous_day_vals_to_current_day_vals(self):
+        for compartment in self.name_to_compartment_dict.values():
+            compartment.previous_day_val = compartment.current_day_val
 
-        self.name_to_epi_compartment_dict = create_name_to_object_dict((S, E, I, R))
+    def update_current_day_vals(self):
+        for compartment in self.name_to_compartment_dict.values():
+            compartment.current_day_val = compartment.current_timestep_val
+
+    def update_history_vals_list(self):
+        for compartment in self.name_to_compartment_dict.values():
+            compartment.history_vals_list.append(compartment.current_day_val)
 
     def simulate_until_time_period(self, last_simulation_day):
-
-        timesteps_per_day = self.simulation_params.timesteps_per_day
-        name_to_epi_compartment_dict = self.name_to_epi_compartment_dict
-
         # last_simulation_day is inclusive endpoint
         for day in range(last_simulation_day + 1):
-            self.simulate_next_day(timesteps_per_day)
+            self.simulate_next_day()
 
-            # breakpoint()
+    def simulate_next_day(self):
 
-            for epi_compartment in name_to_epi_compartment_dict.values():
-                epi_compartment.history_counts_list.append(epi_compartment.current_count)
+        start_time = time.time()
 
-    def simulate_next_day(self, timesteps_per_day):
+        self.set_previous_day_vals_to_current_day_vals()
+
+        self.simulate_next_timesteps(num_timesteps=self.simulation_params.timesteps_per_day)
+
+        self.update_current_day_vals()
+        self.update_history_vals_list()
+
+        print(time.time() - start_time)
+
+    def simulate_next_timesteps(self, num_timesteps):
 
         # Create short-hand for instance attribute access
-        name_to_epi_compartment_dict = self.name_to_epi_compartment_dict
         epi_params = self.epi_params
 
         beta = epi_params.beta
         phi = epi_params.phi
         gamma = epi_params.gamma
         kappa = epi_params.kappa
-        total_count = epi_params.total_count
+        eta = epi_params.eta
+        total_population_val = epi_params.total_population_val
 
-        for epi_compartment in name_to_epi_compartment_dict.values():
-            epi_compartment.previous_count = epi_compartment.current_count
+        S = self.S.current_day_val
+        E = self.E.current_day_val
+        I = self.I.current_day_val
+        R = self.R.current_day_val
 
-        S = name_to_epi_compartment_dict["S"].current_count
-        E = name_to_epi_compartment_dict["E"].current_count
-        I = name_to_epi_compartment_dict["I"].current_count
-        R = name_to_epi_compartment_dict["R"].current_count
-
-        for timestep in range(timesteps_per_day):
+        for timestep in range(num_timesteps):
             # Generate (possibly random) transition variables
-            newly_exposed_count = (beta * phi * S * I / total_count) / timesteps_per_day
-            newly_infected_count = kappa * E / timesteps_per_day
-            newly_recovered_count = gamma * I / timesteps_per_day
+            newly_exposed_val = (beta * phi * S * I / total_population_val) / num_timesteps
+            newly_infected_val = kappa * E / num_timesteps
+            newly_recovered_val = gamma * I / num_timesteps
+            newly_susceptible_val = eta * R / num_timesteps
 
             # Update counts in each compartment using discretized timestep
-            S = S - newly_exposed_count
-            E = E + newly_exposed_count - newly_infected_count
-            I = I + newly_infected_count - newly_recovered_count
-            R = R + newly_recovered_count
+            S = S - newly_exposed_val + newly_susceptible_val
+            E = E + newly_exposed_val - newly_infected_val
+            I = I + newly_infected_val - newly_recovered_val
+            R = R + newly_recovered_val - newly_susceptible_val
 
-        name_to_epi_compartment_dict["S"].current_count = S
-        name_to_epi_compartment_dict["E"].current_count = E
-        name_to_epi_compartment_dict["I"].current_count = I
-        name_to_epi_compartment_dict["R"].current_count = R
+            self.S.current_timestep_val = S
+            self.E.current_timestep_val = E
+            self.I.current_timestep_val = I
+            self.R.current_timestep_val = R
+
 
 if __name__ == "__main__":
     start_time = time.time()
+
+    EpiCompartment("S", np.array([8500000]))
+    EpiCompartment("E", np.array([0]))
+    EpiCompartment("I", np.array([20]))
+    EpiCompartment("R", np.array([0]))
+
     # EpiParams and SimulationParams will eventually be read in from a file
     epi_params = EpiParams()
     epi_params.beta = 0.65
     epi_params.phi = 1
     epi_params.gamma = 0.2
     epi_params.kappa = 0.331
-    epi_params.eta = 0
-    epi_params.total_count = np.array([8500000])
-    epi_params.name_to_initial_count_dict = {"S": np.array([8500000]),
-                                             "E": np.array([0]),
-                                             "I": np.array([20]),
-                                             "R": np.array([0])}
+    epi_params.eta = 0.05
+    epi_params.total_population_val = np.array([8500000])
 
     simulation_params = SimulationParams(timesteps_per_day=7)
 
-    simple_model = SEIRModel(epi_params, simulation_params)
+    simple_model = BaseModel(epi_params,
+                             simulation_params)
 
     print(time.time() - start_time)
 
