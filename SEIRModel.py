@@ -19,10 +19,10 @@ def compute_next_E_val(previous_E_val, newly_exposed_val, newly_infected_val):
 
 start_time = time.time()
 
-EpiCompartment("S", np.array([8500000]))
-EpiCompartment("E", np.array([0]))
-EpiCompartment("I", np.array([20]))
-EpiCompartment("R", np.array([0]))
+list_of_epi_compartments = [EpiCompartment("S", np.array([8500000])),
+                            EpiCompartment("E", np.array([0])),
+                            EpiCompartment("I", np.array([20])),
+                            EpiCompartment("R", np.array([0]))]
 
 # EpiParams and SimulationParams will eventually be read in from a file
 epi_params = namedtuple("EpiParams",
@@ -83,7 +83,7 @@ print(time.time() - start_time)
 
 start_time = time.time()
 
-simple_model = SimpleModel(epi_params, simulation_params)
+simple_model = SimpleModel(list_of_epi_compartments, None, epi_params, simulation_params)
 
 simple_model.simulate_until_time_period(last_simulation_day=365)
 
