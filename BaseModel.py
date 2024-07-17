@@ -4,44 +4,51 @@ import time
 
 from collections import namedtuple
 
+class TransitionProbabilityDistributions:
 
-def compute_deterministic_realization(base_count, rate):
-    return base_count * rate
+    def compute_deterministic_realization(base_count, rate, RNG):
+        return base_count * rate
 
-
-def compute_binomial_realization(base_count, rate):
-    return
+    def compute_binomial_realization(base_count, rate, RNG):
+        return RNG.binomial(n=int(base_count), p=rate)
 
 
 class TransitionVariable:
 
-    def __init__(self, name, transition_type):
+    def __init__(self, name, transition_type, base_count_epi_compartment_name):
         self.name = name
         self.transition_type = transition_type
-        self.compute_realization = None
+        self.base_count_epi_compartment_name = base_count_epi_compartment_name
+
+        self.current_realization = 0
+        self.current_rate = 0
 
         if transition_type == "deterministic":
-            self.compute_realization = compute_deterministic_realization
+            self.compute_realization = TransitionProbabilityDistributions.compute_deterministic_realization
         elif transition_type == "binomial":
-            self.compute_realization = compute_binomial_realization
+            self.compute_realization = TransitionProbabilityDistributions.compute_binomial_realization
+
+
+class EpiParams:
+
+    def __init__(self):
+        pass
 
 
 class EpiCompartment:
-    __slots__ = ("name", "initial_val", "current_day_val",
-                 "current_timestep_val", "previous_day_val",
-                 "history_vals_list")
+    __slots__ = ("name", "initial_val", "inflow_varnames_list", "outflow_varnames_list", "current_val", "history_vals_list")
 
-    def __init__(self, name, initial_val):
+    def __init__(self, name, initial_val, inflow_varnames_list, outflow_varnames_list):
         self.name = name
         self.initial_val = initial_val
 
-        self.current_day_val = initial_val  # current day's values
-        self.current_timestep_val = initial_val
-        self.previous_day_val = []  # previous day's values
+        self.inflow_varnames_list = inflow_varnames_list
+        self.outflow_varnames_list = outflow_varnames_list
+
+        self.current_val = initial_val  # current day's values
 
         self.history_vals_list = []  # historical values
 
-    varnames_dict = {}
 
 
 class SimulationParams:
@@ -74,56 +81,54 @@ class BaseModel:
 
         self.current_simulation_day = simulation_params.starting_simulation_day
 
-        self.name_to_compartment_dict = {}
+        self.name_to_epi_compartment_dict = {}
+        self.name_to_transition_variable_dict = {}
 
         for compartment in self.list_of_epi_compartments:
-            self.name_to_compartment_dict[compartment.name] = compartment
+            self.name_to_epi_compartment_dict[compartment.name] = compartment
             setattr(self, compartment.name, compartment)
+
+        for transition_variable in self.list_of_transition_variables:
+            self.name_to_transition_variable_dict[transition_variable.name] = transition_variable
+            setattr(self, transition_variable.name, transition_variable)
 
         self.bit_generator = np.random.MT19937(seed=RNG_seed)
         self.RNG = np.random.Generator(self.bit_generator)
 
-    def set_previous_day_vals_to_current_day_vals(self):
-        for compartment in self.name_to_compartment_dict.values():
-            compartment.previous_day_val = compartment.current_day_val
-
-    def update_current_day_vals(self):
-        for compartment in self.name_to_compartment_dict.values():
-            compartment.current_day_val = compartment.current_timestep_val
+        self.name_to_transition_rate_dict = {}
 
     def update_history_vals_list(self):
-        for compartment in self.name_to_compartment_dict.values():
-            compartment.history_vals_list.append(compartment.current_day_val)
-
-    def create_compartment_attribute_dict(self, key_string, value_string):
-        d = {}
-        for object in self.list_of_epi_compartments:
-            d[getattr(object, key_string)] = getattr(object, value_string)
-        return d
-
-    def update_compartments_from_dict(self, name_to_val_dict, attribute_to_update):
-        for name, val in name_to_val_dict.items():
-            setattr(self.name_to_compartment_dict[name], attribute_to_update, name)
+        for compartment in self.list_of_epi_compartments:
+            compartment.history_vals_list.append(compartment.current_val.copy())
 
     def simulate_until_time_period(self, last_simulation_day):
         # last_simulation_day is inclusive endpoint
         for day in range(last_simulation_day + 1):
-            self.simulate_next_day()
-
-    def simulate_next_day(self):
-
-        # start_time = time.time()
-
-        self.set_previous_day_vals_to_current_day_vals()
-
-        self.simulate_discretized_timesteps()
-
-        self.update_current_day_vals()
-        self.update_history_vals_list()
-
-        # print(time.time() - start_time)
+            self.simulate_discretized_timesteps()
+            self.update_history_vals_list()
 
     def simulate_discretized_timesteps(self):
+
+        for timestep in range(self.simulation_params.timesteps_per_day):
+
+            self.update_discretized_rates()
+
+            for transition_variable in self.list_of_transition_variables:
+                transition_variable.current_realization = transition_variable.compute_realization(
+                    getattr(self, transition_variable.base_count_epi_compartment_name).current_val,
+                    transition_variable.current_rate,
+                    self.RNG)
+
+            for compartment in self.list_of_epi_compartments:
+                total_inflow = 0
+                total_outflow = 0
+                for varname in compartment.inflow_varnames_list:
+                    total_inflow += self.name_to_transition_variable_dict[varname].current_realization
+                for varname in compartment.outflow_varnames_list:
+                    total_outflow += self.name_to_transition_variable_dict[varname].current_realization
+                compartment.current_val += (total_inflow - total_outflow)
+
+    def update_discretized_rates(self):
 
         pass
 
