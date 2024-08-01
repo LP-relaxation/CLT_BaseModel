@@ -58,12 +58,6 @@ class SimulationParams:
         self.starting_simulation_day = starting_simulation_day
 
 
-class ImmunityTracker:
-
-    def __init__(self, current_variant_prevalence):
-        self.current_variant_prevalence = current_variant_prevalence
-
-
 class BaseModel:
 
     def __init__(self,
@@ -97,13 +91,25 @@ class BaseModel:
 
         self.name_to_transition_rate_dict = {}
 
+        self.current_day_counter = 0
+
+    def reset(self):
+        for compartment in self.list_of_epi_compartments:
+            compartment.current_val = compartment.initial_val
+            compartment.history_vals_list = []
+        for transition_variable in self.list_of_transition_variables:
+            transition_variable.current_rate = 0
+            transition_variable.current_realization = 0
+        self.current_day_counter = 0
+
     def update_history_vals_list(self):
         for compartment in self.list_of_epi_compartments:
             compartment.history_vals_list.append(compartment.current_val.copy())
 
     def simulate_until_time_period(self, last_simulation_day):
+
         # last_simulation_day is inclusive endpoint
-        for day in range(last_simulation_day + 1):
+        while self.current_day_counter < last_simulation_day + 1:
             self.simulate_discretized_timesteps()
             self.update_history_vals_list()
 
@@ -127,6 +133,8 @@ class BaseModel:
                 for varname in compartment.outflow_varnames_list:
                     total_outflow += self.name_to_transition_variable_dict[varname].current_realization
                 compartment.current_val += (total_inflow - total_outflow)
+
+        self.current_day_counter += 1
 
     def update_discretized_rates(self):
 

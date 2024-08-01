@@ -1,0 +1,21 @@
+For Dave & Sonny meeting
+
+- IMHO: must be relentless about...
+- Taking initiative and communicating it 
+- Staying on task: avoiding unnecessary "related" projects, avoiding unnecessary features
+- High quality code: readability and quality assurance using unit tests -- we are telling people that they need to do things differently -- have to set a good example to build trust and also demonstrate good practices
+
+- Houston, Dallas, El Paso, Austin
+
+- Must be able to handle immunoSEIRS model
+- Must be able to handle metapopulation, age-risk groups
+
+- Immediate use cases: bird flu, city-level transmission modeling
+- Immediate users: Linda, Sonny, Remy, Susan, Kaiming, Shraddha, Anass
+- Potential future users: public health officials?
+
+- 2 tests:
+-- Are the users happy with the code?
+-- Are Kaiming, Shraddha, and Anass able to use this code instead of their old code?
+
+- Modeling, calibration, optimization
