@@ -22,6 +22,12 @@ def compute_new_recovered_rate(gamma, num_timesteps):
 def compute_new_susceptible_rate(eta, num_timesteps):
     return eta / num_timesteps
 
+def compute_new_hospitalized_rate(zeta, num_timesteps):
+    return zeta / num_timesteps
+
+def compute_new_dead_rate(nu, num_timesteps):
+    return nu / num_timesteps
+
 
 class SimpleModel(BaseModel):
 
@@ -51,6 +57,16 @@ class SimpleModel(BaseModel):
             num_timesteps=num_timesteps
         )
 
+        self.new_hospitalized.current_rate = compute_new_hospitalized_rate(
+            zeta = self.epi_params.zeta,
+            num_timesteps=num_timesteps
+        )
+
+        self.new_dead.current_rate = compute_new_dead_rate(
+            nu = self.epi_params.nu,
+            num_timesteps=num_timesteps
+        )
+
 
 start_time = time.time()
 
@@ -60,23 +76,29 @@ start_time = time.time()
 S = EpiCompartment("S", np.array([8500000.0 - 20.0]), ["new_susceptible"], ["new_exposed"])
 E = EpiCompartment("E", np.array([0.0]), ["new_exposed"], ["new_infected"])
 I = EpiCompartment("I", np.array([20.0]), ["new_infected"], ["new_recovered"])
+H = EpiCompartment("H", np.array([0.0]), ["new_hospitalized"], ["new_dead", "new_recovered"])
+D = EpiCompartment("D", np.array([0.0]), ["new_dead"], [])
 R = EpiCompartment("R", np.array([0.0]), ["new_recovered"], ["new_susceptible"])
 
 new_susceptible = TransitionVariable("new_susceptible", "deterministic", R)
 new_exposed = TransitionVariable("new_exposed", "deterministic", S)
 new_infected = TransitionVariable("new_infected", "deterministic", E)
-new_recovered = TransitionVariable("new_recovered", "deterministic", I)
+new_hospitalized = TransitionVariable("new_hospitalized", "deterministic", I)
+new_dead = TransitionVariable("new_dead", "deterministic", H)
+new_recovered = TransitionVariable("new_recovered", "deterministic", H, [new_dead])
 
-epi_compartments_list = [S, E, I, R]
+epi_compartments_list = [S, E, I, H, D, R]
 
-transition_variables_list = [new_susceptible, new_exposed, new_infected, new_recovered]
+transition_variables_list = [new_susceptible, new_exposed, new_infected, new_hospitalized, new_dead, new_recovered]
 
 epi_params = EpiParams()
 epi_params.beta = 0.65
 epi_params.phi = 1
-epi_params.gamma = 0.2
+epi_params.gamma = 0.2 # recovery rate
 epi_params.kappa = 0.331
-epi_params.eta = 0.05
+epi_params.eta = 0.05 # new susceptible rate
+epi_params.zeta = 0.03 # hospitalization rate
+epi_params.nu = 0.01 # death rate
 epi_params.total_population_val = np.array([8500000.0])
 
 simulation_params = SimulationParams(timesteps_per_day=7)

@@ -10,15 +10,19 @@ class TestDeterministicLogic(unittest.TestCase):
 
     def setUp(self) -> None:
 
-        self.list_of_epi_compartments = [EpiCompartment("S", np.array([8500000.0 - 20.0]), ["newly_susceptible"], ["newly_exposed"]),
-                                    EpiCompartment("E", np.array([0.0]), ["newly_exposed"], ["newly_infected"]),
-                                    EpiCompartment("I", np.array([20.0]), ["newly_infected"], ["newly_recovered"]),
-                                    EpiCompartment("R", np.array([0.0]), ["newly_recovered"], ["newly_susceptible"])]
+        S = EpiCompartment("S", np.array([8500000.0 - 20.0]), ["new_susceptible"], ["new_exposed"])
+        E = EpiCompartment("E", np.array([0.0]), ["new_exposed"], ["new_infected"])
+        I = EpiCompartment("I", np.array([20.0]), ["new_infected"], ["new_recovered"])
+        R = EpiCompartment("R", np.array([0.0]), ["new_recovered"], ["new_susceptible"])
 
-        self.list_of_transition_variables = [TransitionVariable("newly_susceptible", "deterministic", "R"),
-                                        TransitionVariable("newly_exposed", "deterministic", "S"),
-                                        TransitionVariable("newly_infected", "deterministic", "E"),
-                                        TransitionVariable("newly_recovered", "deterministic", "I")]
+        new_susceptible = TransitionVariable("new_susceptible", "deterministic", R)
+        new_exposed = TransitionVariable("new_exposed", "deterministic", S)
+        new_infected = TransitionVariable("new_infected", "deterministic", E)
+        new_recovered = TransitionVariable("new_recovered", "deterministic", I)
+
+        self.epi_compartments_list = [S, E, I, R]
+
+        self.transition_variables_list = [new_susceptible, new_exposed, new_infected, new_recovered]
 
         self.epi_params = EpiParams()
         self.epi_params.beta = 0.65
@@ -34,8 +38,8 @@ class TestDeterministicLogic(unittest.TestCase):
 
         self.epi_params.beta = 0
 
-        simple_model = SimpleModel(self.list_of_epi_compartments,
-                                   self.list_of_transition_variables,
+        simple_model = SimpleModel(self.epi_compartments_list,
+                                   self.transition_variables_list,
                                    self.epi_params,
                                    self.simulation_params)
 
@@ -46,8 +50,8 @@ class TestDeterministicLogic(unittest.TestCase):
 
     def test_is_population_constant(self):
 
-        simple_model = SimpleModel(self.list_of_epi_compartments,
-                                   self.list_of_transition_variables,
+        simple_model = SimpleModel(self.epi_compartments_list,
+                                   self.transition_variables_list,
                                    self.epi_params,
                                    self.simulation_params)
 
@@ -55,7 +59,7 @@ class TestDeterministicLogic(unittest.TestCase):
             simple_model.simulate_until_time_period(last_simulation_day=day)
 
             current_sum_all_compartments = 0
-            for compartment in simple_model.list_of_epi_compartments:
+            for compartment in simple_model.epi_compartments_list:
                 current_sum_all_compartments += np.sum(compartment.current_val)
 
             self.assertTrue(np.abs(current_sum_all_compartments - np.sum(self.epi_params.total_population_val)) < 1e-6)

@@ -8,7 +8,7 @@ For Dave & Sonny meeting
 - Houston, Dallas, El Paso, Austin
 
 - Must be able to handle immunoSEIRS model
-- Must be able to handle metapopulation, age-risk groups
+- Must be able to handle metapopulation, age-risk groups, immunity, vaccination
 
 - Immediate use cases: bird flu, city-level transmission modeling
 - Immediate users: Linda, Sonny, Remy, Susan, Kaiming, Shraddha, Anass

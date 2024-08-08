@@ -15,18 +15,35 @@ class TransitionProbabilityDistributions:
 
 class TransitionVariable:
 
-    def __init__(self, name, transition_type, base_count_epi_compartment_name):
+    def __init__(self, name, transition_type, base_count_epi_compartment, transition_variable_dependencies_list=[]):
+
+        __slots__ = ("name",
+                     "transition_type",
+                     "base_count_epi_compartment",
+                     "transition_variable_dependencies_list")
+
         self.name = name
         self.transition_type = transition_type
-        self.base_count_epi_compartment_name = base_count_epi_compartment_name
+        self.base_count_epi_compartment = base_count_epi_compartment
 
-        self.current_realization = 0
-        self.current_rate = 0
+        self.current_realization = None
+        self.current_rate = None
+
+        self.transition_variable_dependencies_list = transition_variable_dependencies_list
 
         if transition_type == "deterministic":
             self.compute_realization = TransitionProbabilityDistributions.compute_deterministic_realization
         elif transition_type == "binomial":
             self.compute_realization = TransitionProbabilityDistributions.compute_binomial_realization
+
+    @property
+    def base_count(self):
+        return self.base_count_epi_compartment.current_val - \
+               sum(t_var.current_realization for t_var in self.transition_variable_dependencies_list)
+
+    def reset(self):
+        self.current_realization = None
+        self.current_rate = None
 
 
 class EpiParams:
@@ -36,7 +53,12 @@ class EpiParams:
 
 
 class EpiCompartment:
-    __slots__ = ("name", "initial_val", "inflow_varnames_list", "outflow_varnames_list", "current_val", "history_vals_list")
+    __slots__ = ("name",
+                 "initial_val",
+                 "inflow_varnames_list",
+                 "outflow_varnames_list",
+                 "current_val",
+                 "history_vals_list")
 
     def __init__(self, name, initial_val, inflow_varnames_list, outflow_varnames_list):
         self.name = name
@@ -50,7 +72,6 @@ class EpiCompartment:
         self.history_vals_list = []  # historical values
 
 
-
 class SimulationParams:
 
     def __init__(self, timesteps_per_day, starting_simulation_day=0):
@@ -61,14 +82,14 @@ class SimulationParams:
 class BaseModel:
 
     def __init__(self,
-                 list_of_epi_compartments,
-                 list_of_transition_variables,
+                 epi_compartments_list,
+                 transition_variables_list,
                  epi_params,
                  simulation_params,
                  RNG_seed=50505050):
 
-        self.list_of_epi_compartments = list_of_epi_compartments
-        self.list_of_transition_variables = list_of_transition_variables
+        self.list_of_epi_compartments = epi_compartments_list
+        self.list_of_transition_variables = transition_variables_list
 
         self.epi_params = epi_params
         self.simulation_params = simulation_params
@@ -98,8 +119,8 @@ class BaseModel:
             compartment.current_val = compartment.initial_val
             compartment.history_vals_list = []
         for transition_variable in self.list_of_transition_variables:
-            transition_variable.current_rate = 0
-            transition_variable.current_realization = 0
+            transition_variable.current_rate = None
+            transition_variable.current_realization = None
         self.current_day_counter = 0
 
     def update_history_vals_list(self):
@@ -121,7 +142,7 @@ class BaseModel:
 
             for transition_variable in self.list_of_transition_variables:
                 transition_variable.current_realization = transition_variable.compute_realization(
-                    getattr(self, transition_variable.base_count_epi_compartment_name).current_val,
+                    transition_variable.base_count,
                     transition_variable.current_rate,
                     self.RNG)
 
@@ -133,6 +154,9 @@ class BaseModel:
                 for varname in compartment.outflow_varnames_list:
                     total_outflow += self.name_to_transition_variable_dict[varname].current_realization
                 compartment.current_val += (total_inflow - total_outflow)
+
+            for transition_variable in self.list_of_transition_variables:
+                transition_variable.reset()
 
         self.current_day_counter += 1
 
