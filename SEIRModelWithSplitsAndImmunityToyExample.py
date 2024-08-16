@@ -85,7 +85,7 @@ new_exposed = TransitionVariable("new_exposed", "deterministic", S)
 new_infected = TransitionVariable("new_infected", "deterministic", E)
 new_hospitalized = TransitionVariable("new_hospitalized", "deterministic", I)
 new_dead = TransitionVariable("new_dead", "deterministic", H)
-new_recovered = TransitionVariable("new_recovered", "deterministic", H, [new_dead])
+new_recovered = TransitionVariable("new_recovered", "deterministic", H)
 
 epi_compartments_list = [S, E, I, H, D, R]
 
