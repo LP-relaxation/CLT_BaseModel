@@ -1,0 +1,21 @@
+{
+	"beta": 2,
+	"total_population_val": 1e6,
+	"immunity_hosp_increase_factor": 0.1,
+	"immunity_inf_increase_factor": 0.1,
+	"immunity_hosp_saturation_constant": 0.5,
+	"immunity_inf_saturation_constant": 0.5,
+	"waning_factor_hosp": 0.05,
+	"waning_factor_inf": 0.0,
+	"efficacy_immunity_hosp": 0.8,
+	"efficacy_immunity_inf": 0.8,
+	"efficacy_immunity_death": 0.8,
+	"eta": 0.1,
+	"sigma": 0.5,
+	"mu": 0.5,
+	"gamma": 0.1,
+	"zeta": 0.25,
+	"gamma_hosp": 0.17,
+	"pi": 0.17,
+	"nu": 0.03
+}
