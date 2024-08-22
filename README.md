@@ -8,6 +8,9 @@ multiple age groups fairly easily. Adding risk groups is a work
 in progress, and the matrix multiplication becomes more difficult
 in this situation.
 
+Use the **pytest** package to run the test script. The command is 
+pytest -v ImmunoSEIRSModelTests.py for verbose output.
+
 Strategy:
 - BaseModel.py contains the machinery to construct a customizable 
 model from the "base model"

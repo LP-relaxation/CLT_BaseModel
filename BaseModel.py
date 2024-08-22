@@ -55,8 +55,7 @@ class TransitionProbabilityDistributions:
 
         :param RNG: numpy Generator instance,
             argument not used -- only included to create same function
-            signature as other methods in TransitionProbabilityDistributions
-            class for non-jointly distributed random variables
+            signature as compute_binomial_realization
 
         :return: array_like of positive scalars, same shape as base_count and rate,
             returns mean value base_count * p(rate / num_timesteps) with
@@ -98,6 +97,32 @@ class TransitionProbabilityDistributions:
                             p=approx_binomial_probability_from_rate(rate, 1 / num_timesteps))
 
     @classmethod
+    def compute_deterministic_multinomial_realization(cls, base_count, probabilities_list, RNG=None):
+        '''
+        Deterministically computes number transitioning between
+            EpiCompartments in next timestep. Rather than sampling multinomial
+            random variable, returns mean value base_count * probabilities_list
+            with element-wise multiplication.
+
+        :param base_count: array_like of positive integers,
+            corresponding to population counts in an EpiCompartment instance
+
+        :param probabilities_list: array-like of numbers in (0,1), must sum to 1,
+            each element i corresponds to probability of outcome i for each random
+            trial
+
+        :param RNG: numpy Generator instance,
+            argument not used -- only included to create same function
+            signature as compute_multinomial_realization
+
+        :return: array_like of positive scalars, same shape as base_count and rate,
+            returns realization of multinomial random variable with parameters
+            base_count and probabilities_list
+        '''
+
+        return np.array(base_count * np.array(probabilities_list), dtype=int)
+
+    @classmethod
     def compute_multinomial_realization(cls, base_count, probabilities_list, RNG):
         '''
         Using RNG for random number generation, stochastically computes
@@ -108,12 +133,9 @@ class TransitionProbabilityDistributions:
         :param base_count: array_like of positive integers,
             corresponding to population counts in an EpiCompartment instance
 
-        :param rate: array_like of positive scalars,
-            corresponding to rate (events per time) at which people transition
-            between compartments
-
-        :param num_timesteps: positive integer,
-            number of timesteps per day in the simulation
+        :param probabilities_list: array-like of numbers in (0,1), must sum to 1,
+            each element i corresponds to probability of outcome i for each random
+            trial
 
         :param RNG: numpy Generator instance,
             manages random bits to generate random variables
@@ -140,7 +162,8 @@ class TransitionVariableGroup:
     def __init__(self,
                  name,
                  base_count_epi_compartment,
-                 transition_variables_list):
+                 transition_variables_list,
+                 is_stochastic):
         '''
         :param name: string,
             name of transition variable group
@@ -150,8 +173,13 @@ class TransitionVariableGroup:
         :param transition_variable_list: array-like of TransitionVariable objects,
             holds all TransitionVariable objects that outflow from
             base_count_epi_compartment
+        :param is_stochastic: Boolean,
+            True if binomial / multinomial random transitions are used,
+            False if the deterministic means of the binomial / multinomial
+            distributions are used instead of random sampling
         '''
         self.name = name
+        self.is_stochastic = is_stochastic
         self.base_count_epi_compartment = base_count_epi_compartment
         self.transition_variables_list = transition_variables_list
 
@@ -207,9 +235,16 @@ class TransitionVariableGroup:
         base_count = self.base_count_epi_compartment.current_val
 
         # Sample from the multinomial distribution
-        multinomial_realizations_list = TransitionProbabilityDistributions.compute_multinomial_realization(base_count,
-                                                                                                           probabilities_list,
-                                                                                                           RNG)
+        if self.is_stochastic:
+            multinomial_realizations_list = \
+                TransitionProbabilityDistributions.compute_multinomial_realization(base_count,
+                                                                                   probabilities_list,
+                                                                                   RNG)
+        else:
+            multinomial_realizations_list = \
+                TransitionProbabilityDistributions.compute_deterministic_multinomial_realization(base_count,
+                                                                                                 probabilities_list,
+                                                                                                 RNG)
 
         # Since the ith element in probabilities_list corresponds to the ith transition variable
         #   in transition_variables_list, the ith element in multinomial_realizations_list
@@ -223,18 +258,18 @@ class TransitionVariable:
 
     def __init__(self,
                  name,
-                 transition_type,
                  base_count_epi_compartment,
+                 is_stochastic=True,
                  is_jointly_distributed=False):
         '''
         :param name: string,
             name of TransitionVariable
-        :param transition_type: string,
-            must be either "binomial" or "deterministic," depending on
-            usage of binomial random variables or deterministic transitions
-            with the binomial mean n * p as the realization
         :param base_count_epi_compartment: EpiCompartment object,
             compartment from which TransitionVariable flows
+        :param is_stochastic: Boolean,
+            True if binomial / multinomial random transitions are used,
+            False if the deterministic means of the binomial / multinomial
+            distributions are used instead of random sampling
         :param is_jointly_distributed: Boolean,
             True if there are multiple TransitionVariable outflows
             from the same base_count_epi_compartment and
@@ -245,8 +280,8 @@ class TransitionVariable:
         '''
 
         __slots__ = ("name",
-                     "transition_type",
                      "base_count_epi_compartment",
+                     "is_stochastic",
                      "is_jointly_distributed")
 
         self.name = name
@@ -260,10 +295,10 @@ class TransitionVariable:
         if self.is_jointly_distributed:
             pass
         else:
-            if transition_type == "deterministic":
-                self.compute_realization = TransitionProbabilityDistributions.compute_deterministic_binomial_realization
-            elif transition_type == "binomial":
+            if is_stochastic:
                 self.compute_realization = TransitionProbabilityDistributions.compute_binomial_realization
+            else:
+                self.compute_realization = TransitionProbabilityDistributions.compute_deterministic_binomial_realization
 
     @property
     def base_count(self):
@@ -353,10 +388,10 @@ class SimulationParams:
 class BaseModel:
 
     def __init__(self,
-                 transition_type="deterministic",
+                 is_stochastic=True,
                  RNG_seed=np.random.SeedSequence()):
 
-        self.transition_type = transition_type
+        self.is_stochastic = is_stochastic
 
         self.name_to_epi_compartment_dict = {}
         self.name_to_transition_variable_dict = {}
@@ -415,11 +450,11 @@ class BaseModel:
         # If there are multiple outflows from this epi compartment,
         #   create corresponding TransitionVariables where is_jointly_distributed = True
         #   and create a TransitionVariableGroup instance to hold these transition variables
-        if len(outgoing_transition_variable_names_list) > 0:
+        if len(outgoing_transition_variable_names_list) > 1:
             for transition_variable_name in outgoing_transition_variable_names_list:
                 self.add_transition_variable(transition_variable_name,
-                                             self.transition_type,
                                              epi_compartment,
+                                             self.is_stochastic,
                                              True)
 
             # Create a list of transition variable objects to create a TransitionVariableGroup
@@ -429,12 +464,13 @@ class BaseModel:
             # Create a new TransitionVariableGroup with the name "name" [name of epi compartment] + "_out"
             self.add_transition_variable_group(name + "_out",
                                                epi_compartment,
-                                               transition_variables_list)
+                                               transition_variables_list,
+                                               self.is_stochastic)
         else:
             for transition_variable_name in outgoing_transition_variable_names_list:
                 self.add_transition_variable(transition_variable_name,
-                                             self.transition_type,
                                              epi_compartment,
+                                             self.is_stochastic,
                                              False)
 
     def add_transition_variable(self,
@@ -469,7 +505,8 @@ class BaseModel:
     def add_transition_variable_group(self,
                                       name,
                                       base_count_epi_compartment,
-                                      transition_variable_list):
+                                      transition_variable_list,
+                                      is_stochastic):
         '''
         Constructor method for adding TransitionVariableGroup instance to model
 
@@ -489,7 +526,8 @@ class BaseModel:
 
         transition_variable_group = TransitionVariableGroup(name,
                                                             base_count_epi_compartment,
-                                                            transition_variable_list)
+                                                            transition_variable_list,
+                                                            is_stochastic)
 
         self.name_to_transition_variable_group_dict[name] = transition_variable_group
         setattr(self, name, transition_variable_group)
@@ -647,6 +685,7 @@ class BaseModel:
                 for varname in compartment.outflow_transition_variable_names_list:
                     total_outflow += self.name_to_transition_variable_dict[varname].current_realization
                 compartment.current_val += (total_inflow - total_outflow)
+                # print(compartment.name, compartment.current_val)
 
             # Reset transition variable current_realization and current_rate to None
             for tvar in self.name_to_transition_variable_dict.values():

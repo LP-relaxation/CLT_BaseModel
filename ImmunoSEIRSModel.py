@@ -57,7 +57,7 @@ def compute_new_susceptible_rate(eta):
     return eta
 
 
-class ImmunoSEIRModel(BaseModel):
+class ImmunoSEIRSModel(BaseModel):
 
     def compute_change_in_state_variables(self):
         self.population_immunity_hosp.change_in_current_val = compute_change_in_immunity(
@@ -80,11 +80,11 @@ class ImmunoSEIRModel(BaseModel):
 
     def compute_transition_rates(self):
         self.new_exposed.current_rate = compute_new_exposed_rate(
-            beta=self.epi_params.beta,
             I_val=self.I.current_val,
             immunity_against_inf=self.population_immunity_inf.current_val,
             efficacy_against_inf=self.epi_params.efficacy_immunity_inf,
-            total_population_val=self.epi_params.total_population_val)
+            total_population_val=self.epi_params.total_population_val,
+            beta=self.epi_params.beta)
 
         self.new_infected.current_rate = compute_new_infected_rate(
             sigma=self.epi_params.sigma
@@ -120,10 +120,12 @@ class ImmunoSEIRModel(BaseModel):
 
 simulation_params = SimulationParams(timesteps_per_day=7)
 
-simple_model = ImmunoSEIRModel(transition_type="binomial")
+simple_model = ImmunoSEIRSModel()
 
 simple_model.add_epi_params_from_json("ImmunoSEIRSEpiParams.json")
 simple_model.add_simulation_params(simulation_params)
+
+simple_model.epi_params.beta = 0
 
 simple_model.add_epi_compartment("S", np.array([int(1e6) - 2e4]), ["new_susceptible"], ["new_exposed"])
 simple_model.add_epi_compartment("E", np.array([1e4]), ["new_exposed"], ["new_infected"])
@@ -137,4 +139,4 @@ simple_model.add_state_variable("population_immunity_inf", np.array([0.5]))
 
 simple_model.simulate_until_time_period(last_simulation_day=100)
 
-PlotTools.create_basic_compartment_history_plot(simple_model)
+# PlotTools.create_basic_compartment_history_plot(simple_model)
