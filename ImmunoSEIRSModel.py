@@ -1,4 +1,4 @@
-from BaseModel import EpiCompartment, TransitionVariable, OutgoingTransitionVariableGroup, \
+from BaseModel import EpiCompartment, TransitionVariable, TransitionVariableGroup, \
     BaseModel, SimulationParams, EpiParams
 import PlotTools
 import numpy as np
@@ -15,8 +15,8 @@ def compute_change_in_immunity(current_val,
                                total_population_val,
                                saturation_constant,
                                waning_factor):
-    return (immunity_increase_factor * R_val) / (total_population_val *
-                                                 (1 + saturation_constant * current_val)) - waning_factor * current_val
+    return (immunity_increase_factor * R_val) / (total_population_val * (1 + saturation_constant * current_val)) \
+           - waning_factor * current_val
 
 def compute_new_exposed_rate(I_val,
                              immunity_against_inf,
@@ -118,7 +118,6 @@ class ImmunoSEIRModel(BaseModel):
             eta=self.epi_params.eta
         )
 
-
 simulation_params = SimulationParams(timesteps_per_day=7)
 
 simple_model = ImmunoSEIRModel(transition_type="binomial")
@@ -137,7 +136,5 @@ simple_model.add_state_variable("population_immunity_hosp", np.array([0.5]))
 simple_model.add_state_variable("population_immunity_inf", np.array([0.5]))
 
 simple_model.simulate_until_time_period(last_simulation_day=100)
-
-breakpoint()
 
 PlotTools.create_basic_compartment_history_plot(simple_model)
