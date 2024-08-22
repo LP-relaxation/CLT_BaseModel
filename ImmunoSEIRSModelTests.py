@@ -3,11 +3,14 @@ from BaseModel import SimulationParams
 
 import numpy as np
 
+import copy
 import pytest
+
+random_seed = np.random.SeedSequence()
 
 simulation_params = SimulationParams(timesteps_per_day=7)
 
-model = ImmunoSEIRSModel(is_stochastic=False)
+model = ImmunoSEIRSModel(is_stochastic=True,RNG_seed=random_seed)
 
 model.add_epi_params_from_json("ImmunoSEIRSEpiParams.json")
 model.add_simulation_params(simulation_params)
@@ -27,7 +30,7 @@ def test_beta():
     If the transmission rate beta = 0, then S should not decrease over time
     '''
 
-    model.reset()
+    model.reset_simulation()
     model.epi_params.beta = 0
     model.simulate_until_time_period(last_simulation_day=365)
 
@@ -41,7 +44,7 @@ def test_deaths():
         should not decrease over time
     '''
 
-    model.reset()
+    model.reset_simulation()
     model.epi_params.beta = 2
     model.simulate_until_time_period(last_simulation_day=365)
 
@@ -55,7 +58,7 @@ def test_population_is_constant():
         should be constant over time, equal to the initial total population.
     '''
 
-    model.reset()
+    model.reset_simulation()
     model.epi_params.beta = 2
 
     for day in range(365):
@@ -70,12 +73,52 @@ def test_population_is_constant():
 def test_constructor_methods():
     '''
     Based on this model, there should be 6 epi compartments,
-        7 transition variables, and 2 transition variable groups
+        7 transition variables, 2 transition variable groups,
+        and 2 state variables
     '''
 
     assert len(model.name_to_epi_compartment_dict) == 6
     assert len(model.name_to_transition_variable_dict) == 7
     assert len(model.name_to_transition_variable_group_dict) == 2
+    assert len(model.name_to_state_variable_dict) == 2
 
     assert "I_out" in model.name_to_transition_variable_group_dict
     assert "H_out" in model.name_to_transition_variable_group_dict
+
+def test_attribute_assignment():
+    '''
+    Confirm that each epi compartment, transition variable, transition variable group,
+        and state variable are assigned as attributes to the model
+    '''
+
+    for compartment_name in ("S", "E", "I", "H", "R", "D"):
+        assert compartment_name in vars(model)
+
+    for tvar_name in ("new_susceptible", "new_exposed", "new_infected", "new_recovered_home", "new_hosp",
+                      "new_recovered_hosp", "new_dead"):
+        assert tvar_name in vars(model)
+
+    for tvargroup_name in ("I_out", "H_out"):
+        assert tvargroup_name in vars(model)
+
+    for svar_name in ("population_immunity_hosp", "population_immunity_inf"):
+        assert svar_name in vars(model)
+
+def test_reproducible_RNG():
+    '''
+    Resetting the random number generator and simulating should
+        give the same results as the initial run.
+    '''
+
+    model.reset_simulation()
+    model.epi_params.beta = 2
+    model.simulate_until_time_period(100)
+
+    model_copy = copy.deepcopy(model)
+    model_copy.reset_simulation()
+    model_copy.bit_generator = np.random.MT19937(seed=random_seed)
+    model_copy.RNG = np.random.Generator(model_copy.bit_generator)
+    model_copy.simulate_until_time_period(100)
+
+    for compartment_name in model.name_to_epi_compartment_dict.keys():
+        assert getattr(model, compartment_name).history_vals_list == getattr(model_copy, compartment_name).history_vals_list

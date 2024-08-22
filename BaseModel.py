@@ -494,13 +494,13 @@ class BaseModel:
         See TransitionVariable class (__init__ function) for parameters.
         '''
 
-        transition_variable = TransitionVariable(name,
-                                                 transition_type,
-                                                 base_count_epi_compartment,
-                                                 is_jointly_distributed)
+        tvar = TransitionVariable(name,
+                                  transition_type,
+                                  base_count_epi_compartment,
+                                  is_jointly_distributed)
 
-        self.name_to_transition_variable_dict[name] = transition_variable
-        setattr(self, name, transition_variable)
+        self.name_to_transition_variable_dict[name] = tvar
+        setattr(self, name, tvar)
 
     def add_transition_variable_group(self,
                                       name,
@@ -524,13 +524,13 @@ class BaseModel:
         See TransitionVariableGroup class (__init__ function) for parameters.
         '''
 
-        transition_variable_group = TransitionVariableGroup(name,
-                                                            base_count_epi_compartment,
-                                                            transition_variable_list,
-                                                            is_stochastic)
+        tvgroup = TransitionVariableGroup(name,
+                                          base_count_epi_compartment,
+                                          transition_variable_list,
+                                          is_stochastic)
 
-        self.name_to_transition_variable_group_dict[name] = transition_variable_group
-        setattr(self, name, transition_variable_group)
+        self.name_to_transition_variable_group_dict[name] = tvgroup
+        setattr(self, name, tvgroup)
 
     def add_state_variable(self,
                            name,
@@ -573,7 +573,7 @@ class BaseModel:
     def add_simulation_params(self, simulation_params):
         self.simulation_params = simulation_params
 
-    def reset(self):
+    def reset_simulation(self):
         '''
         Reset each compartment, state variable, and transition variable
             to default/starting values
@@ -597,13 +597,13 @@ class BaseModel:
             compartment.current_val = compartment.init_val
             compartment.history_vals_list = []
 
-        for state_variable in self.name_to_state_variable_dict.values():
-            state_variable.current_val = state_variable.init_val
-            state_variable.change_in_current_val = None
+        for svar in self.name_to_state_variable_dict.values():
+            svar.current_val = svar.init_val
+            svar.change_in_current_val = None
 
-        for transition_variable in self.name_to_transition_variable_dict.values():
-            transition_variable.current_rate = None
-            transition_variable.current_realization = None
+        for tvar in self.name_to_transition_variable_dict.values():
+            tvar.current_rate = None
+            tvar.current_realization = None
 
         self.current_day_counter = 0
 
@@ -659,20 +659,20 @@ class BaseModel:
 
             # Obtain transition variable realizations for jointly distributed transition variables
             #   (i.e. when there are multiple transition variable otuflows from an epi compartment)
-            for transition_variable_group in self.name_to_transition_variable_group_dict.values():
-                transition_variable_group.compute_realization(timesteps_per_day, self.RNG)
+            for tvargroup in self.name_to_transition_variable_group_dict.values():
+                tvargroup.compute_realization(timesteps_per_day, self.RNG)
 
             # Obtain transition variable realizations for marginally distributed transition variables
             #   (i.e. when there is only one transition variable outflow from an epi compartment)
             # If transition variable is jointly distributed, then its realization has already
             #   been computed by its transition variable group container previously, so skip it
-            for transition_variable in self.name_to_transition_variable_dict.values():
-                if transition_variable.is_jointly_distributed:
+            for tvar in self.name_to_transition_variable_dict.values():
+                if tvar.is_jointly_distributed:
                     continue
                 else:
-                    transition_variable.current_realization = transition_variable.compute_realization(
-                        transition_variable.base_count,
-                        transition_variable.current_rate,
+                    tvar.current_realization = tvar.compute_realization(
+                        tvar.base_count,
+                        tvar.current_rate,
                         timesteps_per_day,
                         self.RNG)
 
@@ -680,10 +680,10 @@ class BaseModel:
             for compartment in self.name_to_epi_compartment_dict.values():
                 total_inflow = 0
                 total_outflow = 0
-                for varname in compartment.inflow_transition_variable_names_list:
-                    total_inflow += self.name_to_transition_variable_dict[varname].current_realization
-                for varname in compartment.outflow_transition_variable_names_list:
-                    total_outflow += self.name_to_transition_variable_dict[varname].current_realization
+                for var_name in compartment.inflow_transition_variable_names_list:
+                    total_inflow += self.name_to_transition_variable_dict[var_name].current_realization
+                for var_name in compartment.outflow_transition_variable_names_list:
+                    total_outflow += self.name_to_transition_variable_dict[var_name].current_realization
                 compartment.current_val += (total_inflow - total_outflow)
                 # print(compartment.name, compartment.current_val)
 
