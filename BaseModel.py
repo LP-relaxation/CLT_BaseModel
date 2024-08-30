@@ -5,6 +5,7 @@ import json
 
 from collections import namedtuple
 
+from abc import ABC, abstractmethod
 
 def approx_binomial_probability_from_rate(rate, time_interval_length):
     '''
@@ -380,12 +381,12 @@ class StateVariable:
 
 class SimulationParams:
 
-    def __init__(self, timesteps_per_day, starting_simulation_day=0):
+    def __init__(self, timesteps_per_day=7, starting_simulation_day=0):
         self.timesteps_per_day = timesteps_per_day
         self.starting_simulation_day = starting_simulation_day
 
 
-class BaseModel:
+class BaseModel(ABC):
 
     def __init__(self,
                  is_stochastic=True,
@@ -570,6 +571,19 @@ class BaseModel:
     def add_epi_params(self, epi_params):
         self.epi_params = epi_params
 
+    def add_simulation_params_from_json(self, json_filename):
+        '''
+        Assign simulation_params attribute to SimulationParams instance
+        Load json_filename and assign values to simulation_params attribute
+        '''
+        self.simulation_params = SimulationParams()
+
+        with open(json_filename) as f:
+            d = json.load(f)
+
+        for key, value in d.items():
+            setattr(self.simulation_params, key, value)
+
     def add_simulation_params(self, simulation_params):
         self.simulation_params = simulation_params
 
@@ -705,10 +719,10 @@ class BaseModel:
         for svar in self.name_to_state_variable_dict.values():
             svar.current_val += svar.change_in_current_val / timesteps_per_day
 
+    @abstractmethod
     def compute_change_in_state_variables(self):
-
         pass
 
+    @abstractmethod
     def compute_transition_rates(self):
-
         pass

@@ -8,22 +8,7 @@ import pytest
 
 random_seed = np.random.SeedSequence()
 
-simulation_params = SimulationParams(timesteps_per_day=7)
-
-model = ImmunoSEIRSModel(is_stochastic=True,RNG_seed=random_seed)
-
-model.add_epi_params_from_json("ImmunoSEIRSEpiParams.json")
-model.add_simulation_params(simulation_params)
-
-model.add_epi_compartment("S", np.array([int(1e6) - 2e4]), ["new_susceptible"], ["new_exposed"])
-model.add_epi_compartment("E", np.array([1e4]), ["new_exposed"], ["new_infected"])
-model.add_epi_compartment("I", np.array([1e4]), ["new_infected"], ["new_recovered_home", "new_hosp"])
-model.add_epi_compartment("H", np.array([0.0]), ["new_hosp"], ["new_recovered_hosp", "new_dead"])
-model.add_epi_compartment("R", np.array([0.0]), ["new_recovered_home", "new_recovered_hosp"], ["new_susceptible"])
-model.add_epi_compartment("D", np.array([0.0]), ["new_dead"], [])
-
-model.add_state_variable("population_immunity_hosp", np.array([0.5]))
-model.add_state_variable("population_immunity_inf", np.array([0.5]))
+model = ImmunoSEIRSModel()
 
 def test_beta():
     '''
