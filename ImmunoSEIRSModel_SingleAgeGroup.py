@@ -8,46 +8,47 @@ import json
 from collections import namedtuple
 
 
-def compute_change_in_immunity(current_val,
+def get_change_in_immunity(current_val,
                                R_val,
                                immunity_increase_factor,
                                total_population_val,
                                saturation_constant,
                                waning_factor):
-    return (immunity_increase_factor * R_val) / (total_population_val * (1 + saturation_constant * current_val)) \
-           - waning_factor * current_val
+    return np.asarray((immunity_increase_factor * R_val) / (total_population_val * (1 + saturation_constant * current_val)) \
+           - waning_factor * current_val)
 
-def compute_new_exposed_rate(I_val,
+
+def get_new_exposed_rate(I_val,
                              immunity_against_inf,
                              efficacy_against_inf,
                              beta,
                              total_population_val):
-    return beta * I_val / (total_population_val * (1 + efficacy_against_inf * immunity_against_inf))
+    return np.asarray(beta * I_val / (total_population_val * (1 + efficacy_against_inf * immunity_against_inf)))
 
 
-def compute_new_infected_rate(sigma):
-    return sigma
+def get_new_infected_rate(sigma):
+    return np.asarray(sigma)
 
 
-def compute_new_hosp_rate(zeta,
+def get_new_hosp_rate(zeta,
                           mu,
                           immunity_against_hosp,
                           efficacy_against_hosp):
-    return zeta * mu / (1 + efficacy_against_hosp * immunity_against_hosp)
+    return np.asarray(zeta * mu / (1 + efficacy_against_hosp * immunity_against_hosp))
 
 
-def compute_new_dead_rate(pi,
+def get_new_dead_rate(pi,
                           nu,
                           immunity_against_hosp,
                           efficacy_against_death):
-    return pi * nu / (1 + efficacy_against_death * immunity_against_hosp)
+    return np.asarray(pi * nu / (1 + efficacy_against_death * immunity_against_hosp))
 
 
 class ImmunoSEIRSModel(BaseModel):
 
-    def __init__(self, is_stochastic=True, RNG_seed=np.random.SeedSequence()):
+    def __init__(self, RNG_seed=np.random.SeedSequence()):
 
-        super().__init__(is_stochastic, RNG_seed)
+        super().__init__(RNG_seed)
 
         self.add_epi_params_from_json("ImmunoSEIRS_EpiParams.json")
         self.add_simulation_params_from_json("ImmunoSEIRS_SimulationParams.json")
@@ -62,11 +63,11 @@ class ImmunoSEIRSModel(BaseModel):
         self.add_state_variable("population_immunity_hosp", np.array([0.5]))
         self.add_state_variable("population_immunity_inf", np.array([0.5]))
 
-    def compute_change_in_state_variables(self):
+    def update_change_in_state_variables(self):
 
         epi_params = self.epi_params
 
-        self.population_immunity_hosp.change_in_current_val = compute_change_in_immunity(
+        self.population_immunity_hosp.change_in_current_val = get_change_in_immunity(
             current_val=self.population_immunity_hosp.current_val,
             R_val=self.R.current_val,
             immunity_increase_factor=epi_params.immunity_hosp_increase_factor,
@@ -75,7 +76,7 @@ class ImmunoSEIRSModel(BaseModel):
             waning_factor=epi_params.waning_factor_hosp
         )
 
-        self.population_immunity_inf.change_in_current_val = compute_change_in_immunity(
+        self.population_immunity_inf.change_in_current_val = get_change_in_immunity(
             current_val=self.population_immunity_inf.current_val,
             R_val=self.R.current_val,
             immunity_increase_factor=epi_params.immunity_inf_increase_factor,
@@ -84,38 +85,38 @@ class ImmunoSEIRSModel(BaseModel):
             waning_factor=epi_params.waning_factor_inf
         )
 
-    def compute_transition_rates(self):
+    def update_transition_rates(self):
 
         epi_params = self.epi_params
 
-        self.new_exposed.current_rate = compute_new_exposed_rate(
+        self.new_exposed.current_rate = get_new_exposed_rate(
             I_val=self.I.current_val,
             immunity_against_inf=self.population_immunity_inf.current_val,
             efficacy_against_inf=epi_params.efficacy_immunity_inf,
             total_population_val=epi_params.total_population_val,
             beta=epi_params.beta)
 
-        self.new_hosp.current_rate = compute_new_hosp_rate(
+        self.new_hosp.current_rate = get_new_hosp_rate(
             zeta=epi_params.zeta,
-            mu=epi_params.mu,
+           mu=epi_params.mu,
             immunity_against_hosp=self.population_immunity_hosp.current_val,
             efficacy_against_hosp=epi_params.efficacy_immunity_hosp
         )
 
-        self.new_dead.current_rate = compute_new_dead_rate(
+        self.new_dead.current_rate = get_new_dead_rate(
             pi=epi_params.pi,
             nu=epi_params.nu,
             immunity_against_hosp=self.population_immunity_hosp.current_val,
             efficacy_against_death=epi_params.efficacy_immunity_death
         )
 
-        self.new_infected.current_rate = epi_params.sigma
+        self.new_infected.current_rate = np.expand_dims(epi_params.sigma, axis=0)
 
-        self.new_recovered_home.current_rate = (1 - epi_params.mu) * epi_params.gamma
+        self.new_recovered_home.current_rate = np.expand_dims((1 - epi_params.mu) * epi_params.gamma, axis=0)
 
-        self.new_recovered_hosp.current_rate = (1 - epi_params.nu) * epi_params.gamma_hosp
+        self.new_recovered_hosp.current_rate = np.expand_dims((1 - epi_params.nu) * epi_params.gamma_hosp, axis=0)
 
-        self.new_susceptible.current_rate = epi_params.eta
+        self.new_susceptible.current_rate = np.expand_dims(epi_params.eta, axis=0)
 
 
 start = time.time()

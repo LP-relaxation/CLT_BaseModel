@@ -1,4 +1,4 @@
-from ImmunoSEIRSModel import ImmunoSEIRSModel
+from ImmunoSEIRSModel_SingleAgeGroup import ImmunoSEIRSModel
 from BaseModel import SimulationParams
 
 import numpy as np

@@ -1,3 +1,4 @@
 {
-	"timesteps_per_day":7
+	"timesteps_per_day":7,
+	"transition_type":"poisson"
 }

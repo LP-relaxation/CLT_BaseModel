@@ -7,11 +7,11 @@ from collections import namedtuple
 
 from abc import ABC, abstractmethod
 
-def approx_binomial_probability_from_rate(rate, time_interval_length):
+def approx_binomial_probability_from_rate(rate, interval_length):
     '''
     Converts a rate (events per time) to the probability of any event
-        occurring in the next time period of time_interval_length,
-        assuming the number of events occurring in time_interval_length
+        occurring in the next time interval of length interval_length,
+        assuming the number of events occurring in time interval
         follows a Poisson distribution with given rate parameter
 
     The probability of 0 events in time_interval_length is
@@ -20,133 +20,12 @@ def approx_binomial_probability_from_rate(rate, time_interval_length):
 
     :param rate: positive scalar,
         rate parameter in a Poisson distribution
-    :param time_interval_length: positive scalar,
-        time interval over which event may occur
+    :param interval_length: positive scalar,
+        length of time interval in simulation days
     :return: positive scalar in (0,1)
     '''
 
-    return 1 - np.exp(-rate * time_interval_length)
-
-
-class TransitionProbabilityDistributions:
-    '''
-    Container to hold methods for computing deterministic and random
-        transition realizations between compartments. All such methods are class
-        methods because we do not create instances of this class.
-    '''
-
-    @classmethod
-    def compute_deterministic_binomial_realization(cls, base_count, rate, num_timesteps, RNG=None):
-        '''
-        Deterministically computes number transitioning between
-            EpiCompartments in next timestep. Rather than sampling binomial
-            random variable, returns mean value base_count * p(rate / num_timesteps)
-            with element-wise multiplication, where p(rate / num_timesteps) converts
-            rate to a probability using a Poisson approximation.
-
-        :param base_count: array_like of positive integers,
-            corresponding to population counts in an EpiCompartment instance
-
-        :param rate: array_like of positive scalars, same shape as base_count
-            corresponding to rate (events per time) at which people transition
-            between compartments
-
-        :param num_timesteps: positive integer,
-            number of timesteps per day in the simulation
-
-        :param RNG: numpy Generator instance,
-            argument not used -- only included to create same function
-            signature as compute_binomial_realization
-
-        :return: array_like of positive scalars, same shape as base_count and rate,
-            returns mean value base_count * p(rate / num_timesteps) with
-            element-wise multiplication, where p(rate / num_timesteps)
-            converts rate to a probability using a Poisson approximation
-        '''
-
-        return base_count * rate / num_timesteps
-
-    @classmethod
-    def compute_binomial_realization(cls, base_count, rate, num_timesteps, RNG):
-        '''
-        Using RNG for random number generation, stochastically computes
-            number transitioning between EpiCompartments in next timestep
-            according to binomial distribution with parameters given by base_count
-            and p(rate / num_timesteps), which converts rate to a probability using
-            a Poisson approximation.
-
-        :param base_count: array_like of positive integers,
-            corresponding to population counts in an EpiCompartment instance
-
-        :param rate: array_like of positive scalars, same shape as base_count
-            corresponding to rate (events per time) at which people transition
-            between compartments
-
-        :param num_timesteps: positive integer,
-            number of timesteps per day in the simulation
-
-        :param RNG: numpy Generator instance,
-            manages random bits to generate random variables
-
-        :return: array_like of positive scalars, same shape as base_count and rate,
-            returns realization of Binomial random variable with parameters
-            base_count and p(rate / num_timesteps), where p(rate / num_timesteps)
-            converts rate to a probability using a Poisson approximation
-        '''
-
-        return RNG.binomial(n=int(base_count),
-                            p=approx_binomial_probability_from_rate(rate, 1 / num_timesteps))
-
-    @classmethod
-    def compute_deterministic_multinomial_realization(cls, base_count, probabilities_list, RNG=None):
-        '''
-        Deterministically computes number transitioning between
-            EpiCompartments in next timestep. Rather than sampling multinomial
-            random variable, returns mean value base_count * probabilities_list
-            with element-wise multiplication.
-
-        :param base_count: array_like of positive integers,
-            corresponding to population counts in an EpiCompartment instance
-
-        :param probabilities_list: array-like of numbers in (0,1), must sum to 1,
-            each element i corresponds to probability of outcome i for each random
-            trial
-
-        :param RNG: numpy Generator instance,
-            argument not used -- only included to create same function
-            signature as compute_multinomial_realization
-
-        :return: array_like of positive scalars, same shape as base_count and rate,
-            returns realization of multinomial random variable with parameters
-            base_count and probabilities_list
-        '''
-
-        return np.array(base_count * np.array(probabilities_list), dtype=int)
-
-    @classmethod
-    def compute_multinomial_realization(cls, base_count, probabilities_list, RNG):
-        '''
-        Using RNG for random number generation, stochastically computes
-            number transitioning between EpiCompartments in next timestep
-            according to multinomial distribution with parameters given by base_count
-            and probabilities_list.
-
-        :param base_count: array_like of positive integers,
-            corresponding to population counts in an EpiCompartment instance
-
-        :param probabilities_list: array-like of numbers in (0,1), must sum to 1,
-            each element i corresponds to probability of outcome i for each random
-            trial
-
-        :param RNG: numpy Generator instance,
-            manages random bits to generate random variables
-
-        :return: array_like of positive scalars, same shape as base_count and rate,
-            returns realization of multinomial random variable with parameters
-            base_count and probabilities_list
-        '''
-
-        return RNG.multinomial(int(base_count), probabilities_list)
+    return 1 - np.exp(-rate * interval_length)
 
 
 class TransitionVariableGroup:
@@ -163,28 +42,48 @@ class TransitionVariableGroup:
     def __init__(self,
                  name,
                  base_count_epi_compartment,
-                 transition_variables_list,
-                 is_stochastic):
+                 timesteps_per_day,
+                 RNG,
+                 transition_type,
+                 transition_variables_list):
         '''
         :param name: string,
             name of transition variable group
         :param base_count_epi_compartment: EpiCompartment object,
             corresponds to common EpiCompartment that transitions
             variables in transition_variable_list outflow from
-        :param transition_variable_list: array-like of TransitionVariable objects,
+        :param timesteps_per_day: positive integer,
+            number of discretized timesteps per day
+        :param RNG: numpy Generator object,
+            used to generate random variables
+        :param transition_type: str,
+            Supported values are in {"multinomial", "multinomial_taylor_approx", "poisson",
+            "multinomial_deterministic", "multinomial_taylor_approx_deterministic",
+            "poisson_deterministic"}. Determines which method to use to compute
+            realization, corresponding to get_binomial_realization,
+            get_binomial_taylor_approx_realization, etc... See methods for
+            rigorous explanation.
+        :param transition_variables_list: array-like of TransitionVariable objects,
             holds all TransitionVariable objects that outflow from
             base_count_epi_compartment
-        :param is_stochastic: Boolean,
-            True if binomial / multinomial random transitions are used,
-            False if the deterministic means of the binomial / multinomial
-            distributions are used instead of random sampling
         '''
+
         self.name = name
-        self.is_stochastic = is_stochastic
         self.base_count_epi_compartment = base_count_epi_compartment
+        self.timesteps_per_day = timesteps_per_day
+        self.RNG = RNG
+        self._transition_type = transition_type
         self.transition_variables_list = transition_variables_list
 
-    def compute_total_rate(self):
+        self.get_joint_realization = getattr(self, "get_" + transition_type + "_realization")
+
+        self.current_realizations_list = []
+
+    @property
+    def transition_type(self):
+        return self._transition_type
+
+    def get_total_rate(self):
         '''
         :return: array-like of positive numbers,
             sum of current rates of transition variables in group
@@ -197,31 +96,15 @@ class TransitionVariableGroup:
 
         return total_rate
 
-    def compute_realization(self, timesteps_per_day, RNG):
-
-        '''
-        Compute jointly distributed transition variable outflows, scaled by
-            timesteps_per_day, using multinomial distribution and
-            random numbers from RNG
-        After sampling, updates current_realization attribute on all
-            TransitionVariable instances contained in this
-            transition variable group
-
-        :param timesteps_per_day: positive integer,
-            number of discretized steps per simulation day
-        :param RNG: numpy Generator object,
-            used to generate multinomial random variables
-        '''
-
-        # Total rate at which people leave the base compartment
-        total_rate = self.compute_total_rate()
-
-        # Convert the total rate into a total outgoing probability, scaled by the timesteps per day
-        total_outgoing_probability = approx_binomial_probability_from_rate(total_rate, 1 / timesteps_per_day)
+    def get_probabilities_array(self):
 
         probabilities_list = []
 
-        # Create probabilities_list, where element i corresponds to the
+        total_rate = self.get_total_rate()
+
+        total_outgoing_probability = approx_binomial_probability_from_rate(total_rate, 1/self.timesteps_per_day)
+
+        # Create probabilities_array, where element i corresponds to the
         #   transition variable i's current rate divided by the total rate,
         #   multiplied by the total outgoing probability
         # This generates the probabilities array that parameterizes the
@@ -231,28 +114,75 @@ class TransitionVariableGroup:
 
         # Append the probability that a person stays in the compartment
         probabilities_list.append(1 - total_outgoing_probability)
-        probabilities_list = np.array(probabilities_list).flatten()
 
-        base_count = self.base_count_epi_compartment.current_val
+        return np.squeeze(np.asarray(probabilities_list))
 
-        # Sample from the multinomial distribution
-        if self.is_stochastic:
-            multinomial_realizations_list = \
-                TransitionProbabilityDistributions.compute_multinomial_realization(base_count,
-                                                                                   probabilities_list,
-                                                                                   RNG)
-        else:
-            multinomial_realizations_list = \
-                TransitionProbabilityDistributions.compute_deterministic_multinomial_realization(base_count,
-                                                                                                 probabilities_list,
-                                                                                                 RNG)
+    def get_current_scaled_rates_array(self):
 
-        # Since the ith element in probabilities_list corresponds to the ith transition variable
+        timesteps_per_day = self.timesteps_per_day
+
+        current_scaled_rates_list = [tvar.current_rate * 1/timesteps_per_day for tvar in self.transition_variables_list]
+        current_scaled_rates_list.append(np.array((1 - self.get_total_rate() * 1/timesteps_per_day)))
+
+        return np.squeeze(np.asarray(current_scaled_rates_list))
+
+    def get_joint_realization(self):
+        pass
+
+    def get_multinomial_realization(self):
+
+        probabilities_array = self.get_probabilities_array()
+
+        return np.squeeze(self.RNG.multinomial(np.asarray(self.base_count_epi_compartment.current_val, dtype=int),
+                                               probabilities_array))
+
+    def get_multinomial_taylor_approx_realization(self):
+
+        current_scaled_rates_array = self.get_current_scaled_rates_array()
+
+        return np.squeeze(self.RNG.multinomial(np.asarray(self.base_count_epi_compartment.current_val, dtype=int),
+                                               current_scaled_rates_array))
+
+    def get_poisson_realization(self):
+
+        timesteps_per_day = self.timesteps_per_day
+
+        return np.asarray([self.RNG.poisson(self.base_count_epi_compartment.current_val * tvar.current_rate * 1/timesteps_per_day) for tvar in self.transition_variables_list])
+
+    def get_multinomial_deterministic_realization(self):
+
+        probabilities_array = self.get_probabilities_array()
+
+        return np.squeeze(np.asarray(self.base_count_epi_compartment.current_val * probabilities_array, dtype=int))
+
+    def get_multinomial_taylor_approx_deterministic_realization(self):
+
+        current_scaled_rates_array = self.get_current_scaled_rates_array()
+
+        return np.squeeze(np.asarray(self.base_count_epi_compartment.current_val * current_scaled_rates_array, dtype=int))
+
+    def get_poisson_deterministic_realization(self):
+
+        timesteps_per_day = self.timesteps_per_day
+
+        return np.asarray([self.base_count_epi_compartment.current_val * tvar.current_rate * 1/timesteps_per_day for tvar in self.transition_variables_list], dtype=int)
+
+    def reset(self):
+        self.current_realizations_list = []
+
+    def update_transition_variable_realizations(self):
+        '''
+        Updates current_realization attribute on all
+            TransitionVariable instances contained in this
+            transition variable group
+        '''
+
+        # Since the ith element in probabilities_array corresponds to the ith transition variable
         #   in transition_variables_list, the ith element in multinomial_realizations_list
         #   also corresponds to the ith transition variable in transition_variables_list
         # Update the current realization of the transition variables contained in this group
         for ix in range(len(self.transition_variables_list)):
-            self.transition_variables_list[ix].current_realization = multinomial_realizations_list[ix]
+            self.transition_variables_list[ix].current_realization = self.current_realizations_list[ix]
 
 
 class TransitionVariable:
@@ -260,17 +190,26 @@ class TransitionVariable:
     def __init__(self,
                  name,
                  base_count_epi_compartment,
-                 is_stochastic=True,
+                 timesteps_per_day,
+                 RNG,
+                 transition_type,
                  is_jointly_distributed=False):
         '''
         :param name: string,
             name of TransitionVariable
         :param base_count_epi_compartment: EpiCompartment object,
             compartment from which TransitionVariable flows
-        :param is_stochastic: Boolean,
-            True if binomial / multinomial random transitions are used,
-            False if the deterministic means of the binomial / multinomial
-            distributions are used instead of random sampling
+        :param timesteps_per_day: positive integer,
+            number of discretized timesteps per day
+        :param RNG: numpy Generator object,
+            used to generate random variables
+        :param transition_type: str,
+            Supported values are in {"binomial", "binomial_taylor_approx", "poisson",
+            "binomial_deterministic", "binomial_taylor_approx_deterministic",
+            "poisson_deterministic"}. Determines which method to use to compute
+            realization, corresponding to get_binomial_realization,
+            get_binomial_taylor_approx_realization, etc... See methods for
+            rigorous explanation.
         :param is_jointly_distributed: Boolean,
             True if there are multiple TransitionVariable outflows
             from the same base_count_epi_compartment and
@@ -282,24 +221,47 @@ class TransitionVariable:
 
         __slots__ = ("name",
                      "base_count_epi_compartment",
-                     "is_stochastic",
+                     "timesteps_per_day",
+                     "RNG",
+                     "transition_type",
                      "is_jointly_distributed")
 
         self.name = name
         self.base_count_epi_compartment = base_count_epi_compartment
+        self.timesteps_per_day = timesteps_per_day
+        self.RNG = RNG
+        self.transition_type = transition_type
+        self.is_jointly_distributed = is_jointly_distributed
 
         self.current_realization = None
         self.current_rate = None
 
-        self.is_jointly_distributed = is_jointly_distributed
-
         if self.is_jointly_distributed:
             pass
         else:
-            if is_stochastic:
-                self.compute_realization = TransitionProbabilityDistributions.compute_binomial_realization
-            else:
-                self.compute_realization = TransitionProbabilityDistributions.compute_deterministic_binomial_realization
+            self.get_realization = getattr(self, "get_" + transition_type + "_realization")
+
+    def get_binomial_realization(self):
+        return self.RNG.binomial(n=np.asarray(self.base_count, dtype=int),
+                            p=approx_binomial_probability_from_rate(self.current_rate, 1 / self.timesteps_per_day))
+
+    def get_binomial_taylor_approx_realization(self):
+        return self.RNG.binomial(n=np.asarray(self.base_count, dtype=int),
+                                 p= self.current_rate * (1/self.timesteps_per_day))
+
+    def get_poisson_realization(self):
+        return self.RNG.poisson(self.base_count * self.current_rate * (1/self.timesteps_per_day))
+
+    def get_binomial_deterministic_realization(self):
+        return np.asarray(self.base_count *
+                        approx_binomial_probability_from_rate(self.current_rate, 1/self.timesteps_per_day),
+                        dtype=int)
+
+    def get_binomial_taylor_approx_deterministic_realization(self):
+        return np.asarray(self.base_count * self.current_rate * (1/self.timesteps_per_day), dtype=int)
+
+    def get_poisson_deterministic_realization(self):
+        return np.asarray(self.base_count * self.current_rate * (1/self.timesteps_per_day), dtype=int)
 
     @property
     def base_count(self):
@@ -381,18 +343,18 @@ class StateVariable:
 
 class SimulationParams:
 
-    def __init__(self, timesteps_per_day=7, starting_simulation_day=0):
+    def __init__(self,
+                 timesteps_per_day=7,
+                 starting_simulation_day=0,
+                 transition_type="binomial"):
         self.timesteps_per_day = timesteps_per_day
         self.starting_simulation_day = starting_simulation_day
+        self.transition_type = transition_type
 
-
-class BaseModel(ABC):
+class BaseModel:
 
     def __init__(self,
-                 is_stochastic=True,
                  RNG_seed=np.random.SeedSequence()):
-
-        self.is_stochastic = is_stochastic
 
         self.name_to_epi_compartment_dict = {}
         self.name_to_transition_variable_dict = {}
@@ -448,6 +410,10 @@ class BaseModel(ABC):
         self.name_to_epi_compartment_dict[name] = epi_compartment
         setattr(self, name, epi_compartment)
 
+        timesteps_per_day = self.simulation_params.timesteps_per_day
+        transition_type = self.simulation_params.transition_type
+        RNG = self.RNG
+
         # If there are multiple outflows from this epi compartment,
         #   create corresponding TransitionVariables where is_jointly_distributed = True
         #   and create a TransitionVariableGroup instance to hold these transition variables
@@ -455,7 +421,9 @@ class BaseModel(ABC):
             for transition_variable_name in outgoing_transition_variable_names_list:
                 self.add_transition_variable(transition_variable_name,
                                              epi_compartment,
-                                             self.is_stochastic,
+                                             timesteps_per_day,
+                                             RNG,
+                                             transition_type,
                                              True)
 
             # Create a list of transition variable objects to create a TransitionVariableGroup
@@ -465,19 +433,25 @@ class BaseModel(ABC):
             # Create a new TransitionVariableGroup with the name "name" [name of epi compartment] + "_out"
             self.add_transition_variable_group(name + "_out",
                                                epi_compartment,
-                                               transition_variables_list,
-                                               self.is_stochastic)
+                                               timesteps_per_day,
+                                               RNG,
+                                               transition_type,
+                                               transition_variables_list)
         else:
             for transition_variable_name in outgoing_transition_variable_names_list:
                 self.add_transition_variable(transition_variable_name,
                                              epi_compartment,
-                                             self.is_stochastic,
+                                             timesteps_per_day,
+                                             RNG,
+                                             transition_type,
                                              False)
 
     def add_transition_variable(self,
                                 name,
-                                transition_type,
                                 base_count_epi_compartment,
+                                timesteps_per_day,
+                                RNG,
+                                transition_type,
                                 is_jointly_distributed=False):
         '''
         Constructor method for adding TransitionVariable instance to model
@@ -496,8 +470,10 @@ class BaseModel(ABC):
         '''
 
         tvar = TransitionVariable(name,
-                                  transition_type,
                                   base_count_epi_compartment,
+                                  timesteps_per_day,
+                                  RNG,
+                                  transition_type,
                                   is_jointly_distributed)
 
         self.name_to_transition_variable_dict[name] = tvar
@@ -506,8 +482,10 @@ class BaseModel(ABC):
     def add_transition_variable_group(self,
                                       name,
                                       base_count_epi_compartment,
-                                      transition_variable_list,
-                                      is_stochastic):
+                                      timesteps_per_day,
+                                      RNG,
+                                      transition_type,
+                                      transition_variables_list):
         '''
         Constructor method for adding TransitionVariableGroup instance to model
 
@@ -525,10 +503,14 @@ class BaseModel(ABC):
         See TransitionVariableGroup class (__init__ function) for parameters.
         '''
 
+        transition_type = transition_type.replace("binomial", "multinomial")
+
         tvgroup = TransitionVariableGroup(name,
                                           base_count_epi_compartment,
-                                          transition_variable_list,
-                                          is_stochastic)
+                                          timesteps_per_day,
+                                          RNG,
+                                          transition_type,
+                                          transition_variables_list)
 
         self.name_to_transition_variable_group_dict[name] = tvgroup
         setattr(self, name, tvgroup)
@@ -664,17 +646,18 @@ class BaseModel(ABC):
 
         for timestep in range(timesteps_per_day):
 
-            self.compute_change_in_state_variables()
+            self.update_change_in_state_variables()
 
             # Users will inherit from base class BaseModel and override
             #   these functions to customize their model
             self.update_state_variables()
-            self.compute_transition_rates()
+            self.update_transition_rates()
 
             # Obtain transition variable realizations for jointly distributed transition variables
             #   (i.e. when there are multiple transition variable otuflows from an epi compartment)
             for tvargroup in self.name_to_transition_variable_group_dict.values():
-                tvargroup.compute_realization(timesteps_per_day, self.RNG)
+                tvargroup.current_realizations_list = tvargroup.get_joint_realization()
+                tvargroup.update_transition_variable_realizations()
 
             # Obtain transition variable realizations for marginally distributed transition variables
             #   (i.e. when there is only one transition variable outflow from an epi compartment)
@@ -684,11 +667,7 @@ class BaseModel(ABC):
                 if tvar.is_jointly_distributed:
                     continue
                 else:
-                    tvar.current_realization = tvar.compute_realization(
-                        tvar.base_count,
-                        tvar.current_rate,
-                        timesteps_per_day,
-                        self.RNG)
+                    tvar.current_realization = tvar.get_realization()
 
             # Update all epi compartments
             for compartment in self.name_to_epi_compartment_dict.values():
@@ -699,7 +678,6 @@ class BaseModel(ABC):
                 for var_name in compartment.outflow_transition_variable_names_list:
                     total_outflow += self.name_to_transition_variable_dict[var_name].current_realization
                 compartment.current_val += (total_inflow - total_outflow)
-                # print(compartment.name, compartment.current_val)
 
             # Reset transition variable current_realization and current_rate to None
             for tvar in self.name_to_transition_variable_dict.values():
@@ -719,10 +697,8 @@ class BaseModel(ABC):
         for svar in self.name_to_state_variable_dict.values():
             svar.current_val += svar.change_in_current_val / timesteps_per_day
 
-    @abstractmethod
-    def compute_change_in_state_variables(self):
+    def update_change_in_state_variables(self):
         pass
 
-    @abstractmethod
-    def compute_transition_rates(self):
+    def update_transition_rates(self):
         pass
