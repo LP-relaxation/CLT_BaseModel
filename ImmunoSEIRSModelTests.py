@@ -8,14 +8,12 @@ import pytest
 
 random_seed = np.random.SeedSequence()
 
-model = ImmunoSEIRSModel()
-
 def test_beta():
     '''
     If the transmission rate beta = 0, then S should not decrease over time
     '''
 
-    model.reset_simulation()
+    model = ImmunoSEIRSModel(random_seed)
     model.epi_params.beta = 0
     model.simulate_until_time_period(last_simulation_day=365)
 
@@ -29,7 +27,7 @@ def test_deaths():
         should not decrease over time
     '''
 
-    model.reset_simulation()
+    model = ImmunoSEIRSModel(random_seed)
     model.epi_params.beta = 2
     model.simulate_until_time_period(last_simulation_day=365)
 
@@ -43,7 +41,7 @@ def test_population_is_constant():
         should be constant over time, equal to the initial total population.
     '''
 
-    model.reset_simulation()
+    model = ImmunoSEIRSModel(random_seed)
     model.epi_params.beta = 2
 
     for day in range(365):
@@ -62,6 +60,8 @@ def test_constructor_methods():
         and 2 state variables
     '''
 
+    model = ImmunoSEIRSModel(random_seed)
+
     assert len(model.name_to_epi_compartment_dict) == 6
     assert len(model.name_to_transition_variable_dict) == 7
     assert len(model.name_to_transition_variable_group_dict) == 2
@@ -75,6 +75,8 @@ def test_attribute_assignment():
     Confirm that each epi compartment, transition variable, transition variable group,
         and state variable are assigned as attributes to the model
     '''
+
+    model = ImmunoSEIRSModel(random_seed)
 
     for compartment_name in ("S", "E", "I", "H", "R", "D"):
         assert compartment_name in vars(model)
@@ -95,7 +97,7 @@ def test_reproducible_RNG():
         give the same results as the initial run.
     '''
 
-    model.reset_simulation()
+    model = ImmunoSEIRSModel(random_seed)
     model.epi_params.beta = 2
     model.simulate_until_time_period(100)
 

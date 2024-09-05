@@ -230,7 +230,7 @@ class TransitionVariable:
         self.base_count_epi_compartment = base_count_epi_compartment
         self.timesteps_per_day = timesteps_per_day
         self.RNG = RNG
-        self.transition_type = transition_type
+        self._transition_type = transition_type
         self.is_jointly_distributed = is_jointly_distributed
 
         self.current_realization = None
@@ -240,6 +240,10 @@ class TransitionVariable:
             pass
         else:
             self.get_realization = getattr(self, "get_" + transition_type + "_realization")
+
+    @property
+    def transition_type(self):
+        return self._transition_type
 
     def get_binomial_realization(self):
         return self.RNG.binomial(n=np.asarray(self.base_count, dtype=int),
@@ -351,7 +355,7 @@ class SimulationParams:
         self.starting_simulation_day = starting_simulation_day
         self.transition_type = transition_type
 
-class BaseModel:
+class BaseModel(ABC):
 
     def __init__(self,
                  RNG_seed=np.random.SeedSequence()):
@@ -697,8 +701,10 @@ class BaseModel:
         for svar in self.name_to_state_variable_dict.values():
             svar.current_val += svar.change_in_current_val / timesteps_per_day
 
+    @abstractmethod
     def update_change_in_state_variables(self):
         pass
 
+    @abstractmethod
     def update_transition_rates(self):
         pass

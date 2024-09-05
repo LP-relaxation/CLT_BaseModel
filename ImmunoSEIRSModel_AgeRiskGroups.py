@@ -9,20 +9,21 @@ from collections import namedtuple
 
 
 def get_change_in_immunity(current_val,
-                               R_val,
-                               immunity_increase_factor,
-                               total_population_val,
-                               saturation_constant,
-                               waning_factor):
-    return np.asarray((immunity_increase_factor * R_val) / (total_population_val * (1 + saturation_constant * current_val)) \
-           - waning_factor * current_val)
+                           R_val,
+                           immunity_increase_factor,
+                           total_population_val,
+                           saturation_constant,
+                           waning_factor):
+    return np.asarray(
+        (immunity_increase_factor * R_val) / (total_population_val * (1 + saturation_constant * current_val)) \
+        - waning_factor * current_val)
 
 
 def get_new_exposed_rate(I_val,
-                             immunity_against_inf,
-                             efficacy_against_inf,
-                             beta,
-                             total_population_val):
+                         immunity_against_inf,
+                         efficacy_against_inf,
+                         beta,
+                         total_population_val):
     return np.asarray(beta * I_val / (total_population_val * (1 + efficacy_against_inf * immunity_against_inf)))
 
 
@@ -31,30 +32,29 @@ def get_new_infected_rate(sigma):
 
 
 def get_new_hosp_rate(zeta,
-                          mu,
-                          immunity_against_hosp,
-                          efficacy_against_hosp):
+                      mu,
+                      immunity_against_hosp,
+                      efficacy_against_hosp):
     return np.asarray(zeta * mu / (1 + efficacy_against_hosp * immunity_against_hosp))
 
 
 def get_new_dead_rate(pi,
-                          nu,
-                          immunity_against_hosp,
-                          efficacy_against_death):
+                      nu,
+                      immunity_against_hosp,
+                      efficacy_against_death):
     return np.asarray(pi * nu / (1 + efficacy_against_death * immunity_against_hosp))
 
 
 class ImmunoSEIRSModel(BaseModel):
 
     def __init__(self, RNG_seed=np.random.SeedSequence()):
-
         super().__init__(RNG_seed)
 
         self.add_epi_params_from_json("ImmunoSEIRS_EpiParams.json")
         self.add_simulation_params_from_json("ImmunoSEIRS_SimulationParams.json")
 
-        self.add_epi_compartment("S", np.array([[1e6-2e4, 1e6-2e4],
-                                                [1e6-2e4, 1e6-2e4]]), ["new_susceptible"], ["new_exposed"])
+        self.add_epi_compartment("S", np.array([[1e6 - 2e4, 1e6 - 2e4],
+                                                [1e6 - 2e4, 1e6 - 2e4]]), ["new_susceptible"], ["new_exposed"])
         self.add_epi_compartment("E", np.array([[1e4, 1e4],
                                                 [1e4, 1e4]]), ["new_exposed"], ["new_infected"])
         self.add_epi_compartment("I", np.array([[1e4, 1e4],
@@ -62,17 +62,17 @@ class ImmunoSEIRSModel(BaseModel):
         self.add_epi_compartment("H", np.array([[0.0, 0.0],
                                                 [0.0, 0.0]]), ["new_hosp"], ["new_recovered_hosp", "new_dead"])
         self.add_epi_compartment("R", np.array([[0.0, 0.0],
-                                                [0.0, 0.0]]), ["new_recovered_home", "new_recovered_hosp"], ["new_susceptible"])
+                                                [0.0, 0.0]]), ["new_recovered_home", "new_recovered_hosp"],
+                                 ["new_susceptible"])
         self.add_epi_compartment("D", np.array([[0.0, 0.0],
                                                 [0.0, 0.0]]), ["new_dead"], [])
 
         self.add_state_variable("population_immunity_hosp", np.array([[0.5, 0.5],
                                                                       [0.5, 0.5]]))
         self.add_state_variable("population_immunity_inf", np.array([[0.5, 0.5],
-                                                                      [0.5, 0.5]]))
+                                                                     [0.5, 0.5]]))
 
     def update_change_in_state_variables(self):
-
         epi_params = self.epi_params
 
         self.population_immunity_hosp.change_in_current_val = get_change_in_immunity(
@@ -94,7 +94,6 @@ class ImmunoSEIRSModel(BaseModel):
         )
 
     def update_transition_rates(self):
-
         epi_params = self.epi_params
 
         self.new_exposed.current_rate = get_new_exposed_rate(
@@ -106,7 +105,7 @@ class ImmunoSEIRSModel(BaseModel):
 
         self.new_hosp.current_rate = get_new_hosp_rate(
             zeta=epi_params.zeta,
-           mu=epi_params.mu,
+            mu=epi_params.mu,
             immunity_against_hosp=self.population_immunity_hosp.current_val,
             efficacy_against_hosp=epi_params.efficacy_immunity_hosp
         )
