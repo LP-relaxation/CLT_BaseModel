@@ -1,15 +1,19 @@
 {
 	"beta": 2,
-	"total_population_val": 1e6,
+	"total_population_val": [[1e6,1e6],[1e6,1e6]],
 	"immunity_hosp_increase_factor": 0.1,
 	"immunity_inf_increase_factor": 0.1,
-	"immunity_hosp_saturation_constant": 0.5,
-	"immunity_inf_saturation_constant": 0.5,
+	"immunity_vaccine_increase_factor": 0.3,
+	"immunity_hosp_saturation_constant": [[[0.5,0.5,0.2],[0.5,0.5,0.2]],[[0.5,0.5,0.2],[0.5,0.5,0.2]]],
+	"immunity_inf_saturation_constant": [[[0.5,0.5,0.2],[0.5,0.5,0.2]],[[0.5,0.5,0.2],[0.5,0.5,0.2]]],
 	"waning_factor_hosp": 0.05,
 	"waning_factor_inf": 0.0,
-	"efficacy_immunity_hosp": 0.8,
-	"efficacy_immunity_inf": 0.8,
-	"efficacy_immunity_death": 0.8,
+	"waning_factor_vaccine_hosp": 0.02,
+	"waning_factor_vaccine_inf": 0.02,
+	"vaccine_in_effect_delay": 14,
+	"efficacy_immunity_hosp": [0.8,0.8,0.9],
+	"efficacy_immunity_inf": [0.8,0.8,0.9],
+	"efficacy_immunity_death": [0.8,0.8,0.9],
 	"eta": 0.1,
 	"sigma": 0.5,
 	"mu": 0.5,
@@ -17,5 +21,6 @@
 	"zeta": 0.25,
 	"gamma_hosp": 0.17,
 	"pi": 0.17,
-	"nu": 0.03
+	"nu": 0.03,
+	"contact_matrix": [[1,2],[2,1]]
 }

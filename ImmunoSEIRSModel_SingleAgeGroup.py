@@ -95,6 +95,7 @@ class ImmunoSEIRSModel(BaseModel):
             efficacy_against_inf=epi_params.efficacy_immunity_inf,
             total_population_val=epi_params.total_population_val,
             beta=epi_params.beta)
+        #print(self.new_exposed.current_rate)
 
         self.new_hosp.current_rate = get_new_hosp_rate(
             zeta=epi_params.zeta,

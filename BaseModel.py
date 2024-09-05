@@ -369,6 +369,8 @@ class BaseModel:
         self.epi_params = None
         self.simulation_params = None
 
+        self.current_time_step_counter = 0
+
     def add_epi_compartment(self,
                             name,
                             init_val,
@@ -602,6 +604,7 @@ class BaseModel:
             tvar.current_realization = None
 
         self.current_day_counter = 0
+        self.current_time_step_counter = 0
 
     def update_history_vals_list(self):
         '''
@@ -683,6 +686,7 @@ class BaseModel:
             for tvar in self.name_to_transition_variable_dict.values():
                 tvar.reset()
 
+            self.current_time_step_counter += 1
         # Move to next day in simulation
         self.current_day_counter += 1
 
