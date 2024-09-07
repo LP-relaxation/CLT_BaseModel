@@ -1,47 +1,89 @@
-from ImmunoSEIRSModel_SingleAgeGroup import ImmunoSEIRSModel
+from ImmunoSEIRSModel import ImmunoSEIRSModel
 from BaseModel import SimulationParams
+from PlotTools import create_basic_compartment_history_plot
 
 import numpy as np
 
 import copy
 import pytest
 
+from pathlib import Path
+
+base_path = Path(__file__).parent
+
 random_seed = np.random.SeedSequence()
 
-def test_beta():
+model_1age_1risk = ImmunoSEIRSModel(base_path / "instance1_1age_1risk_test" / "epi_params.json",
+                                    base_path / "instance1_1age_1risk_test" / "simulation_params.json",
+                                    base_path / "instance1_1age_1risk_test" / "epi_compartments.json",
+                                    base_path / "instance1_1age_1risk_test" / "state_variables.json",
+                                    random_seed)
+
+model_2age_2risk = ImmunoSEIRSModel(base_path / "instance2_2age_2risk_test" / "epi_params.json",
+                                    base_path / "instance2_2age_2risk_test" / "simulation_params.json",
+                                    base_path / "instance2_2age_2risk_test" / "epi_compartments.json",
+                                    base_path / "instance2_2age_2risk_test" / "state_variables.json",
+                                    random_seed)
+
+def create_models_all_transition_types_list(model):
+
+    models_list = []
+
+    for transition_type in ("binomial", "binomial_deterministic",
+                            "binomial_taylor_approx", "binomial_taylor_approx_deterministic",
+                            "poisson", "poisson_deterministic"):
+
+        model_variation = copy.deepcopy(model)
+        model_variation.modify_model_transition_type(transition_type)
+
+        models_list.append(model_variation)
+
+        return models_list
+
+model_1age_1risk_variations_list = create_models_all_transition_types_list(model_1age_1risk)
+
+model_2age_2risk_variations_list = create_models_all_transition_types_list(model_2age_2risk)
+
+@pytest.mark.parametrize("model",
+                         model_1age_1risk_variations_list + model_2age_2risk_variations_list)
+def test_beta(model):
     '''
     If the transmission rate beta = 0, then S should not decrease over time
     '''
 
-    model = ImmunoSEIRSModel(random_seed)
+    model.reset_simulation()
     model.epi_params.beta = 0
     model.simulate_until_time_period(last_simulation_day=365)
 
     S_history = model.name_to_epi_compartment_dict["S"].history_vals_list
 
-    assert np.sum((np.diff(np.sum(S_history, axis=1)) >= 0)) == len(S_history) - 1
+    assert np.sum((np.diff(np.sum(S_history, axis=(1,2))) >= 0)) == len(S_history) - 1
 
-def test_deaths():
+@pytest.mark.parametrize("model",
+                         model_1age_1risk_variations_list + model_2age_2risk_variations_list)
+def test_deaths(model):
     '''
     People do not rise from the dead; the deaths compartment
         should not decrease over time
     '''
 
-    model = ImmunoSEIRSModel(random_seed)
+    model.reset_simulation()
     model.epi_params.beta = 2
     model.simulate_until_time_period(last_simulation_day=365)
 
     D_history = model.name_to_epi_compartment_dict["D"].history_vals_list
 
-    assert np.sum((np.diff(np.sum(D_history, axis=1)) >= 0)) == len(D_history) - 1
+    assert np.sum(np.diff(np.sum(D_history, axis=(1,2))) >= 0) == len(D_history) - 1
 
-def test_population_is_constant():
+@pytest.mark.parametrize("model",
+                         model_1age_1risk_variations_list + model_2age_2risk_variations_list)
+def test_population_is_constant(model):
     '''
     The total population (summed over all compartments and age-risk groups)
         should be constant over time, equal to the initial total population.
     '''
 
-    model = ImmunoSEIRSModel(random_seed)
+    model.reset_simulation()
     model.epi_params.beta = 2
 
     for day in range(365):
@@ -53,14 +95,16 @@ def test_population_is_constant():
 
         assert np.abs(current_sum_all_compartments - np.sum(model.epi_params.total_population_val)) < 1e-6
 
-def test_constructor_methods():
+@pytest.mark.parametrize("model",
+                         model_1age_1risk_variations_list + model_2age_2risk_variations_list)
+def test_constructor_methods(model):
     '''
     Based on this model, there should be 6 epi compartments,
         7 transition variables, 2 transition variable groups,
         and 2 state variables
     '''
 
-    model = ImmunoSEIRSModel(random_seed)
+    model.reset_simulation()
 
     assert len(model.name_to_epi_compartment_dict) == 6
     assert len(model.name_to_transition_variable_dict) == 7
@@ -70,13 +114,15 @@ def test_constructor_methods():
     assert "I_out" in model.name_to_transition_variable_group_dict
     assert "H_out" in model.name_to_transition_variable_group_dict
 
-def test_attribute_assignment():
+@pytest.mark.parametrize("model",
+                         model_1age_1risk_variations_list + model_2age_2risk_variations_list)
+def test_attribute_assignment(model):
     '''
     Confirm that each epi compartment, transition variable, transition variable group,
         and state variable are assigned as attributes to the model
     '''
 
-    model = ImmunoSEIRSModel(random_seed)
+    model.reset_simulation()
 
     for compartment_name in ("S", "E", "I", "H", "R", "D"):
         assert compartment_name in vars(model)
@@ -91,21 +137,34 @@ def test_attribute_assignment():
     for svar_name in ("population_immunity_hosp", "population_immunity_inf"):
         assert svar_name in vars(model)
 
-def test_reproducible_RNG():
+@pytest.mark.parametrize("model",
+                         model_1age_1risk_variations_list + model_2age_2risk_variations_list)
+def test_reproducible_RNG(model):
     '''
     Resetting the random number generator and simulating should
         give the same results as the initial run.
     '''
 
-    model = ImmunoSEIRSModel(random_seed)
-    model.epi_params.beta = 2
+    model.reset_simulation()
+    model.modify_model_RNG_seed(random_seed)
     model.simulate_until_time_period(100)
 
-    model_copy = copy.deepcopy(model)
-    model_copy.reset_simulation()
-    model_copy.bit_generator = np.random.MT19937(seed=random_seed)
-    model_copy.RNG = np.random.Generator(model_copy.bit_generator)
-    model_copy.simulate_until_time_period(100)
+    original_model_history_dict = {}
 
     for compartment_name in model.name_to_epi_compartment_dict.keys():
-        assert getattr(model, compartment_name).history_vals_list == getattr(model_copy, compartment_name).history_vals_list
+        original_model_history_dict[compartment_name] = getattr(model, compartment_name).history_vals_list
+
+    reset_model_history_dict = {}
+
+    model.reset_simulation()
+    model.modify_model_RNG_seed(random_seed)
+    model.simulate_until_time_period(100)
+
+    for compartment_name in model.name_to_epi_compartment_dict.keys():
+        reset_model_history_dict[compartment_name] = getattr(model, compartment_name).history_vals_list
+
+    for compartment_name in original_model_history_dict.keys():
+        assert np.array_equal(np.array(original_model_history_dict[compartment_name]),\
+            np.array(reset_model_history_dict[compartment_name]))
+
+test_beta(model_1age_1risk_variations_list[0])

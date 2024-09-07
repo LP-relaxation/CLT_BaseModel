@@ -1,0 +1,37 @@
+{
+	"S":
+	{	"init_val": [[980000.0]],
+		"incoming_transition_variable_names_list": ["new_susceptible"],
+		"outgoing_transition_variable_names_list": ["new_exposed"]
+	},
+	"E":
+	{
+		"init_val": [[10000.0]],
+		"incoming_transition_variable_names_list": ["new_exposed"],
+		"outgoing_transition_variable_names_list": ["new_infected"]
+	},
+	"I":
+	{
+		"init_val": [[10000.0]],
+		"incoming_transition_variable_names_list": ["new_infected"],
+		"outgoing_transition_variable_names_list": ["new_recovered_home", "new_hosp"]
+	},
+	"H":
+	{
+		"init_val": [[0.0]],
+		"incoming_transition_variable_names_list": ["new_hosp"],
+		"outgoing_transition_variable_names_list": ["new_recovered_hosp", "new_dead"]
+	},
+	"R":
+	{
+		"init_val": [[0.0]],
+		"incoming_transition_variable_names_list": ["new_recovered_home", "new_recovered_hosp"],
+		"outgoing_transition_variable_names_list": ["new_susceptible"]
+	},
+	"D":
+	{
+		"init_val": [[0.0]],
+		"incoming_transition_variable_names_list": ["new_dead"],
+		"outgoing_transition_variable_names_list": []
+	}
+}

@@ -1,0 +1,10 @@
+{
+	"population_immunity_hosp":
+	{
+      "init_val": [[0.5, 0.5], [0.5, 0.5]]
+    },
+	"population_immunity_inf":
+    {
+      "init_val": [[0.5, 0.5], [0.5, 0.5]]
+    }
+}

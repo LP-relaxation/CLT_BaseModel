@@ -1,0 +1,23 @@
+{
+	"num_age_groups":2,
+	"num_risk_groups":2,
+	"beta": 2,
+	"total_population_val": [[1000000.0, 1000000.0], [1000000.0, 1000000.0]],
+	"immunity_hosp_increase_factor": 0.1,
+	"immunity_inf_increase_factor": 0.1,
+	"immunity_hosp_saturation_constant": 0.5,
+	"immunity_inf_saturation_constant": 0.5,
+	"waning_factor_hosp": 0.05,
+	"waning_factor_inf": 0.05,
+	"efficacy_immunity_hosp": [[0.8, 0.8]],
+	"efficacy_immunity_inf": [[0.8, 0.8]],
+	"efficacy_immunity_death": [[0.8, 0.8]],
+	"eta": 0.1,
+	"sigma": 0.5,
+	"mu": [[0.5, 0.5]],
+	"gamma": 0.1,
+	"zeta": 0.25,
+	"gamma_hosp": 0.17,
+	"pi": 0.17,
+	"nu": [[0.03, 0.03]]
+}

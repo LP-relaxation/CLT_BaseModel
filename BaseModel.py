@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import time
 import json
 
+import copy
+
 from collections import namedtuple
 
 from abc import ABC, abstractmethod
@@ -18,11 +20,14 @@ def approx_binomial_probability_from_rate(rate, interval_length):
         e^(-rate * time_interval_length), so the probability of any event
         in time_interval_length is 1 - e^(-rate * time_interval_length)
 
-    :param rate: positive scalar,
-        rate parameter in a Poisson distribution
+    :param rate: array-like or positive scalars,
+        dimension A x L (number of age groups
+        x number of risk groups), rate parameters
+        in a Poisson distribution
     :param interval_length: positive scalar,
         length of time interval in simulation days
-    :return: positive scalar in (0,1)
+    :return: array-like of positive scalars,
+        dimension A x L
     '''
 
     return 1 - np.exp(-rate * interval_length)
@@ -45,14 +50,16 @@ class TransitionVariableGroup:
                  timesteps_per_day,
                  RNG,
                  transition_type,
-                 transition_variables_list):
+                 transition_variables_list,
+                 num_age_groups,
+                 num_risk_groups):
         '''
         :param name: string,
             name of transition variable group
         :param base_count_epi_compartment: EpiCompartment object,
             corresponds to common EpiCompartment that transitions
             variables in transition_variable_list outflow from
-        :param timesteps_per_day: positive integer,
+        :param timesteps_per_day: positive int,
             number of discretized timesteps per day
         :param RNG: numpy Generator object,
             used to generate random variables
@@ -66,22 +73,36 @@ class TransitionVariableGroup:
         :param transition_variables_list: array-like of TransitionVariable objects,
             holds all TransitionVariable objects that outflow from
             base_count_epi_compartment
+        :param num_age_groups: positive int,
+            number of age groups (rows)
+        :param num_risk_groups: positive int,
+            number of risk groups (columns)
         '''
 
         self.name = name
         self.base_count_epi_compartment = base_count_epi_compartment
         self.timesteps_per_day = timesteps_per_day
         self.RNG = RNG
-        self._transition_type = transition_type
         self.transition_variables_list = transition_variables_list
 
-        self.get_joint_realization = getattr(self, "get_" + transition_type + "_realization")
+        self.num_age_groups = num_age_groups
+        self.num_risk_groups = num_risk_groups
 
         self.current_realizations_list = []
+
+        self.assign_transition_type(transition_type)
 
     @property
     def transition_type(self):
         return self._transition_type
+
+    def assign_get_joint_realization_function(self, transition_type):
+        self.get_joint_realization = getattr(self, "get_" + transition_type + "_realization")
+
+    def assign_transition_type(self, transition_type):
+        transition_type = transition_type.replace("binomial", "multinomial")
+        self._transition_type = transition_type
+        self.assign_get_joint_realization_function(transition_type)
 
     def get_total_rate(self):
         '''
@@ -89,7 +110,7 @@ class TransitionVariableGroup:
             sum of current rates of transition variables in group
         '''
 
-        total_rate = 0
+        total_rate = np.zeros((self.num_age_groups, self.num_risk_groups))
 
         for transition_variable in self.transition_variables_list:
             total_rate += transition_variable.current_rate
@@ -98,24 +119,26 @@ class TransitionVariableGroup:
 
     def get_probabilities_array(self):
 
-        probabilities_list = []
-
         total_rate = self.get_total_rate()
 
         total_outgoing_probability = approx_binomial_probability_from_rate(total_rate, 1/self.timesteps_per_day)
 
-        # Create probabilities_array, where element i corresponds to the
+        # Create probabilities_list, where element i corresponds to the
         #   transition variable i's current rate divided by the total rate,
         #   multiplied by the total outgoing probability
         # This generates the probabilities array that parameterizes the
         #   multinomial distribution
+        probabilities_list = []
+
         for transition_variable in self.transition_variables_list:
             probabilities_list.append((transition_variable.current_rate / total_rate) * total_outgoing_probability)
 
         # Append the probability that a person stays in the compartment
         probabilities_list.append(1 - total_outgoing_probability)
 
-        return np.squeeze(np.asarray(probabilities_list))
+        # breakpoint()
+
+        return np.asarray(probabilities_list)
 
     def get_current_scaled_rates_array(self):
 
@@ -124,7 +147,7 @@ class TransitionVariableGroup:
         current_scaled_rates_list = [tvar.current_rate * 1/timesteps_per_day for tvar in self.transition_variables_list]
         current_scaled_rates_list.append(np.array((1 - self.get_total_rate() * 1/timesteps_per_day)))
 
-        return np.squeeze(np.asarray(current_scaled_rates_list))
+        return np.asarray(current_scaled_rates_list)
 
     def get_joint_realization(self):
         pass
@@ -133,33 +156,68 @@ class TransitionVariableGroup:
 
         probabilities_array = self.get_probabilities_array()
 
-        return np.squeeze(self.RNG.multinomial(np.asarray(self.base_count_epi_compartment.current_val, dtype=int),
-                                               probabilities_array))
+        num_outflows = len(self.transition_variables_list)
+
+        # We use num_outflows + 1 because for the multinomial distribution we explicitly model
+        #   the number who stay/remain in the compartment
+        realizations_array = np.zeros((num_outflows + 1, self.num_age_groups, self.num_risk_groups))
+
+        for age_group in range(self.num_age_groups):
+            for risk_group in range(self.num_risk_groups):
+                realizations_array[:, age_group, risk_group] = self.RNG.multinomial(
+                    np.asarray(self.base_count_epi_compartment.current_val[age_group,risk_group], dtype=int),
+                    probabilities_array[:,age_group,risk_group])
+
+        return realizations_array
 
     def get_multinomial_taylor_approx_realization(self):
 
         current_scaled_rates_array = self.get_current_scaled_rates_array()
 
-        return np.squeeze(self.RNG.multinomial(np.asarray(self.base_count_epi_compartment.current_val, dtype=int),
-                                               current_scaled_rates_array))
+        num_outflows = len(self.transition_variables_list)
+
+        # We use num_outflows + 1 because for the multinomial distribution we explicitly model
+        #   the number who stay/remain in the compartment
+        realizations_array = np.zeros((num_outflows + 1, self.num_age_groups, self.num_risk_groups))
+
+        for age_group in range(self.num_age_groups):
+            for risk_group in range(self.num_risk_groups):
+                realizations_array[:, age_group, risk_group] = self.RNG.multinomial(
+                    np.asarray(self.base_count_epi_compartment.current_val[age_group,risk_group], dtype=int),
+                    current_scaled_rates_array[:,age_group,risk_group])
+
+        return realizations_array
 
     def get_poisson_realization(self):
 
         timesteps_per_day = self.timesteps_per_day
 
-        return np.asarray([self.RNG.poisson(self.base_count_epi_compartment.current_val * tvar.current_rate * 1/timesteps_per_day) for tvar in self.transition_variables_list])
+        num_outflows = len(self.transition_variables_list)
+
+        realizations_array = np.zeros((num_outflows, self.num_age_groups, self.num_risk_groups))
+
+        transition_variables_list = self.transition_variables_list
+
+        for age_group in range(self.num_age_groups):
+            for risk_group in range(self.num_risk_groups):
+                for outflow_ix in range(num_outflows):
+                    realizations_array[outflow_ix, age_group, risk_group] = self.RNG.poisson(
+                        self.base_count_epi_compartment.current_val[age_group,risk_group] *
+                        transition_variables_list[outflow_ix].current_rate[age_group, risk_group] * 1/timesteps_per_day)
+
+        return realizations_array
 
     def get_multinomial_deterministic_realization(self):
 
         probabilities_array = self.get_probabilities_array()
 
-        return np.squeeze(np.asarray(self.base_count_epi_compartment.current_val * probabilities_array, dtype=int))
+        return self.base_count_epi_compartment.current_val * probabilities_array
 
     def get_multinomial_taylor_approx_deterministic_realization(self):
 
         current_scaled_rates_array = self.get_current_scaled_rates_array()
 
-        return np.squeeze(np.asarray(self.base_count_epi_compartment.current_val * current_scaled_rates_array, dtype=int))
+        return self.base_count_epi_compartment.current_val * current_scaled_rates_array
 
     def get_poisson_deterministic_realization(self):
 
@@ -182,7 +240,7 @@ class TransitionVariableGroup:
         #   also corresponds to the ith transition variable in transition_variables_list
         # Update the current realization of the transition variables contained in this group
         for ix in range(len(self.transition_variables_list)):
-            self.transition_variables_list[ix].current_realization = self.current_realizations_list[ix]
+            self.transition_variables_list[ix].current_realization = self.current_realizations_list[ix,:,:]
 
 
 class TransitionVariable:
@@ -193,13 +251,15 @@ class TransitionVariable:
                  timesteps_per_day,
                  RNG,
                  transition_type,
-                 is_jointly_distributed=False):
+                 is_jointly_distributed,
+                 num_age_groups,
+                 num_risk_groups):
         '''
         :param name: string,
             name of TransitionVariable
         :param base_count_epi_compartment: EpiCompartment object,
             compartment from which TransitionVariable flows
-        :param timesteps_per_day: positive integer,
+        :param timesteps_per_day: positive int,
             number of discretized timesteps per day
         :param RNG: numpy Generator object,
             used to generate random variables
@@ -217,33 +277,39 @@ class TransitionVariable:
             TransitionVariable instance is also contained in a
             TransitionVariableGroup). False otherwise, in which case
             random sampling is marginal.
+        :param num_age_groups: positive int,
+            number of age groups (rows)
+        :param num_risk_groups: positive int,
+            number of risk groups (columns)
         '''
-
-        __slots__ = ("name",
-                     "base_count_epi_compartment",
-                     "timesteps_per_day",
-                     "RNG",
-                     "transition_type",
-                     "is_jointly_distributed")
 
         self.name = name
         self.base_count_epi_compartment = base_count_epi_compartment
         self.timesteps_per_day = timesteps_per_day
         self.RNG = RNG
-        self._transition_type = transition_type
         self.is_jointly_distributed = is_jointly_distributed
+
+        self.num_age_groups = num_age_groups
+        self.num_risk_groups = num_risk_groups
 
         self.current_realization = None
         self.current_rate = None
 
+        self.assign_transition_type(transition_type)
+
+    @property
+    def transition_type(self):
+        return self._transition_type
+
+    def assign_get_realization_function(self, transition_type):
         if self.is_jointly_distributed:
             pass
         else:
             self.get_realization = getattr(self, "get_" + transition_type + "_realization")
 
-    @property
-    def transition_type(self):
-        return self._transition_type
+    def assign_transition_type(self, transition_type):
+        self._transition_type = transition_type
+        self.assign_get_realization_function(transition_type)
 
     def get_binomial_realization(self):
         return self.RNG.binomial(n=np.asarray(self.base_count, dtype=int),
@@ -308,7 +374,7 @@ class EpiCompartment:
         '''
         :param name: string,
             name of EpiCompartment
-        :param init_val: array-like of positive integers,
+        :param init_val: array-like of positive ints,
             starting population for EpiCompartment
         :param incoming_transition_variable_names_list: array-like of TransitionVariable objects,
             list of TransitionVariable objects that inflow to epi compartment
@@ -318,7 +384,7 @@ class EpiCompartment:
 
         self.name = name
         self.init_val = init_val
-        self.current_val = init_val.copy()
+        self.current_val = copy.deepcopy(init_val)
 
         self.inflow_transition_variable_names_list = inflow_transition_variable_names_list
         self.outflow_transition_variable_names_list = outflow_transition_variable_names_list
@@ -341,7 +407,7 @@ class StateVariable:
                  init_val):
         self.name = name
         self.init_val = init_val
-        self.current_val = init_val.copy()
+        self.current_val = copy.deepcopy(init_val)
         self.change_in_current_val = None
 
 
@@ -365,13 +431,43 @@ class BaseModel(ABC):
         self.name_to_transition_variable_group_dict = {}
         self.name_to_state_variable_dict = {}
 
-        self.bit_generator = np.random.MT19937(seed=RNG_seed)
-        self.RNG = np.random.Generator(self.bit_generator)
+        self._bit_generator = np.random.MT19937(seed=RNG_seed)
+        self._RNG = np.random.Generator(self._bit_generator)
 
         self.current_day_counter = 0
 
         self.epi_params = None
         self.simulation_params = None
+
+    def modify_model_RNG_seed(self, RNG_seed):
+
+        self._bit_generator = np.random.MT19937(seed=RNG_seed)
+        self._RNG = np.random.Generator(self._bit_generator)
+
+        for tvar_group in self.name_to_transition_variable_group_dict.values():
+            tvar_group.RNG = self._RNG
+
+        for tvar in self.name_to_transition_variable_dict.values():
+            tvar.RNG = self._RNG
+
+    def modify_model_transition_type(self, transition_type):
+
+        for tvar_group in self.name_to_transition_variable_group_dict.values():
+            tvar_group.assign_transition_type(transition_type)
+
+        for tvar in self.name_to_transition_variable_dict.values():
+            tvar.assign_transition_type(transition_type)
+
+    def add_epi_compartments_from_json(self, json_filename):
+
+        with open(json_filename) as f:
+            d = json.load(f)
+
+        for epi_compartment_name, data_dict in d.items():
+            self.add_epi_compartment(epi_compartment_name,
+                                     np.asarray(data_dict["init_val"]),
+                                     data_dict["incoming_transition_variable_names_list"],
+                                     data_dict["outgoing_transition_variable_names_list"])
 
     def add_epi_compartment(self,
                             name,
@@ -416,7 +512,7 @@ class BaseModel(ABC):
 
         timesteps_per_day = self.simulation_params.timesteps_per_day
         transition_type = self.simulation_params.transition_type
-        RNG = self.RNG
+        RNG = self._RNG
 
         # If there are multiple outflows from this epi compartment,
         #   create corresponding TransitionVariables where is_jointly_distributed = True
@@ -428,7 +524,9 @@ class BaseModel(ABC):
                                              timesteps_per_day,
                                              RNG,
                                              transition_type,
-                                             True)
+                                             True,
+                                             self.epi_params.num_age_groups,
+                                             self.epi_params.num_risk_groups)
 
             # Create a list of transition variable objects to create a TransitionVariableGroup
             transition_variables_list = [
@@ -440,7 +538,9 @@ class BaseModel(ABC):
                                                timesteps_per_day,
                                                RNG,
                                                transition_type,
-                                               transition_variables_list)
+                                               transition_variables_list,
+                                               self.epi_params.num_age_groups,
+                                               self.epi_params.num_risk_groups)
         else:
             for transition_variable_name in outgoing_transition_variable_names_list:
                 self.add_transition_variable(transition_variable_name,
@@ -448,7 +548,9 @@ class BaseModel(ABC):
                                              timesteps_per_day,
                                              RNG,
                                              transition_type,
-                                             False)
+                                             False,
+                                             self.epi_params.num_age_groups,
+                                             self.epi_params.num_risk_groups)
 
     def add_transition_variable(self,
                                 name,
@@ -456,7 +558,9 @@ class BaseModel(ABC):
                                 timesteps_per_day,
                                 RNG,
                                 transition_type,
-                                is_jointly_distributed=False):
+                                is_jointly_distributed,
+                                num_age_groups,
+                                num_risk_groups):
         '''
         Constructor method for adding TransitionVariable instance to model
 
@@ -478,7 +582,9 @@ class BaseModel(ABC):
                                   timesteps_per_day,
                                   RNG,
                                   transition_type,
-                                  is_jointly_distributed)
+                                  is_jointly_distributed,
+                                  num_age_groups,
+                                  num_risk_groups)
 
         self.name_to_transition_variable_dict[name] = tvar
         setattr(self, name, tvar)
@@ -489,7 +595,9 @@ class BaseModel(ABC):
                                       timesteps_per_day,
                                       RNG,
                                       transition_type,
-                                      transition_variables_list):
+                                      transition_variables_list,
+                                      num_age_groups,
+                                      num_risk_groups):
         '''
         Constructor method for adding TransitionVariableGroup instance to model
 
@@ -514,10 +622,21 @@ class BaseModel(ABC):
                                           timesteps_per_day,
                                           RNG,
                                           transition_type,
-                                          transition_variables_list)
+                                          transition_variables_list,
+                                          num_age_groups,
+                                          num_risk_groups)
 
         self.name_to_transition_variable_group_dict[name] = tvgroup
         setattr(self, name, tvgroup)
+
+    def add_state_variables_from_json(self, json_filename):
+
+        with open(json_filename) as f:
+            d = json.load(f)
+
+        for state_variable_name, data_dict in d.items():
+            self.add_state_variable(state_variable_name,
+                                    np.asarray(data_dict["init_val"]))
 
     def add_state_variable(self,
                            name,
@@ -552,6 +671,8 @@ class BaseModel(ABC):
             d = json.load(f)
 
         for key, value in d.items():
+            if type(value) is list:
+                value = np.asarray(value)
             setattr(self.epi_params, key, value)
 
     def add_epi_params(self, epi_params):
@@ -594,11 +715,11 @@ class BaseModel(ABC):
         '''
 
         for compartment in self.name_to_epi_compartment_dict.values():
-            compartment.current_val = compartment.init_val
+            compartment.current_val = copy.deepcopy(compartment.init_val)
             compartment.history_vals_list = []
 
         for svar in self.name_to_state_variable_dict.values():
-            svar.current_val = svar.init_val
+            svar.current_val = copy.deepcopy(svar.init_val)
             svar.change_in_current_val = None
 
         for tvar in self.name_to_transition_variable_dict.values():
@@ -615,7 +736,7 @@ class BaseModel(ABC):
         '''
 
         for compartment in self.name_to_epi_compartment_dict.values():
-            compartment.history_vals_list.append(compartment.current_val.copy())
+            compartment.history_vals_list.append(copy.deepcopy(compartment.current_val))
 
     def simulate_until_time_period(self, last_simulation_day):
         '''
@@ -625,7 +746,7 @@ class BaseModel(ABC):
             timesteps
         Save daily simulation data as history
 
-        :param last_simulation_day: positive integer,
+        :param last_simulation_day: positive int,
             stop simulation at last_simulation_day (i.e. exclusive,
             simulate up to but not including last_simulation_day)
         '''
@@ -650,11 +771,9 @@ class BaseModel(ABC):
 
         for timestep in range(timesteps_per_day):
 
-            self.update_change_in_state_variables()
-
             # Users will inherit from base class BaseModel and override
             #   these functions to customize their model
-            self.update_state_variables()
+            self.update_change_in_state_variables()
             self.update_transition_rates()
 
             # Obtain transition variable realizations for jointly distributed transition variables
@@ -673,15 +792,9 @@ class BaseModel(ABC):
                 else:
                     tvar.current_realization = tvar.get_realization()
 
-            # Update all epi compartments
-            for compartment in self.name_to_epi_compartment_dict.values():
-                total_inflow = 0
-                total_outflow = 0
-                for var_name in compartment.inflow_transition_variable_names_list:
-                    total_inflow += self.name_to_transition_variable_dict[var_name].current_realization
-                for var_name in compartment.outflow_transition_variable_names_list:
-                    total_outflow += self.name_to_transition_variable_dict[var_name].current_realization
-                compartment.current_val += (total_inflow - total_outflow)
+            # In-place updates -- advance the simulation
+            self.update_epi_compartments()
+            self.update_state_variables()
 
             # Reset transition variable current_realization and current_rate to None
             for tvar in self.name_to_transition_variable_dict.values():
@@ -690,10 +803,35 @@ class BaseModel(ABC):
         # Move to next day in simulation
         self.current_day_counter += 1
 
+    def update_epi_compartment_current_val(self, compartment):
+        '''
+        Update current_val in-place for given compartment
+        Computes total inflow based on all inflow transition variables
+            and total outflow based on all outflow transition variables
+            to get net outflow
+        Updated value is previous current_val plus net outflow
+        Assumes that transition variables have been already sampled.
+
+        :param compartment: EpiCompartment object,
+            whose attribute current_val gets updated in place
+        '''
+
+        total_inflow = np.sum([self.name_to_transition_variable_dict[var_name].current_realization
+                               for var_name in compartment.inflow_transition_variable_names_list], axis=0)
+        total_outflow = np.sum([self.name_to_transition_variable_dict[var_name].current_realization
+                               for var_name in compartment.outflow_transition_variable_names_list], axis=0)
+        compartment.current_val += (total_inflow - total_outflow)
+
+    def update_epi_compartments(self):
+        '''
+        Update current_val in-place for each epi_compartment in model
+        '''
+        for compartment in self.name_to_epi_compartment_dict.values():
+            self.update_epi_compartment_current_val(compartment)
+
     def update_state_variables(self):
         '''
-        Helper function to update state variables with proper scale
-            according to timesteps per day
+        Update state variables with proper scale according to timesteps per day
         '''
 
         timesteps_per_day = self.simulation_params.timesteps_per_day
