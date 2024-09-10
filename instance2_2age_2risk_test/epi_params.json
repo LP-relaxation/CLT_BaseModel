@@ -9,15 +9,25 @@
 	"immunity_inf_saturation_constant": 0.5,
 	"waning_factor_hosp": 0.05,
 	"waning_factor_inf": 0.05,
-	"efficacy_immunity_hosp": [[0.8, 0.8]],
-	"efficacy_immunity_inf": [[0.8, 0.8]],
-	"efficacy_immunity_death": [[0.8, 0.8]],
-	"eta": 0.1,
-	"sigma": 0.5,
-	"mu": [[0.5, 0.5]],
-	"gamma": 0.1,
-	"zeta": 0.25,
-	"gamma_hosp": 0.17,
-	"pi": 0.17,
-	"nu": [[0.03, 0.03]]
+	"efficacy_immunity_hosp":
+		[[0.8, 0.8],
+		[0.8, 0.8]],
+	"efficacy_immunity_inf":
+		[[0.8, 0.8],
+		[0.8, 0.8]],
+	"efficacy_immunity_death":
+		[[0.8, 0.8],
+		[0.8, 0.8]],
+	"R_to_S": 0.1,
+	"E_to_I_rate": 0.5,
+	"I_to_H_adjusted_proportion":
+		[[0.5, 0.5],
+		[0.5, 0.5]],
+	"I_to_R_rate": 0.1,
+	"I_to_H_rate": 0.25,
+	"H_to_R_rate": 0.17,
+	"H_to_D_rate": 0.17,
+	"H_to_D_adjusted_proportion":
+		[[0.3, 0.3],
+		[0.3, 0.3]]
 }

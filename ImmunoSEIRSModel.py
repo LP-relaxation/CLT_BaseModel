@@ -1,5 +1,5 @@
 from BaseModel import BaseModel, SimulationParams
-import PlotTools
+from PlotTools import create_basic_compartment_history_plot
 import numpy as np
 import matplotlib.pyplot as plt
 import time
@@ -28,18 +28,18 @@ def get_new_exposed_rate(I_val,
     return np.asarray(beta * I_val / (total_population_val * (1 + efficacy_against_inf * immunity_against_inf)))
 
 
-def get_new_hosp_rate(zeta,
-                      mu,
+def get_new_hosp_rate(I_to_H_rate,
+                      I_to_H_adjusted_proportion,
                       immunity_against_hosp,
                       efficacy_against_hosp):
-    return np.asarray(zeta * mu / (1 + efficacy_against_hosp * immunity_against_hosp))
+    return np.asarray(I_to_H_rate * I_to_H_adjusted_proportion / (1 + efficacy_against_hosp * immunity_against_hosp))
 
 
-def get_new_dead_rate(pi,
-                      nu,
+def get_new_dead_rate(H_to_D_adjusted_proportion,
+                      H_to_D_rate,
                       immunity_against_hosp,
                       efficacy_against_death):
-    return np.asarray(pi * nu / (1 + efficacy_against_death * immunity_against_hosp))
+    return np.asarray(H_to_D_adjusted_proportion * H_to_D_rate / (1 + efficacy_against_death * immunity_against_hosp))
 
 
 class ImmunoSEIRSModel(BaseModel):
@@ -89,15 +89,15 @@ class ImmunoSEIRSModel(BaseModel):
             beta=epi_params.beta)
 
         self.new_hosp.current_rate = get_new_hosp_rate(
-            zeta=epi_params.zeta,
-            mu=epi_params.mu,
+            I_to_H_rate=epi_params.I_to_H_rate,
+            I_to_H_adjusted_proportion=epi_params.I_to_H_adjusted_proportion,
             immunity_against_hosp=self.population_immunity_hosp.current_val,
             efficacy_against_hosp=epi_params.efficacy_immunity_hosp
         )
 
         self.new_dead.current_rate = get_new_dead_rate(
-            pi=epi_params.pi,
-            nu=epi_params.nu,
+            H_to_D_rate=epi_params.H_to_D_rate,
+            H_to_D_adjusted_proportion=epi_params.H_to_D_adjusted_proportion,
             immunity_against_hosp=self.population_immunity_hosp.current_val,
             efficacy_against_death=epi_params.efficacy_immunity_death
         )
@@ -105,16 +105,16 @@ class ImmunoSEIRSModel(BaseModel):
         num_age_groups = self.epi_params.num_age_groups
         num_risk_groups = self.epi_params.num_risk_groups
 
-        self.new_infected.current_rate = np.full((num_age_groups, num_risk_groups), epi_params.sigma)
+        self.new_infected.current_rate = np.full((num_age_groups, num_risk_groups), epi_params.E_to_I_rate)
 
         self.new_recovered_home.current_rate = np.full((num_age_groups, num_risk_groups),
-                                                       (1 - epi_params.mu) * epi_params.gamma)
+                                                       (1 - epi_params.I_to_H_adjusted_proportion) * epi_params.I_to_R_rate)
 
         self.new_recovered_hosp.current_rate = np.full((num_age_groups, num_risk_groups),
-                                                       (1 - epi_params.nu) * epi_params.gamma_hosp)
+                                                       (1 - epi_params.H_to_D_adjusted_proportion) * epi_params.H_to_R_rate)
 
         self.new_susceptible.current_rate = np.full((num_age_groups, num_risk_groups),
-                                                    epi_params.eta)
+                                                    epi_params.R_to_S)
 
 base_path = Path(__file__).parent
 
@@ -127,3 +127,5 @@ model_1age_1risk = ImmunoSEIRSModel(base_path / "instance1_1age_1risk_test" / "e
                                     random_seed)
 
 model_1age_1risk.simulate_until_time_period(365)
+
+create_basic_compartment_history_plot(model_1age_1risk)
