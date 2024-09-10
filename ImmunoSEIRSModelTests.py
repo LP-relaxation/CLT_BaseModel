@@ -165,5 +165,3 @@ def test_reproducible_RNG(model):
     for compartment_name in original_model_history_dict.keys():
         assert np.array_equal(np.array(original_model_history_dict[compartment_name]),\
             np.array(reset_model_history_dict[compartment_name]))
-
-test_beta(model_1age_1risk_variations_list[0])
