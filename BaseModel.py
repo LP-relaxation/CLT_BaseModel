@@ -1,12 +1,6 @@
 import numpy as np
-import matplotlib.pyplot as plt
-import time
 import json
-
 import copy
-
-from collections import namedtuple
-
 from abc import ABC, abstractmethod
 
 def approx_binomial_probability_from_rate(rate, interval_length):
@@ -63,13 +57,11 @@ class TransitionVariableGroup:
             number of discretized timesteps per day
         :param RNG: numpy Generator object,
             used to generate random variables
-        :param transition_type: str,
-            Supported values are in {"multinomial", "multinomial_taylor_approx", "poisson",
-            "multinomial_deterministic", "multinomial_taylor_approx_deterministic",
-            "poisson_deterministic"}. Determines which method to use to compute
-            realization, corresponding to get_binomial_realization,
-            get_binomial_taylor_approx_realization, etc... See methods for
-            rigorous explanation.
+        transition_type: TransitionType Enum instance,
+            Determines which method to use to compute realization,
+            corresponding to get_binomial_realization,
+            get_binomial_taylor_approx_realization, etc...
+            See methods for rigorous explanation.
         :param transition_variables_list: array-like of TransitionVariable objects,
             holds all TransitionVariable objects that outflow from
             base_count_epi_compartment
@@ -96,28 +88,76 @@ class TransitionVariableGroup:
     def transition_type(self):
         return self._transition_type
 
-    def assign_get_joint_realization_function(self, transition_type):
-        self.get_joint_realization = getattr(self, "get_" + transition_type + "_realization")
-
     def assign_transition_type(self, transition_type):
+        '''
+        Updates transition_type and updates get_joint_realization
+            method according to transition_type.
+
+        :param transition_type: str,
+            Supported values are in {"multinomial", "multinomial_taylor_approx", "poisson",
+            "multinomial_deterministic", "multinomial_taylor_approx_deterministic",
+            "poisson_deterministic"}. Determines which method to use to compute
+            realization, corresponding to get_binomial_realization,
+            get_binomial_taylor_approx_realization, etc... See methods for
+            rigorous explanation.
+        '''
+
+        # If marginal transition type is binomial, then
+        #   joint transition type is multinomial
         transition_type = transition_type.replace("binomial", "multinomial")
+
         self._transition_type = transition_type
         self.assign_get_joint_realization_function(transition_type)
 
+    def assign_get_joint_realization_function(self, transition_type):
+        '''
+        Updates get_joint_realization method according to transition_type.
+            Overrides get_joint_realization so that joint transitions
+            are computed according to the desired transition_type.
+
+        :param transition_type: str,
+            Supported values are in {"multinomial", "multinomial_taylor_approx", "poisson",
+            "multinomial_deterministic", "multinomial_taylor_approx_deterministic",
+            "poisson_deterministic"}. Determines which method to use to compute
+            realization, corresponding to get_binomial_realization,
+            get_binomial_taylor_approx_realization, etc... See methods for
+            rigorous explanation.
+        '''
+
+        self.get_joint_realization = getattr(self, "get_" + transition_type + "_realization")
+
     def get_total_rate(self):
         '''
+        Return the age-risk-specific total transition rate,
+            which is the sum of the current rate of each transition variable
+            in this transition variable group
+        Used to properly scale multinomial probabilities vector so
+            that elements sum to 1
+
         :return: array-like of positive numbers,
-            sum of current rates of transition variables in group
+            size equal to number of age groups x number of risk groups,
+            sum of current rates of transition variables in
+            transition variable group
         '''
 
-        total_rate = np.zeros((self.num_age_groups, self.num_risk_groups))
-
-        for transition_variable in self.transition_variables_list:
-            total_rate += transition_variable.current_rate
-
-        return total_rate
+        # axis 0: corresponds to outgoing transition variable
+        # axis 1: corresponds to age groups
+        # axis 2: corresponds to risk groups
+        # --> summing over axis 0 gives us the total rate for each age-risk group
+        return np.sum(self.get_current_rates_array(), axis=0)
 
     def get_probabilities_array(self):
+        '''
+        Returns an array of probabilities used for joint binomial
+            (multinomial) transitions (get_multinomial_realization method)
+
+        :return: array-like of positive numbers,
+            size equal to (length of outgoing transition variables list + 1)
+            x number of age groups x number of risk groups --
+            note the "+1" corresponds to the multinomial outcome of staying
+            in the same epi compartment (not transitioning to any outgoing
+            epi compartment)
+        '''
 
         total_rate = self.get_total_rate()
 
@@ -136,23 +176,38 @@ class TransitionVariableGroup:
         # Append the probability that a person stays in the compartment
         probabilities_list.append(1 - total_outgoing_probability)
 
-        # breakpoint()
-
         return np.asarray(probabilities_list)
 
-    def get_current_scaled_rates_array(self):
+    def get_current_rates_array(self):
+        '''
+        Returns an array of current rates of transition variables in
+            self.transition_variables_list -- ith element in array
+            corresponds to current rate of ith transition variable
 
-        timesteps_per_day = self.timesteps_per_day
+        :return: array-like of positive numbers,
+            size equal to length of outgoing transition variables list
+            x number of age groups x number of risk groups
+        '''
 
-        current_scaled_rates_list = [tvar.current_rate * 1/timesteps_per_day for tvar in self.transition_variables_list]
-        current_scaled_rates_list.append(np.array((1 - self.get_total_rate() * 1/timesteps_per_day)))
+        current_rates_list = [tvar.current_rate for tvar in self.transition_variables_list]
 
-        return np.asarray(current_scaled_rates_list)
+        return np.asarray(current_rates_list)
 
     def get_joint_realization(self):
         pass
 
     def get_multinomial_realization(self):
+        '''
+        Returns an array of transition realizations (number transitioning
+            to outgoing compartments) sampled from multinomial distribution
+
+        :return: array-like of positive numbers,
+            size equal to (length of outgoing transition variables list + 1)
+            x number of age groups x number of risk groups --
+            note the "+1" corresponds to the multinomial outcome of staying
+            in the same epi compartment (not transitioning to any outgoing
+            epi compartment)
+        '''
 
         probabilities_array = self.get_probabilities_array()
 
@@ -171,10 +226,35 @@ class TransitionVariableGroup:
         return realizations_array
 
     def get_multinomial_taylor_approx_realization(self):
+        '''
+        Returns an array of transition realizations (number transitioning
+            to outgoing compartments) sampled from multinomial distribution
+            using Taylor Series approximation for probability parameter
+        Here, the probability that
 
-        current_scaled_rates_array = self.get_current_scaled_rates_array()
+        :return: array-like of positive numbers,
+            size equal to (length of outgoing transition variables list + 1)
+            x number of age groups x number of risk groups --
+            note the "+1" corresponds to the multinomial outcome of staying
+            in the same epi compartment (not transitioning to any outgoing
+            epi compartment)
+        '''
 
         num_outflows = len(self.transition_variables_list)
+
+        timesteps_per_day = self.timesteps_per_day
+
+        current_rates_array = self.get_current_rates_array()
+
+        total_rate = self.get_total_rate()
+
+        # Multiply current rates array by length of time interval (1 / timesteps_per_day)
+        # Also append additional value corresponding to probability of
+        #   remaining in current epi compartment (not transitioning at all)
+        # Note: vstack function here works better than append function because append
+        #   automatically flattens the resulting array, resulting in dimension issues
+        current_scaled_rates_array = np.vstack((current_rates_array / timesteps_per_day,
+                                               np.expand_dims(1 - total_rate / timesteps_per_day, axis=0)))
 
         # We use num_outflows + 1 because for the multinomial distribution we explicitly model
         #   the number who stay/remain in the compartment
@@ -189,6 +269,14 @@ class TransitionVariableGroup:
         return realizations_array
 
     def get_poisson_realization(self):
+        '''
+        Returns an array of transition realizations (number transitioning
+            to outgoing compartments) sampled from Poisson distribution
+
+        :return: array-like of positive numbers,
+            size equal to length of outgoing transition variables list
+            x number of age groups x number of risk groups
+        '''
 
         timesteps_per_day = self.timesteps_per_day
 
@@ -208,22 +296,50 @@ class TransitionVariableGroup:
         return realizations_array
 
     def get_multinomial_deterministic_realization(self):
+        '''
+        Deterministic counterpart to get_multinomial_realization --
+            uses mean (n x p, i.e. total counts x probability array) as realization
+            rather than randomly sampling
+
+        :return: array-like of positive numbers,
+            size equal to (length of outgoing transition variables list + 1)
+            x number of age groups x number of risk groups --
+            note the "+1" corresponds to the multinomial outcome of staying
+            in the same epi compartment (not transitioning to any outgoing
+            epi compartment)
+        '''
 
         probabilities_array = self.get_probabilities_array()
-
         return self.base_count_epi_compartment.current_val * probabilities_array
 
     def get_multinomial_taylor_approx_deterministic_realization(self):
+        '''
+        Deterministic counterpart to get_multinomial_taylor_approx_realization --
+            uses mean (n x p, i.e. total counts x probability array) as realization
+            rather than randomly sampling
 
-        current_scaled_rates_array = self.get_current_scaled_rates_array()
+        :return: array-like of positive numbers,
+            size equal to (length of outgoing transition variables list + 1)
+            x number of age groups x number of risk groups --
+            note the "+1" corresponds to the multinomial outcome of staying
+            in the same epi compartment (not transitioning to any outgoing
+            epi compartment)
+        '''
 
-        return self.base_count_epi_compartment.current_val * current_scaled_rates_array
+        current_rates_array = self.get_current_rates_array()
+        return self.base_count_epi_compartment.current_val * current_rates_array / self.timesteps_per_day
 
     def get_poisson_deterministic_realization(self):
+        '''
+        Deterministic counterpart to get_poisson_realization --
+            uses mean (rate array) as realization rather than randomly sampling
 
-        timesteps_per_day = self.timesteps_per_day
+        :return: array-like of positive numbers,
+            size equal to length of outgoing transition variables list
+            x number of age groups x number of risk groups
+        '''
 
-        return np.asarray([self.base_count_epi_compartment.current_val * tvar.current_rate * 1/timesteps_per_day for tvar in self.transition_variables_list], dtype=int)
+        return self.get_current_rates_array() / self.timesteps_per_day
 
     def reset(self):
         self.current_realizations_list = []
@@ -459,10 +575,15 @@ class BaseModel(ABC):
             tvar.assign_transition_type(transition_type)
 
     def add_epi_compartments_from_json(self, json_filename):
+        '''
+        Load json_filename and add Epi Compartment instances
+            for each entry
+        '''
 
         with open(json_filename) as f:
             d = json.load(f)
 
+        # Must convert list to numpy array to support numpy operations
         for epi_compartment_name, data_dict in d.items():
             self.add_epi_compartment(epi_compartment_name,
                                      np.asarray(data_dict["init_val"]),
@@ -630,10 +751,15 @@ class BaseModel(ABC):
         setattr(self, name, tvgroup)
 
     def add_state_variables_from_json(self, json_filename):
+        '''
+        Load json_filename and add Epi Compartment instances
+            for each entry
+        '''
 
         with open(json_filename) as f:
             d = json.load(f)
 
+        # Must convert list to numpy array to support numpy operations
         for state_variable_name, data_dict in d.items():
             self.add_state_variable(state_variable_name,
                                     np.asarray(data_dict["init_val"]))
@@ -664,12 +790,15 @@ class BaseModel(ABC):
         '''
         Assign epi_params attribute to EpiParams instance
         Load json_filename and assign values to epi_params attribute
+        Converts lists to numpy arrays
         '''
         self.epi_params = EpiParams()
 
         with open(json_filename) as f:
             d = json.load(f)
 
+        # json does not support arrays -- so must convert lists
+        #   to numpy arrays to support numpy operations
         for key, value in d.items():
             if type(value) is list:
                 value = np.asarray(value)

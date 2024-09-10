@@ -7,6 +7,7 @@ import json
 
 from collections import namedtuple
 
+from pathlib import Path
 
 def get_change_in_immunity(current_val,
                            R_val,
@@ -115,3 +116,14 @@ class ImmunoSEIRSModel(BaseModel):
         self.new_susceptible.current_rate = np.full((num_age_groups, num_risk_groups),
                                                     epi_params.eta)
 
+base_path = Path(__file__).parent
+
+random_seed = np.random.SeedSequence()
+
+model_1age_1risk = ImmunoSEIRSModel(base_path / "instance1_1age_1risk_test" / "epi_params.json",
+                                    base_path / "instance1_1age_1risk_test" / "simulation_params.json",
+                                    base_path / "instance1_1age_1risk_test" / "epi_compartments.json",
+                                    base_path / "instance1_1age_1risk_test" / "state_variables.json",
+                                    random_seed)
+
+model_1age_1risk.simulate_until_time_period(365)

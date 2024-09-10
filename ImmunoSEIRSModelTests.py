@@ -1,5 +1,4 @@
 from ImmunoSEIRSModel import ImmunoSEIRSModel
-from BaseModel import SimulationParams
 from PlotTools import create_basic_compartment_history_plot
 
 import numpy as np

@@ -1,4 +1,4 @@
 {
 	"timesteps_per_day":7,
-	"transition_type":"poisson_deterministic"
+	"transition_type":"binomial_taylor_approx"
 }
