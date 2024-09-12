@@ -1,0 +1,73 @@
+{
+	"epi_compartments": {
+	"S":
+	{	"init_val": [[980000.0, 980000.0], [980000.0, 980000.0]],
+		"incoming_transition_variable_names_list": ["new_susceptible"],
+		"outgoing_transition_variable_names_list": ["new_exposed"],
+		"outgoing_transition_rate_function": {"new_exposed": "get_new_exposed_rate_no_immune"}
+	},
+	"E":
+	{
+		"init_val": [[10000.0, 10000.0], [10000.0, 10000.0]],
+		"incoming_transition_variable_names_list": ["new_exposed"],
+		"outgoing_transition_variable_names_list": ["new_infected"],
+		"outgoing_transition_rate_function": {"new_infected": "get_new_infected_rate"}
+	},
+	"I":
+	{
+		"init_val": [[10000.0, 10000.0], [10000.0, 10000.0]],
+		"incoming_transition_variable_names_list": ["new_infected"],
+		"outgoing_transition_variable_names_list": ["new_recovered_home", "new_hosp"],
+		"outgoing_transition_rate_function": {"new_recovered_home": "get_new_recovered_home_rate",
+						      "new_hosp": "get_new_hosp_rate"}
+	},
+	"H":
+	{
+		"init_val": [[0.0, 0.0], [0.0, 0.0]],
+		"incoming_transition_variable_names_list": ["new_hosp"],
+		"outgoing_transition_variable_names_list": ["new_recovered_hosp", "new_dead"],
+		"outgoing_transition_rate_function": {"new_recovered_hosp": "get_new_recovered_hosp_rate",
+						      "new_dead": "get_new_dead_rate"}
+	},
+	"R":
+	{
+		"init_val": [[0.0, 0.0], [0.0, 0.0]],
+		"incoming_transition_variable_names_list": ["new_recovered_home",  "new_recovered_hosp"],
+		"outgoing_transition_variable_names_list": ["new_susceptible"],
+		"outgoing_transition_rate_function": {"new_susceptible": "get_new_susceptible_rate"}
+	},
+	"D":
+	{
+		"init_val": [[0.0, 0.0], [0.0, 0.0]],
+		"incoming_transition_variable_names_list": ["new_dead"],
+		"outgoing_transition_variable_names_list": [],
+		"outgoing_transition_rate_function": {}
+	}
+	},
+	"immune_compartments": {
+		"population_immunity_hosp_H1": {
+			"init_val": [[0.5, 0.5],[0.5, 0.5]],
+			"state_update_function": "get_change_in_immunity_H1"
+		},
+		"population_immunity_hosp_H3": {
+			"init_val": [[0.5, 0.5],[0.5, 0.5]],
+			"state_update_function": "get_change_in_immunity_H3"
+		},
+		"population_immunity_hosp_V": {
+			"init_val":[[0.5, 0.5],[0.5, 0.5]],
+			"state_update_function": "get_change_in_immunity_V"
+		},
+		"population_immunity_inf_H1": {
+			"init_val": [[0.5, 0.5],[0.5, 0.5]],
+			"state_update_function": "get_change_in_immunity_H1"
+		},
+		"population_immunity_inf_H3": {
+			"init_val": [[0.6, 0.5],[0.5, 0.5]],
+			"state_update_function": "get_change_in_immunity_H3"
+		},
+		"population_immunity_inf_V": {
+			"init_val": [[0.5, 0.5],[0.5, 0.5]],
+			"state_update_function": "get_change_in_immunity_V"
+		}
+	}
+}

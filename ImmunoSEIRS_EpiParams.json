@@ -22,5 +22,7 @@
 	"gamma_hosp": 0.17,
 	"pi": 0.17,
 	"nu": 0.03,
-	"contact_matrix": [[1,2],[2,1]]
+	"contact_matrix": [[1,2],[2,1]],
+	"num_age_groups":2,
+	"num_risk_groups":2
 }

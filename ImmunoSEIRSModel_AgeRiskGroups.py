@@ -1,16 +1,18 @@
 from BaseModel import BaseModel, SimulationParams
+from EpiFunctions import EpiFunctions
 import PlotTools
 import numpy as np
 import matplotlib.pyplot as plt
 import time
 import json
 import pandas as pd
+import pdb
 
 from collections import namedtuple
 
 # global values
-VARIANT_DIM = 2
-VACCINE_DIM = 1
+#VARIANT_DIM = 2
+#VACCINE_DIM = 1
 
 def get_change_in_immunity_H1(immune_H1_val,
                               immune_H3_val,
@@ -147,152 +149,43 @@ def get_new_dead_rate(pi,
 
 class ImmunoSEIRSModel(BaseModel):
 
-    def __init__(self, RNG_seed=np.random.SeedSequence()):
+    def __init__(self, epi_params_json_filename,
+                 simulation_params_json_filename,
+                 epi_compartments_json_filename,
+                 vaccine_filename,
+                 RNG_seed=np.random.SeedSequence()):
 
         super().__init__(RNG_seed)
 
-        self.add_epi_params_from_json("ImmunoSEIRS_EpiParams.json")
-        self.add_simulation_params_from_json("ImmunoSEIRS_SimulationParams.json")
-        self.read_vaccine_data("vaccine.csv")
-
+        self.add_epi_params_from_json(epi_params_json_filename)
+        self.add_simulation_params_from_json(simulation_params_json_filename)
+        self.read_vaccine_data(vaccine_filename)
+        #breakpoint()
+        # TODO: Put the following into the add_epi_params_from_json
         self.epi_params.immunity_hosp_saturation_constant = np.array(self.epi_params.immunity_hosp_saturation_constant)
         self.epi_params.immunity_inf_saturation_constant = np.array(self.epi_params.immunity_inf_saturation_constant)
         self.epi_params.total_population_val = np.array(self.epi_params.total_population_val)
         self.epi_params.contact_matrix = np.array(self.epi_params.contact_matrix)
 
-        self.add_epi_compartment("S", np.array([[1e6-2e4, 1e6-2e4],
-                                                [1e6-2e4, 1e6-2e4]]), ["new_susceptible"], ["new_exposed"])
-        self.add_epi_compartment("E", np.array([[1e4, 1e4],
-                                                [1e4, 1e4]]), ["new_exposed"], ["new_infected"])
-        self.add_epi_compartment("I", np.array([[1e4, 1e4],
-                                                [1e4, 1e4]]), ["new_infected"], ["new_recovered_home", "new_hosp"])
-        self.add_epi_compartment("H", np.array([[0.0, 0.0],
-                                                [0.0, 0.0]]), ["new_hosp"], ["new_recovered_hosp", "new_dead"])
-        self.add_epi_compartment("R", np.array([[0.0, 0.0],
-                                                [0.0, 0.0]]), ["new_recovered_home", "new_recovered_hosp"], ["new_susceptible"])
-        self.add_epi_compartment("D", np.array([[0.0, 0.0],
-                                                [0.0, 0.0]]), ["new_dead"], [])
+        # initialize the functions
+        self.function_base = EpiFunctions()
 
-        self.add_state_variable("population_immunity_hosp_H1", np.array([[0.5, 0.5],
-                                                                      [0.5, 0.5]]))
-        self.add_state_variable("population_immunity_hosp_H3", np.array([[0.5, 0.5],
-                                                                         [0.5, 0.5]]))
-        self.add_state_variable("population_immunity_hosp_V", np.array([[0.5, 0.5],
-                                                                         [0.5, 0.5]]))
-
-        self.add_state_variable("population_immunity_inf_H1", np.array([[0.5, 0.5],
-                                                                      [0.5, 0.5]]))
-        self.add_state_variable("population_immunity_inf_H3", np.array([[0.6, 0.5],
-                                                                        [0.5, 0.5]]))
-        self.add_state_variable("population_immunity_inf_V", np.array([[0.5, 0.5],
-                                                                        [0.5, 0.5]]))
+        self.add_epi_compartments_from_json(epi_compartments_json_filename)
+        self.add_state_variables_from_json(epi_compartments_json_filename)
+        breakpoint()
 
     def update_change_in_state_variables(self): # for immunity variable
+        for state_variable_name in self.name_to_state_variable_dict:
+            self.name_to_state_variable_dict[state_variable_name].change_in_current_val = self.function_base.execute[
+            self.name_to_state_variable_dict[state_variable_name].state_update_function](self)
 
-        epi_params = self.epi_params
-
-        self.population_immunity_hosp_H1.change_in_current_val = get_change_in_immunity_H1(
-            immune_H1_val=self.population_immunity_hosp_H1.current_val,
-            immune_H3_val=self.population_immunity_hosp_H3.current_val,
-            immune_V_val=self.population_immunity_hosp_V.current_val,
-            R_val=self.R.current_val,
-            immunity_increase_factor=epi_params.immunity_hosp_increase_factor,
-            total_population_val=epi_params.total_population_val,
-            saturation_matrix=epi_params.immunity_hosp_saturation_constant,
-            waning_factor=epi_params.waning_factor_hosp
-        )
-
-        self.population_immunity_hosp_H3.change_in_current_val = get_change_in_immunity_H3(
-            immune_H1_val=self.population_immunity_hosp_H1.current_val,
-            immune_H3_val=self.population_immunity_hosp_H3.current_val,
-            immune_V_val=self.population_immunity_hosp_V.current_val,
-            R_val=self.R.current_val,
-            immunity_increase_factor=epi_params.immunity_hosp_increase_factor,
-            total_population_val=epi_params.total_population_val,
-            saturation_matrix=epi_params.immunity_hosp_saturation_constant,
-            waning_factor=epi_params.waning_factor_hosp
-        )
-
-        self.population_immunity_hosp_V.change_in_current_val = get_change_in_immunity_V(
-            immune_V_val=self.population_immunity_hosp_V.current_val,
-            vaccine_doses=self.data_vaccine,
-            index_date=self.current_day_counter,
-            vaccine_in_effect_delay=epi_params.vaccine_in_effect_delay,
-            immunity_increase_factor=epi_params.immunity_vaccine_increase_factor,
-            waning_factor=epi_params.waning_factor_vaccine_hosp
-            )
-
-
-        self.population_immunity_inf_H1.change_in_current_val = get_change_in_immunity_H1(
-            immune_H1_val=self.population_immunity_inf_H1.current_val,
-            immune_H3_val=self.population_immunity_inf_H3.current_val,
-            immune_V_val=self.population_immunity_inf_V.current_val,
-            R_val=self.R.current_val,
-            immunity_increase_factor=epi_params.immunity_inf_increase_factor,
-            total_population_val=epi_params.total_population_val,
-            saturation_matrix=epi_params.immunity_inf_saturation_constant,
-            waning_factor=epi_params.waning_factor_inf
-        )
-
-        self.population_immunity_inf_H3.change_in_current_val = get_change_in_immunity_H3(
-            immune_H1_val=self.population_immunity_inf_H1.current_val,
-            immune_H3_val=self.population_immunity_inf_H3.current_val,
-            immune_V_val=self.population_immunity_inf_V.current_val,
-            R_val=self.R.current_val,
-            immunity_increase_factor=epi_params.immunity_inf_increase_factor,
-            total_population_val=epi_params.total_population_val,
-            saturation_matrix=epi_params.immunity_inf_saturation_constant,
-            waning_factor=epi_params.waning_factor_inf
-        )
-
-        self.population_immunity_inf_V.change_in_current_val = get_change_in_immunity_V(
-            immune_V_val=self.population_immunity_hosp_V.current_val,
-            vaccine_doses=self.data_vaccine,
-            index_date=self.current_day_counter,
-            vaccine_in_effect_delay=epi_params.vaccine_in_effect_delay,
-            immunity_increase_factor=epi_params.immunity_vaccine_increase_factor,
-            waning_factor=epi_params.waning_factor_vaccine_inf
-        )
 
     def update_transition_rates(self):
+        for epiCompartment_name in self.name_to_epi_compartment_dict:
+            for transition_variable_name in self.name_to_epi_compartment_dict[epiCompartment_name].outflow_transition_variable_names_list:
+                self.name_to_transition_variable_dict[transition_variable_name].current_rate = self.function_base.execute[
+                    self.name_to_epi_compartment_dict[epiCompartment_name].outgoing_transition_rate_function[transition_variable_name]](self)
 
-        epi_params = self.epi_params
-
-        self.new_exposed.current_rate = get_new_exposed_rate(
-            I_val=self.I.current_val,
-            immunity_against_inf_H1=self.population_immunity_inf_H1.current_val,
-            immunity_against_inf_H3=self.population_immunity_inf_H1.current_val,
-            immunity_against_inf_V=self.population_immunity_inf_V.current_val,
-            efficacy_against_inf=epi_params.efficacy_immunity_inf,
-            total_population_val=epi_params.total_population_val,
-            contact_matrix=epi_params.contact_matrix,
-            beta=epi_params.beta)
-
-        self.new_hosp.current_rate = get_new_hosp_rate(
-            zeta=epi_params.zeta,
-           mu=epi_params.mu,
-            immunity_against_hosp_H1=self.population_immunity_hosp_H1.current_val,
-            immunity_against_hosp_H3=self.population_immunity_hosp_H3.current_val,
-            immunity_against_hosp_V=self.population_immunity_hosp_V.current_val,
-            efficacy_against_hosp=epi_params.efficacy_immunity_hosp
-        )
-
-        self.new_dead.current_rate = get_new_dead_rate(
-            pi=epi_params.pi,
-            nu=epi_params.nu,
-            immunity_against_hosp_H1=self.population_immunity_hosp_H1.current_val,
-            immunity_against_hosp_H3=self.population_immunity_hosp_H3.current_val,
-            immunity_against_hosp_V=self.population_immunity_hosp_V.current_val,
-            efficacy_against_death=epi_params.efficacy_immunity_death
-        )
-
-        self.new_infected.current_rate = np.ones(shape=self.I.current_val.shape) * epi_params.sigma #np.expand_dims(epi_params.sigma, axis=0)
-
-        self.new_recovered_home.current_rate = np.ones(shape=self.I.current_val.shape) * (1 - epi_params.mu) * epi_params.gamma #np.expand_dims((1 - epi_params.mu) * epi_params.gamma, axis=0)
-
-        self.new_recovered_hosp.current_rate = np.ones(shape=self.I.current_val.shape) * (1 - epi_params.nu) * epi_params.gamma_hosp #np.expand_dims((1 - epi_params.nu) * epi_params.gamma_hosp, axis=0)
-
-        self.new_susceptible.current_rate = np.ones(shape=self.I.current_val.shape) * epi_params.eta #np.expand_dims(epi_params.eta, axis=0)
 
     def read_vaccine_data(self, input_path):
         data_vaccine = pd.read_csv(input_path)
@@ -300,8 +193,14 @@ class ImmunoSEIRSModel(BaseModel):
 
 start = time.time()
 
-simple_model = ImmunoSEIRSModel()
+simple_model = ImmunoSEIRSModel(epi_params_json_filename = "ImmunoSEIRS_EpiParams.json",
+                                simulation_params_json_filename = "ImmunoSEIRS_SimulationParams.json",
+                                epi_compartments_json_filename = "ImmunoSEIRS_CompartmentalModel_v2.json",
+                                vaccine_filename = "vaccine.csv",
+                                RNG_seed=np.random.SeedSequence()
+                                )
 
+breakpoint()
 simple_model.simulate_until_time_period(last_simulation_day=365)
 
 print(time.time() - start)
