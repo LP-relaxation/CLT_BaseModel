@@ -953,6 +953,7 @@ class BaseModel(ABC):
         """
         Update current_val in-place for each epi_compartment in model
         """
+
         for compartment in self.name_to_epi_compartment_dict.values():
             self.update_epi_compartment_current_val(compartment)
 
