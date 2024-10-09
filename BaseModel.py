@@ -4,7 +4,7 @@ import copy
 from abc import ABC, abstractmethod
 
 
-class TransitionVariableGroup:
+class TransitionVariableGroup(ABC):
     """
     Container for TransitionVariable objects to handle joint sampling,
     when there are multiple outflows from a single compartment
