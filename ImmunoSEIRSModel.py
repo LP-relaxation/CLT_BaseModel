@@ -121,11 +121,17 @@ base_path = Path(__file__).parent
 random_seed = np.random.SeedSequence()
 
 model_1age_1risk = ImmunoSEIRSModel(base_path / "instance1_1age_1risk_test" / "epi_params.json",
-                                    base_path / "instance1_1age_1risk_test" / "simulation_params.json",
-                                    base_path / "instance1_1age_1risk_test" / "epi_compartments.json",
-                                    base_path / "instance1_1age_1risk_test" / "state_variables.json",
+                                    base_path / "instance1_1age_1risk_test" / "config.json",
+                                    base_path / "instance1_1age_1risk_test" / "epi_compartments_state_vars_init_vals.json",
+                                    base_path / "instance1_1age_1risk_test" / "state_variables_init_vals.json",
                                     random_seed)
 
+import time
+
+start = time.time()
+
 model_1age_1risk.simulate_until_time_period(365)
+
+print(time.time() - start)
 
 create_basic_compartment_history_plot(model_1age_1risk)
