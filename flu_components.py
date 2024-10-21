@@ -2,7 +2,7 @@ import numpy as np
 import json
 import copy
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, make_dataclass
+from dataclasses import dataclass
 from typing import Optional
 
 from pathlib import Path
@@ -11,12 +11,12 @@ import matplotlib.pyplot as plt
 
 from base_components import approx_binomial_probability_from_rate, \
     Config, TransitionVariableGroup, TransitionVariable, StateVariable, \
-    EpiCompartment, TransmissionModel
+    EpiCompartment, TransmissionModel, dataclass_instance_from_json
 from plotting import create_basic_compartment_history_plot
 
 
 @dataclass
-class EpiParams:
+class FluEpiParams:
     num_age_groups: Optional[int] = None
     num_risk_groups: Optional[int] = None
     beta: Optional[float] = None
@@ -41,7 +41,7 @@ class EpiParams:
 
 
 @dataclass
-class SimState:
+class FluSimState:
     S: Optional[np.ndarray] = None
     E: Optional[np.ndarray] = None
     I: Optional[np.ndarray] = None
@@ -94,37 +94,25 @@ class NewDead(TransitionVariable):
 
 
 class PopulationImmunityHosp(StateVariable):
-    def get_change_in_current_val(self, sim_state, epi_params):
+    def get_change_in_current_val(self, sim_state, epi_params, timesteps_per_day):
+
         immunity_gain = (epi_params.immunity_hosp_increase_factor * sim_state.R) / \
                         (epi_params.total_population_val *
                          (1 + epi_params.immunity_hosp_saturation_constant * sim_state.population_immunity_hosp))
         immunity_loss = epi_params.waning_factor_hosp * sim_state.population_immunity_hosp
 
-        return np.asarray(immunity_gain - immunity_loss)
+        return np.asarray(immunity_gain - immunity_loss) / timesteps_per_day
 
 
 class PopulationImmunityInf(StateVariable):
-    def get_change_in_current_val(self, sim_state, epi_params):
+    def get_change_in_current_val(self, sim_state, epi_params, timesteps_per_day):
+
         immunity_gain = (epi_params.immunity_inf_increase_factor * sim_state.R) / \
                         (epi_params.total_population_val * (1 + epi_params.immunity_inf_saturation_constant *
                                                             sim_state.population_immunity_inf))
         immunity_loss = epi_params.waning_factor_inf * sim_state.population_immunity_inf
 
-        return np.asarray(immunity_gain - immunity_loss)
-
-
-def dataclass_instance_from_json(dataclass_name, json_filepath):
-    with open(json_filepath, 'r') as file:
-        data = json.load(file)
-
-    # to numpy arrays to support numpy operations
-    for key, val in data.items():
-        if type(val) is list:
-            data[key] = np.asarray(val)
-
-    # breakpoint()
-
-    return dataclass_name(**data)
+        return np.asarray(immunity_gain - immunity_loss) / timesteps_per_day
 
 
 class ImmunoSEIRSConstructor:
@@ -134,8 +122,9 @@ class ImmunoSEIRSConstructor:
                  epi_params_filepath,
                  epi_compartments_state_vars_init_vals_filepath):
         self.config = dataclass_instance_from_json(Config, config_filepath)
-        self.epi_params = dataclass_instance_from_json(EpiParams, epi_params_filepath)
-        self.sim_state = dataclass_instance_from_json(SimState, epi_compartments_state_vars_init_vals_filepath)
+        self.epi_params = dataclass_instance_from_json(FluEpiParams, epi_params_filepath)
+        self.sim_state = dataclass_instance_from_json(FluSimState,
+                                                      epi_compartments_state_vars_init_vals_filepath)
 
         self.transition_variable_lookup = {}
         self.transition_variable_group_lookup = {}
@@ -195,40 +184,17 @@ class ImmunoSEIRSConstructor:
         self.setup_transition_variable_groups()
         self.setup_state_variables()
 
-        immunoseirs_compartments = list(self.compartment_lookup.values())
-        immunoseirs_transition_variables = list(self.transition_variable_lookup.values())
-        immunoseirs_transition_variable_groups = list(self.transition_variable_group_lookup.values())
-        immunoseirs_state_variables = list(self.state_variable_lookup.values())
+        flu_compartments = list(self.compartment_lookup.values())
+        flu_transition_variables = list(self.transition_variable_lookup.values())
+        flu_transition_variable_groups = list(self.transition_variable_group_lookup.values())
+        flu_state_variables = list(self.state_variable_lookup.values())
 
-        return TransmissionModel(immunoseirs_compartments,
-                                 immunoseirs_transition_variables,
-                                 immunoseirs_transition_variable_groups,
-                                 immunoseirs_state_variables,
+        return TransmissionModel(flu_compartments,
+                                 flu_transition_variables,
+                                 flu_transition_variable_groups,
+                                 flu_state_variables,
                                  self.sim_state,
                                  self.epi_params,
                                  self.config,
                                  RNG_seed)
-
-base_path = Path(__file__).parent / "instance1_1age_1risk_test"
-
-immunoseirs_config_filepath = base_path / "config.json"
-immunoseirs_epi_params_filepath = base_path / "epi_params.json"
-immunoseirs_epi_compartments_state_vars_init_vals_filepath = base_path / "epi_compartments_state_vars_init_vals.json"
-
-immunoseirs_constructor = ImmunoSEIRSConstructor(immunoseirs_config_filepath,
-                                                 immunoseirs_epi_params_filepath,
-                                                 immunoseirs_epi_compartments_state_vars_init_vals_filepath)
-
-immunoseirs_model = immunoseirs_constructor.create_transmission_model(np.random.SeedSequence())
-
-import time
-
-start = time.time()
-
-immunoseirs_model.simulate_until_time_period(365)
-
-print(time.time() - start)
-
-create_basic_compartment_history_plot(immunoseirs_model)
-
 

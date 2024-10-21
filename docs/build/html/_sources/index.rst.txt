@@ -11,6 +11,7 @@ Documentation created by LP.
 .. autosummary::
    :toctree: stubs
 
-   BaseModel
-   ImmunoSEIRSModel
+   base_components
+   flu_components
+   flu_demo
 

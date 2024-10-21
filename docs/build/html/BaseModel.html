@@ -245,7 +245,7 @@
 <h1>BaseModel module<a class="headerlink" href="#basemodel-module" title="Link to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">BaseModel.</span></span><span class="sig-name descname"><span class="pre">BaseModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">RNG_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">SeedSequence(entropy=139609714433497873374836591273057470005)</span></span></em><span class="sig-paren">)</span></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">BaseModel.</span></span><span class="sig-name descname"><span class="pre">BaseModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">RNG_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">SeedSequence(entropy=273238601003513959974669186291997772625)</span></span></em><span class="sig-paren">)</span></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
 <dl class="py method">
 <dt class="sig sig-object py">
@@ -603,7 +603,7 @@ infection can both be modeled as a StateVariable instance.</p>
 <dl class="py class">
 <dt class="sig sig-object py">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">BaseModel.</span></span><span class="sig-name descname"><span class="pre">TransitionVariableGroup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_count_epi_compartment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timesteps_per_day</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">RNG</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transition_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transition_variables_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_age_groups</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_risk_groups</span></span></em><span class="sig-paren">)</span></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></p>
 <p>Container for TransitionVariable objects to handle joint sampling,
 when there are multiple outflows from a single compartment</p>
 <p>For example, if all outflows of compartment H are: R and D,

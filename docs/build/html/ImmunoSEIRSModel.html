@@ -178,7 +178,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
         <div class="visually-hidden">Toggle table of contents sidebar</div>
         <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
       </label>
@@ -199,8 +199,9 @@
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <ul>
-<li class="toctree-l1"><a class="reference internal" href="stubs/BaseModel.html">BaseModel</a></li>
-<li class="toctree-l1"><a class="reference internal" href="stubs/ImmunoSEIRSModel.html">ImmunoSEIRSModel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stubs/base_components.html">base_components</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stubs/flu_components.html">flu_components</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stubs/flu_demo.html">flu_demo</a></li>
 </ul>
 
 </div>
@@ -235,50 +236,14 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
             <div class="visually-hidden">Toggle table of contents sidebar</div>
             <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="module-ImmunoSEIRSModel">
-<span id="immunoseirsmodel-module"></span><h1>ImmunoSEIRSModel module<a class="headerlink" href="#module-ImmunoSEIRSModel" title="Link to this heading">¶</a></h1>
-<dl class="py class">
-<dt class="sig sig-object py" id="ImmunoSEIRSModel.ImmunoSEIRSModel">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModel.</span></span><span class="sig-name descname"><span class="pre">ImmunoSEIRSModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">epi_params_json_filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">simulation_params_json_filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">epi_compartments_json_filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_variables_json_filename</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">RNG_seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">SeedSequence(entropy=209904498289996623656098486673742157464)</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModel.ImmunoSEIRSModel" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="BaseModel.html#BaseModel.BaseModel" title="BaseModel.BaseModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseModel</span></code></a></p>
-<dl class="py method">
-<dt class="sig sig-object py" id="ImmunoSEIRSModel.ImmunoSEIRSModel.update_change_in_state_variables">
-<span class="sig-name descname"><span class="pre">update_change_in_state_variables</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModel.ImmunoSEIRSModel.update_change_in_state_variables" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="ImmunoSEIRSModel.ImmunoSEIRSModel.update_transition_rates">
-<span class="sig-name descname"><span class="pre">update_transition_rates</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModel.ImmunoSEIRSModel.update_transition_rates" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="ImmunoSEIRSModel.get_change_in_immunity">
-<span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModel.</span></span><span class="sig-name descname"><span class="pre">get_change_in_immunity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">current_val</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">R_val</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">immunity_increase_factor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_population_val</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">saturation_constant</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">waning_factor</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModel.get_change_in_immunity" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="ImmunoSEIRSModel.get_new_dead_rate">
-<span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModel.</span></span><span class="sig-name descname"><span class="pre">get_new_dead_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">H_to_D_adjusted_proportion</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">H_to_D_rate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">immunity_against_hosp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">efficacy_against_death</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModel.get_new_dead_rate" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="ImmunoSEIRSModel.get_new_exposed_rate">
-<span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModel.</span></span><span class="sig-name descname"><span class="pre">get_new_exposed_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">I_val</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">immunity_against_inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">efficacy_against_inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">total_population_val</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModel.get_new_exposed_rate" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="ImmunoSEIRSModel.get_new_hosp_rate">
-<span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModel.</span></span><span class="sig-name descname"><span class="pre">get_new_hosp_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">I_to_H_rate</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">I_to_H_adjusted_proportion</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">immunity_against_hosp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">efficacy_against_hosp</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModel.get_new_hosp_rate" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
+          <section id="immunoseirsmodel-module">
+<h1>ImmunoSEIRSModel module<a class="headerlink" href="#immunoseirsmodel-module" title="Link to this heading">¶</a></h1>
 </section>
 
         </article>
@@ -306,35 +271,8 @@
         
       </footer>
     </div>
-    <aside class="toc-drawer">
+    <aside class="toc-drawer no-toc">
       
-      
-      <div class="toc-sticky toc-scroll">
-        <div class="toc-title-container">
-          <span class="toc-title">
-            On this page
-          </span>
-        </div>
-        <div class="toc-tree-container">
-          <div class="toc-tree">
-            <ul>
-<li><a class="reference internal" href="#">ImmunoSEIRSModel module</a><ul>
-<li><a class="reference internal" href="#ImmunoSEIRSModel.ImmunoSEIRSModel"><code class="docutils literal notranslate"><span class="pre">ImmunoSEIRSModel</span></code></a><ul>
-<li><a class="reference internal" href="#ImmunoSEIRSModel.ImmunoSEIRSModel.update_change_in_state_variables"><code class="docutils literal notranslate"><span class="pre">ImmunoSEIRSModel.update_change_in_state_variables()</span></code></a></li>
-<li><a class="reference internal" href="#ImmunoSEIRSModel.ImmunoSEIRSModel.update_transition_rates"><code class="docutils literal notranslate"><span class="pre">ImmunoSEIRSModel.update_transition_rates()</span></code></a></li>
-</ul>
-</li>
-<li><a class="reference internal" href="#ImmunoSEIRSModel.get_change_in_immunity"><code class="docutils literal notranslate"><span class="pre">get_change_in_immunity()</span></code></a></li>
-<li><a class="reference internal" href="#ImmunoSEIRSModel.get_new_dead_rate"><code class="docutils literal notranslate"><span class="pre">get_new_dead_rate()</span></code></a></li>
-<li><a class="reference internal" href="#ImmunoSEIRSModel.get_new_exposed_rate"><code class="docutils literal notranslate"><span class="pre">get_new_exposed_rate()</span></code></a></li>
-<li><a class="reference internal" href="#ImmunoSEIRSModel.get_new_hosp_rate"><code class="docutils literal notranslate"><span class="pre">get_new_hosp_rate()</span></code></a></li>
-</ul>
-</li>
-</ul>
-
-          </div>
-        </div>
-      </div>
       
       
     </aside>

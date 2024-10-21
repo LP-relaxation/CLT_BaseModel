@@ -178,7 +178,7 @@
           <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
         </button>
       </div>
-      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
         <div class="visually-hidden">Toggle table of contents sidebar</div>
         <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
       </label>
@@ -199,8 +199,9 @@
 </form>
 <div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
   <ul>
-<li class="toctree-l1"><a class="reference internal" href="stubs/BaseModel.html">BaseModel</a></li>
-<li class="toctree-l1"><a class="reference internal" href="stubs/ImmunoSEIRSModel.html">ImmunoSEIRSModel</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stubs/base_components.html">base_components</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stubs/flu_components.html">flu_components</a></li>
+<li class="toctree-l1"><a class="reference internal" href="stubs/flu_demo.html">flu_demo</a></li>
 </ul>
 
 </div>
@@ -235,71 +236,14 @@
               <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
             </button>
           </div>
-          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
             <div class="visually-hidden">Toggle table of contents sidebar</div>
             <i class="icon"><svg><use href="#svg-toc"></use></svg></i>
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="module-ImmunoSEIRSModelTests">
-<span id="immunoseirsmodeltests-module"></span><h1>ImmunoSEIRSModelTests module<a class="headerlink" href="#module-ImmunoSEIRSModelTests" title="Link to this heading">¶</a></h1>
-<dl class="py function">
-<dt class="sig sig-object py" id="ImmunoSEIRSModelTests.create_models_all_transition_types_list">
-<span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModelTests.</span></span><span class="sig-name descname"><span class="pre">create_models_all_transition_types_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModelTests.create_models_all_transition_types_list" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="ImmunoSEIRSModelTests.test_attribute_assignment">
-<span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModelTests.</span></span><span class="sig-name descname"><span class="pre">test_attribute_assignment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModelTests.test_attribute_assignment" title="Link to this definition">¶</a></dt>
-<dd><dl class="simple">
-<dt>Confirm that each epi compartment, transition variable, transition variable group,</dt><dd><p>and state variable are assigned as attributes to the model</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="ImmunoSEIRSModelTests.test_beta">
-<span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModelTests.</span></span><span class="sig-name descname"><span class="pre">test_beta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModelTests.test_beta" title="Link to this definition">¶</a></dt>
-<dd><p>If the transmission rate beta = 0, then S should not decrease over time</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="ImmunoSEIRSModelTests.test_constructor_methods">
-<span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModelTests.</span></span><span class="sig-name descname"><span class="pre">test_constructor_methods</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModelTests.test_constructor_methods" title="Link to this definition">¶</a></dt>
-<dd><dl class="simple">
-<dt>Based on this model, there should be 6 epi compartments,</dt><dd><p>7 transition variables, 2 transition variable groups,
-and 2 state variables</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="ImmunoSEIRSModelTests.test_deaths">
-<span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModelTests.</span></span><span class="sig-name descname"><span class="pre">test_deaths</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModelTests.test_deaths" title="Link to this definition">¶</a></dt>
-<dd><dl class="simple">
-<dt>People do not rise from the dead; the deaths compartment</dt><dd><p>should not decrease over time</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="ImmunoSEIRSModelTests.test_population_is_constant">
-<span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModelTests.</span></span><span class="sig-name descname"><span class="pre">test_population_is_constant</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModelTests.test_population_is_constant" title="Link to this definition">¶</a></dt>
-<dd><dl class="simple">
-<dt>The total population (summed over all compartments and age-risk groups)</dt><dd><p>should be constant over time, equal to the initial total population.</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="ImmunoSEIRSModelTests.test_reproducible_RNG">
-<span class="sig-prename descclassname"><span class="pre">ImmunoSEIRSModelTests.</span></span><span class="sig-name descname"><span class="pre">test_reproducible_RNG</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#ImmunoSEIRSModelTests.test_reproducible_RNG" title="Link to this definition">¶</a></dt>
-<dd><dl class="simple">
-<dt>Resetting the random number generator and simulating should</dt><dd><p>give the same results as the initial run.</p>
-</dd>
-</dl>
-</dd></dl>
-
+          <section id="immunoseirsmodeltests-module">
+<h1>ImmunoSEIRSModelTests module<a class="headerlink" href="#immunoseirsmodeltests-module" title="Link to this heading">¶</a></h1>
 </section>
 
         </article>
@@ -327,33 +271,8 @@ and 2 state variables</p>
         
       </footer>
     </div>
-    <aside class="toc-drawer">
+    <aside class="toc-drawer no-toc">
       
-      
-      <div class="toc-sticky toc-scroll">
-        <div class="toc-title-container">
-          <span class="toc-title">
-            On this page
-          </span>
-        </div>
-        <div class="toc-tree-container">
-          <div class="toc-tree">
-            <ul>
-<li><a class="reference internal" href="#">ImmunoSEIRSModelTests module</a><ul>
-<li><a class="reference internal" href="#ImmunoSEIRSModelTests.create_models_all_transition_types_list"><code class="docutils literal notranslate"><span class="pre">create_models_all_transition_types_list()</span></code></a></li>
-<li><a class="reference internal" href="#ImmunoSEIRSModelTests.test_attribute_assignment"><code class="docutils literal notranslate"><span class="pre">test_attribute_assignment()</span></code></a></li>
-<li><a class="reference internal" href="#ImmunoSEIRSModelTests.test_beta"><code class="docutils literal notranslate"><span class="pre">test_beta()</span></code></a></li>
-<li><a class="reference internal" href="#ImmunoSEIRSModelTests.test_constructor_methods"><code class="docutils literal notranslate"><span class="pre">test_constructor_methods()</span></code></a></li>
-<li><a class="reference internal" href="#ImmunoSEIRSModelTests.test_deaths"><code class="docutils literal notranslate"><span class="pre">test_deaths()</span></code></a></li>
-<li><a class="reference internal" href="#ImmunoSEIRSModelTests.test_population_is_constant"><code class="docutils literal notranslate"><span class="pre">test_population_is_constant()</span></code></a></li>
-<li><a class="reference internal" href="#ImmunoSEIRSModelTests.test_reproducible_RNG"><code class="docutils literal notranslate"><span class="pre">test_reproducible_RNG()</span></code></a></li>
-</ul>
-</li>
-</ul>
-
-          </div>
-        </div>
-      </div>
       
       
     </aside>
