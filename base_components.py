@@ -40,6 +40,8 @@ def approx_binomial_probability_from_rate(rate, interval_length):
     and L is the number of risk groups. Rate is transformed to
     A x L np.ndarray corresponding to probabilities.
 
+    Parameters
+    ----------
     :param rate: np.ndarray of positive scalars,
         dimension A x L (number of age groups
         x number of risk groups), rate parameters
@@ -58,11 +60,13 @@ class Config:
     """
     Stores simulation configuration values.
 
-    :param timesteps_per_day: int,
+    Attributes
+    ----------
+    :ivar timesteps_per_day: int,
         number of discretized timesteps within a simulation
         day -- more timesteps_per_day mean smaller discretization
         time intervals, which may cause the model to run slower
-    :param transition_type: str,
+    :ivar transition_type: str,
         valid value must be from TransitionTypes, specifying the
         probability distribution of transitions between compartments
     """
@@ -81,14 +85,19 @@ class TransitionVariableGroup(ABC):
     or Dead, a TransitionVariableGroup that holds both R and D handles
     the correct correlation structure between R and D
 
+    When an instance is initialized, its get_joint_realization attribute
+    is dynamically assigned to a method according to its transition_type
+    attribute. This enables all instances to use the same method during
+    simulation.
+
     Attributes
     ----------
     :ivar origin: EpiCompartment instance,
         specifies origin of TransitionVariableGroup instance --
         corresponding populations leave this compartment
     :ivar _transition_type: str,
-        private variable, only values defined in JointTransitionTypes Enum
-        are valid, specifies joint probability distribution of all outflows
+        only values defined in JointTransitionTypes Enum are valid,
+        specifies joint probability distribution of all outflows
         from origin
     :ivar transition_variables: list-like of TransitionVariable instances,
         specifying TransitionVariable instances that outflow from origin --
@@ -96,11 +105,15 @@ class TransitionVariableGroup(ABC):
     :ivar get_joint_realization: function,
         assigned at initialization, generates realizations according
         to probability distribution given by _transition_type attribute,
-        returns either (O x A x L) or ((O+1) x A x L) np.ndarray,
-        where O is the length of transition_variables (i.e., number of
+        returns either (M x A x L) or ((M+1) x A x L) np.ndarray,
+        where M is the length of transition_variables (i.e., number of
         outflows from origin), A is number of age groups, L is number of
         risk groups
+    :ivar current_realizations_list: list,
+        used to store results from get_joint_realization --
+        has either M or M+1 np.ndarrays of size A x L
 
+    See __init__ docstring for other attributes.
     """
 
     def __init__(self,
@@ -108,11 +121,11 @@ class TransitionVariableGroup(ABC):
                  transition_type,
                  transition_variables):
         """
-        See class docstring for other parameters.
-
         :param transition_type: str,
             only values defined in TransitionTypes Enum are valid, specifying
             probability distribution of transitions between compartments
+
+        See class docstring for other parameters.
         """
 
         self.origin = origin
@@ -125,6 +138,9 @@ class TransitionVariableGroup(ABC):
         transition_type = transition_type.replace("binomial", "multinomial")
         self._transition_type = transition_type
 
+        # Dynamically assign a method to get_joint_realization attribute
+        #   based on the value of transition_type
+        # getattr fetches a method by name
         self.get_joint_realization = getattr(self, "get_" + transition_type + "_realization")
 
         self.current_realizations_list = []
@@ -132,36 +148,6 @@ class TransitionVariableGroup(ABC):
     @property
     def transition_type(self):
         return self._transition_type
-
-    def assign_transition_type(self, transition_type):
-        """
-        Updates transition_type and updates get_joint_realization
-        method according to transition_type.
-
-        :param transition_type: str,
-            valid value must be from TransitionTypes, specifying the
-            probability distribution of transitions between compartments
-        """
-
-        # If marginal transition type is binomial, then
-        #   joint transition type is multinomial
-        transition_type = transition_type.replace("binomial", "multinomial")
-
-        return transition_type
-
-    def assign_get_joint_realization_func(self, transition_type):
-        """
-        Updates get_joint_realization method according to transition_type.
-
-        Overrides get_joint_realization so that joint transitions
-        are computed according to the desired transition_type.
-
-        :param transition_type: str,
-            valid value must be from TransitionTypes, specifying the
-            probability distribution of transitions between compartments
-        """
-
-        return getattr(self, "get_" + transition_type + "_realization")
 
     def get_total_rate(self):
         """
@@ -184,7 +170,7 @@ class TransitionVariableGroup(ABC):
         # --> summing over axis 0 gives the total rate for each age-risk group
         return np.sum(self.get_current_rates_array(), axis=0)
 
-    def get_probabilities_array(self, timesteps_per_day):
+    def get_probabilities_array(self, num_timesteps):
         """
         Returns an array of probabilities used for joint binomial
         (multinomial) transitions (get_multinomial_realization method)
@@ -200,7 +186,7 @@ class TransitionVariableGroup(ABC):
         total_rate = self.get_total_rate()
 
         total_outgoing_probability = approx_binomial_probability_from_rate(total_rate,
-                                                                           1 / timesteps_per_day)
+                                                                           1 / num_timesteps)
 
         # Create probabilities_list, where element i corresponds to the
         #   transition variable i's current rate divided by the total rate,
@@ -229,14 +215,16 @@ class TransitionVariableGroup(ABC):
             x number of age groups x number of risk groups
         """
 
-        current_rates_list = [tvar.current_rate for tvar in self.transition_variables]
+        current_rates_list = []
+        for tvar in self.transition_variables:
+            current_rates_list.append(tvar.current_rate)
 
         return np.asarray(current_rates_list)
 
     def get_joint_realization(self):
         pass
 
-    def get_multinomial_realization(self, RNG, timesteps_per_day):
+    def get_multinomial_realization(self, RNG, num_timesteps):
         """
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from multinomial distribution
@@ -249,7 +237,7 @@ class TransitionVariableGroup(ABC):
             epi compartment)
         """
 
-        probabilities_array = self.get_probabilities_array(timesteps_per_day)
+        probabilities_array = self.get_probabilities_array(num_timesteps)
 
         num_outflows = len(self.transition_variables)
 
@@ -267,7 +255,7 @@ class TransitionVariableGroup(ABC):
 
         return realizations_array
 
-    def get_multinomial_taylor_approx_realization(self, RNG, timesteps_per_day):
+    def get_multinomial_taylor_approx_realization(self, RNG, num_timesteps):
         """
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from multinomial distribution
@@ -287,13 +275,13 @@ class TransitionVariableGroup(ABC):
 
         total_rate = self.get_total_rate()
 
-        # Multiply current rates array by length of time interval (1 / timesteps_per_day)
+        # Multiply current rates array by length of time interval (1 / num_timesteps)
         # Also append additional value corresponding to probability of
         #   remaining in current epi compartment (not transitioning at all)
         # Note: vstack function here works better than append function because append
         #   automatically flattens the resulting array, resulting in dimension issues
-        current_scaled_rates_array = np.vstack((current_rates_array / timesteps_per_day,
-                                                np.expand_dims(1 - total_rate / timesteps_per_day, axis=0)))
+        current_scaled_rates_array = np.vstack((current_rates_array / num_timesteps,
+                                                np.expand_dims(1 - total_rate / num_timesteps, axis=0)))
 
         num_age_groups, num_risk_groups = np.shape(self.origin.current_val)
 
@@ -309,7 +297,7 @@ class TransitionVariableGroup(ABC):
 
         return realizations_array
 
-    def get_poisson_realization(self, RNG, timesteps_per_day):
+    def get_poisson_realization(self, RNG, num_timesteps):
         """
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from Poisson distribution
@@ -333,11 +321,11 @@ class TransitionVariableGroup(ABC):
                     realizations_array[outflow_ix, age_group, risk_group] = RNG.poisson(
                         self.origin.current_val[age_group, risk_group] *
                         transition_variables[outflow_ix].current_rate[
-                            age_group, risk_group] * 1 / timesteps_per_day)
+                            age_group, risk_group] * 1 / num_timesteps)
 
         return realizations_array
 
-    def get_multinomial_deterministic_realization(self, timesteps_per_day):
+    def get_multinomial_deterministic_realization(self, num_timesteps):
         """
         Deterministic counterpart to get_multinomial_realization --
         uses mean (n x p, i.e. total counts x probability array) as realization
@@ -351,10 +339,10 @@ class TransitionVariableGroup(ABC):
             epi compartment)
         """
 
-        probabilities_array = self.get_probabilities_array(timesteps_per_day)
+        probabilities_array = self.get_probabilities_array(num_timesteps)
         return self.origin.current_val * probabilities_array
 
-    def get_multinomial_taylor_approx_deterministic_realization(self, timesteps_per_day):
+    def get_multinomial_taylor_approx_deterministic_realization(self, num_timesteps):
         """
         Deterministic counterpart to get_multinomial_taylor_approx_realization --
         uses mean (n x p, i.e. total counts x probability array) as realization
@@ -369,9 +357,9 @@ class TransitionVariableGroup(ABC):
         """
 
         current_rates_array = self.get_current_rates_array()
-        return self.origin.current_val * current_rates_array / timesteps_per_day
+        return self.origin.current_val * current_rates_array / num_timesteps
 
-    def get_poisson_deterministic_realization(self, timesteps_per_day):
+    def get_poisson_deterministic_realization(self, num_timesteps):
         """
         Deterministic counterpart to get_poisson_realization --
         uses mean (rate array) as realization rather than randomly sampling
@@ -381,7 +369,7 @@ class TransitionVariableGroup(ABC):
             x number of age groups x number of risk groups
         """
 
-        return self.get_current_rates_array() / timesteps_per_day
+        return self.get_current_rates_array() / num_timesteps
 
     def reset(self):
         self.current_realizations_list = []
@@ -405,11 +393,33 @@ class TransitionVariableGroup(ABC):
 class TransitionVariable(ABC):
     """
     Abstract base class for transition variables in
-        epidemiological model.
+    epidemiological model.
 
     For example, in an S-I-R model, the new number infected
-        every iteration (the number going from S to I) in an iteration
-        is modeled as a TransitionVariable instance.
+    every iteration (the number going from S to I) in an iteration
+    is modeled as a TransitionVariable subclass, with a concrete
+    implementation of the abstract method get_current_rate.
+
+    When an instance is initialized, its get_realization attribute
+    is dynamically assigned, just like in the case of
+    TransitionVariableGroup instantiation.
+
+    Attributes
+    ----------
+    :ivar _transition_type: str,
+        only values defined in TransitionTypes Enum are valid, specifying
+        probability distribution of transitions between compartments
+    :ivar get_current_rate: function,
+        provides specific implementation for computing current rate
+        as a function of current simulation state and epidemiological parameters
+    :ivar current_rate: np.ndarray,
+        holds output from get_current_rate method -- used to generate
+        random variable realizations for transitions between compartments
+    :ivar current_realization: np.ndarray,
+        holds realization of random variable parameterized by current_rate
+        attribute
+
+    See __init__ docstring for other attributes.
     """
 
     def __init__(self,
@@ -423,26 +433,36 @@ class TransitionVariable(ABC):
         :param destination: EpiCompartment instance,
             the compartment which Transition Variable instance enters
         :param transition_type: str,
-            name of the transition type -- specifies the mathematical function
-            used for transitions
+            only values defined in TransitionTypes Enum are valid, specifying
+            probability distribution of transitions between compartments
         :param is_jointly_distributed: Boolean,
             indicates if transition quantity must be jointly computed
             (i.e. if there are multiple outflows from the origin compartment)
+
         """
 
         self.origin = origin
         self.destination = destination
 
-        self.is_jointly_distributed = is_jointly_distributed
-
-        self.assign_transition_type(transition_type)
+        # Also see __init__ method in TransitionVariableGroup class.
+        #   The structure is similar.
+        self._transition_type = transition_type
+        if self.is_jointly_distributed:
+            self.get_realization = getattr(self, "get_" + transition_type + "_realization")
+        else:
+            self.get_realization = None
 
         self.current_rate = 0
         self.current_realization = 0
 
     @abstractmethod
-    def get_current_rate(self, sim_state, epi_params):
+    def get_current_rate(self, sim_state, epi_params) -> np.ndarray:
         """
+        Computes and returns current rate of transition variable,
+        based on current state of the simulation and epidemiological parameters.
+        Output should be a numpy array of size A x L, where A is
+        sim_state.num_age_groups and L is sim_state.num_risk_groups
+
         :param sim_state: DataClass instance,
             holds simulation state (current values of
             EpiCompartment instances and StateVariable
@@ -450,8 +470,10 @@ class TransitionVariable(ABC):
         :param epi_params: DataClass instance,
             holds values of epidemiological parameters
         :return: np.ndarray,
+            holds age-risk transition rate,
             must be same shape as origin.init_val,
-            has age-risk transition rate
+            i.e. be size A x L, where A is sim_state.num_age_groups
+            and L is sim_state.num_risk_groups
         """
         pass
 
@@ -465,37 +487,27 @@ class TransitionVariable(ABC):
     def transition_type(self):
         return self._transition_type
 
-    def assign_get_realization_func(self, transition_type):
-        if self.is_jointly_distributed:
-            pass
-        else:
-            self.get_realization = getattr(self, "get_" + transition_type + "_realization")
-
-    def assign_transition_type(self, transition_type):
-        self._transition_type = transition_type
-        self.assign_get_realization_func(transition_type)
-
-    def get_binomial_realization(self, RNG, timesteps_per_day):
+    def get_binomial_realization(self, RNG, num_timesteps):
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
-                            p=approx_binomial_probability_from_rate(self.current_rate, 1 / timesteps_per_day))
+                            p=approx_binomial_probability_from_rate(self.current_rate, 1 / num_timesteps))
 
-    def get_binomial_taylor_approx_realization(self, RNG, timesteps_per_day):
+    def get_binomial_taylor_approx_realization(self, RNG, num_timesteps):
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
-                            p=self.current_rate * (1 / timesteps_per_day))
+                            p=self.current_rate * (1 / num_timesteps))
 
-    def get_poisson_realization(self, RNG, timesteps_per_day):
-        return RNG.poisson(self.base_count * self.current_rate * (1 / timesteps_per_day))
+    def get_poisson_realization(self, RNG, num_timesteps):
+        return RNG.poisson(self.base_count * self.current_rate * (1 / num_timesteps))
 
-    def get_binomial_deterministic_realization(self, timesteps_per_day):
+    def get_binomial_deterministic_realization(self, num_timesteps):
         return np.asarray(self.base_count *
-                          approx_binomial_probability_from_rate(self.current_rate, 1 / timesteps_per_day),
+                          approx_binomial_probability_from_rate(self.current_rate, 1 / num_timesteps),
                           dtype=int)
 
-    def get_binomial_taylor_approx_deterministic_realization(self, timesteps_per_day):
-        return np.asarray(self.base_count * self.current_rate * (1 / timesteps_per_day), dtype=int)
+    def get_binomial_taylor_approx_deterministic_realization(self, num_timesteps):
+        return np.asarray(self.base_count * self.current_rate * (1 / num_timesteps), dtype=int)
 
-    def get_poisson_deterministic_realization(self, timesteps_per_day):
-        return np.asarray(self.base_count * self.current_rate * (1 / timesteps_per_day), dtype=int)
+    def get_poisson_deterministic_realization(self, num_timesteps):
+        return np.asarray(self.base_count * self.current_rate * (1 / num_timesteps), dtype=int)
 
     @property
     def base_count(self):
@@ -506,6 +518,25 @@ class EpiCompartment:
     """
     Class for epidemiological compartments (e.g. Susceptible,
         Exposed, Infected, etc...)
+
+    Attributes
+    ----------
+    :ivar current_val: np.ndarray,
+        same size as init_val, holds current value of EpiCompartment
+        for age-risk groups
+    :ivar current_inflow: np.ndarray,
+        same size as current_val, used to sum up all
+        transition variable realizations incoming to this compartment
+        for age-risk groups
+    :ivar current_outflow: np.ndarray,
+        same size of current_val, used to sum up all
+        transition variable realizations outgoing from this compartment
+        for age-risk groups
+    :ivar history_vals_list: list of np.ndarrays,
+        each element is the same size of current_val, holds
+        history of compartment states for age-risk groups --
+        element t corresponds to previous current_val value at
+        end of simulation day t
     """
 
     def __init__(self,
@@ -561,12 +592,28 @@ class EpiCompartment:
 
 class StateVariable(ABC):
     """
-    Class for variables that are deterministic functions of
-    the simulation state (meaning epi compartment values, other parameters,
+    Abstract base class for state variables in epidemiological model.
+
+    This is intended for variables that are deterministic functions of
+    the simulation state (including epi compartment values, other parameters,
     and time.)
 
-    For example, population-level immunity against hospitalization and
-    infection can both be modeled as a StateVariable instance.
+    For example, population-level immunity variables should be
+    modeled as a StateVariable subclass, with a concrete
+    implementation of the abstract method get_change_in_current_val.
+
+    Attributes
+    ----------
+    :ivar current_val: np.ndarray,
+        same size as init_val, holds current value of State Variable
+        for age-risk groups
+    :ivar change_in_current_val: np.ndarray,
+        initialized to None, but during simulation holds change in
+        current value of StateVariable for age-risk groups
+        (size A x L, where A is number of risk groups and L is number
+        of age groups)
+
+    See __init__ docstring for other attributes.
     """
 
     def __init__(self,
@@ -590,7 +637,26 @@ class StateVariable(ABC):
         self.history_vals_list = []
 
     @abstractmethod
-    def get_change_in_current_val(self, sim_state, epi_params, timesteps_per_day):
+    def get_change_in_current_val(self, sim_state, epi_params, num_timesteps) -> np.ndarray:
+        """
+        Computes and returns change in current value of state variable,
+        based on current state of the simulation and epidemiological parameters.
+        Output should be a numpy array of size A x L, where A is
+        sim_state.num_age_groups and L is sim_state.num_risk_groups
+
+        :param sim_state: DataClass instance,
+            holds simulation state (current values of
+            EpiCompartment instances and StateVariable
+            instances)
+        :param epi_params: DataClass instance,
+            holds values of epidemiological parameters
+        :param num_timesteps: int,
+            number of timesteps -- used to determine time interval
+            length for discretization
+        :return: np.ndarray,
+            size A x L, where A is sim_state.num_age_groups and L is
+            sim_state.num_risk_groups
+        """
         pass
 
     def update_current_val(self):
@@ -630,6 +696,38 @@ class TransmissionModel:
     within compartments, transition_variables, transition_variable_groups,
     and state_variables. The "flow" and "physics" information are stored
     on the objects.
+
+    Attributes
+    ----------
+    :ivar compartments: list-like,
+        list of all the model's EpiCompartment instances
+    :ivar transition_variables: list-like,
+        list of all the model's TransitionVariable instances
+    :ivar transition_variable_groups: list-like,
+        list of all the model's TransitionVariableGroup instances
+    :ivar state_variables: list-like,
+        list of all the model's StateVariable instances
+    :ivar sim_state: DataClass,
+        data container for the model's current values of
+        EpiCompartment instances and StateVariable instances --
+        there must be one field for each EpiCompartment instance
+        and for each StateVariable instance -- each field's name must
+        match the "name" attribute of the corresponding EpiCompartment
+        or StateVariable instance
+    :ivar epi_params: DataClass,
+        data container for the model's epidemiological parameters,
+        such as the "Greek letters" characterizing sojourn times
+        in compartments
+    :ivar config: DataClass,
+        data container for the model's simulation configuration values
+    :ivar RNG: np.random.Generator object,
+        used to generate random variables and control reproducibility
+    :ivar current_day_counter: int,
+        tracks current simulation day -- incremented by +1
+        when config.timesteps_per_day discretized timesteps
+        have completed
+
+    See __init__ docstring for other attributes.
     """
 
     def __init__(self,
@@ -642,30 +740,11 @@ class TransmissionModel:
                  config,
                  RNG_seed):
         """
-        :param compartments: list-like,
-            list of all the model's EpiCompartment instances
-        :param transition_variables: list-like,
-            list of all the model's TransitionVariable instances
-        :param transition_variable_groups: list-like,
-            list of all the model's TransitionVariableGroup instances
-        :param state_variables: list-like,
-            list of all the model's StateVariable instances
-        :param sim_state: DataClass,
-            data container for the model's current values of
-            EpiCompartment instances and StateVariable instances --
-            there must be one field for each EpiCompartment instance
-            and for each StateVariable instance -- each field's name must
-            match the "name" attribute of the corresponding EpiCompartment
-            or StateVariable instance
-        :param epi_params: DataClass,
-            data container for the model's epidemiological parameters,
-            such as the "Greek letters" characterizing sojourn times
-            in compartments
-        :param config: DataClass,
-            data container for the model's simulation configuration values
         :param RNG_seed: positive int,
             used to initialize the model's RNG for generating
             random variables and random transitions
+
+        See class docstring for other parameters.
         """
 
         self.compartments = compartments
@@ -677,6 +756,7 @@ class TransmissionModel:
         self.epi_params = epi_params
         self.config = config
 
+        # Create bit generator seeded with given RNG_seed
         self._bit_generator = np.random.MT19937(seed=RNG_seed)
         self.RNG = np.random.Generator(self._bit_generator)
 
@@ -747,37 +827,61 @@ class TransmissionModel:
                 else:
                     tvar.current_realization = tvar.get_realization(self.RNG, timesteps_per_day)
 
-            # In-place updates -- advance the simulation
+            """
+            ###############################################
+            ##### IN-PLACE UPDATE OF SIMULATION STATE #####
+            ###############################################
+            """
+
             for tvar in self.transition_variables:
                 tvar.update_origin_outflow()
                 tvar.update_destination_inflow()
 
             for svar in self.state_variables:
                 svar.update_current_val()
-                svar.update_history()
-
                 svar.update_sim_state(sim_state)
 
             for compartment in self.compartments:
                 compartment.update_current_val()
-                compartment.update_history()
-
                 compartment.update_sim_state(sim_state)
 
                 compartment.reset_inflow()
                 compartment.reset_outflow()
 
+        # Update state variable history and compartment history
+        #   at end of each day, not at end of every discretization timestep,
+        #   to be efficient
+        svar.update_history()
+        compartment.update_history()
+
         # Move to next day in simulation
         self.current_day_counter += 1
 
 
-def dataclass_instance_from_json(dataclass_name, json_filepath):
+def dataclass_instance_from_json(dataclass_ref, json_filepath):
+    """
+    Create instance of DataClass from class dataclass_ref,
+    based on information in json_filepath
+
+    :param dataclass_ref: dataclass (class, not instance)
+        from which to create instance
+    :param json_filepath: str,
+        path to json file (path includes actual filename
+        with suffix ".json") -- all json fields must
+        match name and datatype of dataclass_ref instance
+        attributes
+    :return: dataclass object,
+        instance of dataclass_ref with attributes dynamically
+        assigned by json_filepath file contents
+    """
+
     with open(json_filepath, 'r') as file:
         data = json.load(file)
 
-    # to numpy arrays to support numpy operations
+    # convert lists to numpy arrays to support numpy operations
+    #   since json does not have direct support for numpy
     for key, val in data.items():
         if type(val) is list:
             data[key] = np.asarray(val)
 
-    return dataclass_name(**data)
+    return dataclass_ref(**data)
