@@ -92,8 +92,8 @@ class TransitionVariableGroup(ABC):
 
     Attributes
     ----------
-    :ivar origin: EpiCompartment instance,
-        specifies origin of TransitionVariableGroup instance --
+    :ivar origin: EpiCompartment,
+        specifies origin of TransitionVariableGroup --
         corresponding populations leave this compartment
     :ivar _transition_type: str,
         only values defined in JointTransitionTypes Enum are valid,
@@ -428,10 +428,10 @@ class TransitionVariable(ABC):
                  transition_type,
                  is_jointly_distributed=False):
         """
-        :param origin: EpiCompartment instance,
-            the compartment from which Transition Variable instance exits
-        :param destination: EpiCompartment instance,
-            the compartment which Transition Variable instance enters
+        :param origin: EpiCompartment,
+            the compartment from which Transition Variable exits
+        :param destination: EpiCompartment,
+            the compartment which Transition Variable enters
         :param transition_type: str,
             only values defined in TransitionTypes Enum are valid, specifying
             probability distribution of transitions between compartments
@@ -463,11 +463,11 @@ class TransitionVariable(ABC):
         Output should be a numpy array of size A x L, where A is
         sim_state.num_age_groups and L is sim_state.num_risk_groups
 
-        :param sim_state: DataClass instance,
+        :param sim_state: DataClass,
             holds simulation state (current values of
             EpiCompartment instances and StateVariable
             instances)
-        :param epi_params: DataClass instance,
+        :param epi_params: DataClass,
             holds values of epidemiological parameters
         :return: np.ndarray,
             holds age-risk transition rate,
@@ -621,7 +621,7 @@ class StateVariable(ABC):
                  init_val):
         """
         :param name: str,
-            name of StateVariable instance
+            name of StateVariable
         :param init_val: 2D np.ndarray of nonnegative floats,
             corresponding to initial value of state variable,
             where i,jth entry corresponds to age group i and
@@ -644,11 +644,11 @@ class StateVariable(ABC):
         Output should be a numpy array of size A x L, where A is
         sim_state.num_age_groups and L is sim_state.num_risk_groups
 
-        :param sim_state: DataClass instance,
+        :param sim_state: DataClass,
             holds simulation state (current values of
             EpiCompartment instances and StateVariable
             instances)
-        :param epi_params: DataClass instance,
+        :param epi_params: DataClass,
             holds values of epidemiological parameters
         :param num_timesteps: int,
             number of timesteps -- used to determine time interval
@@ -740,6 +740,8 @@ class TransmissionModel:
                  config,
                  RNG_seed):
         """
+        TODO: maybe group arguments together into DataClass to simplify?
+
         :param RNG_seed: positive int,
             used to initialize the model's RNG for generating
             random variables and random transitions
@@ -863,14 +865,14 @@ def dataclass_instance_from_json(dataclass_ref, json_filepath):
     Create instance of DataClass from class dataclass_ref,
     based on information in json_filepath
 
-    :param dataclass_ref: dataclass (class, not instance)
+    :param dataclass_ref: DataClass class (class, not instance)
         from which to create instance
     :param json_filepath: str,
         path to json file (path includes actual filename
         with suffix ".json") -- all json fields must
         match name and datatype of dataclass_ref instance
         attributes
-    :return: dataclass object,
+    :return: DataClass,
         instance of dataclass_ref with attributes dynamically
         assigned by json_filepath file contents
     """
