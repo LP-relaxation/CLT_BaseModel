@@ -447,10 +447,12 @@ class TransitionVariable(ABC):
         # Also see __init__ method in TransitionVariableGroup class.
         #   The structure is similar.
         self._transition_type = transition_type
-        if self.is_jointly_distributed:
-            self.get_realization = getattr(self, "get_" + transition_type + "_realization")
-        else:
+        self._is_jointly_distributed = is_jointly_distributed
+
+        if is_jointly_distributed:
             self.get_realization = None
+        else:
+            self.get_realization = getattr(self, "get_" + transition_type + "_realization")
 
         self.current_rate = 0
         self.current_realization = 0
@@ -486,6 +488,10 @@ class TransitionVariable(ABC):
     @property
     def transition_type(self):
         return self._transition_type
+
+    @property
+    def is_jointly_distributed(self):
+        return self._is_jointly_distributed
 
     def get_binomial_realization(self, RNG, num_timesteps):
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
@@ -853,8 +859,11 @@ class TransmissionModel:
         # Update state variable history and compartment history
         #   at end of each day, not at end of every discretization timestep,
         #   to be efficient
-        svar.update_history()
-        compartment.update_history()
+        for svar in self.state_variables:
+            svar.update_history()
+
+        for compartment in self.compartments:
+            compartment.update_history()
 
         # Move to next day in simulation
         self.current_day_counter += 1

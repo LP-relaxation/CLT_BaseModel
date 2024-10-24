@@ -98,7 +98,7 @@ class FluEpiParams:
     num_age_groups: Optional[int] = None
     num_risk_groups: Optional[int] = None
     beta: Optional[float] = None
-    total_population_val: Optional[float] = None
+    total_population_val: Optional[np.ndarray] = None
     immunity_hosp_increase_factor: Optional[float] = None
     immunity_inf_increase_factor: Optional[float] = None
     immunity_saturation_constant: Optional[float] = None
@@ -168,7 +168,7 @@ class FluSimState:
 
 class NewExposed(TransitionVariable):
     def get_current_rate(self, sim_state, epi_params):
-        force_of_immunity = (1 + epi_params.inf_risk_reduct * sim_state.population_immunity_inf)
+        force_of_immunity = (1 + epi_params.inf_risk_reduction * sim_state.population_immunity_inf)
         return np.asarray(epi_params.beta * sim_state.I
                           / (epi_params.total_population_val * force_of_immunity))
 
@@ -198,7 +198,7 @@ class NewRecoveredHosp(TransitionVariable):
 class NewHosp(TransitionVariable):
     def get_current_rate(self, sim_state, epi_params):
         return np.asarray(epi_params.I_to_H_rate * epi_params.I_to_H_adjusted_proportion /
-                          (1 + epi_params.hosp_risk_reduct * sim_state.population_immunity_hosp))
+                          (1 + epi_params.hosp_risk_reduction * sim_state.population_immunity_hosp))
 
 
 class NewDead(TransitionVariable):
