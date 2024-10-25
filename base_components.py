@@ -7,6 +7,11 @@ from typing import Optional
 from enum import Enum
 
 
+class TransmissionModelError(Exception):
+    """Custom exceptions for simulation model errors."""
+    pass
+
+
 class TransitionTypes(str, Enum):
     BINOMIAL = "binomial"
     BINOMIAL_DETERMINISTIC = "binomial_deterministic"
@@ -75,7 +80,7 @@ class Config:
     transition_type: str = TransitionTypes.BINOMIAL
 
 
-class TransitionVariableGroup(ABC):
+class TransitionVariableGroup:
     """
     Container for TransitionVariable objects to handle joint sampling,
     when there are multiple outflows from a single compartment
@@ -109,7 +114,7 @@ class TransitionVariableGroup(ABC):
         where M is the length of transition_variables (i.e., number of
         outflows from origin), A is number of age groups, L is number of
         risk groups
-    :ivar current_realizations_list: list,
+    :ivar current_vals_list: list,
         used to store results from get_joint_realization --
         has either M or M+1 np.ndarrays of size A x L
 
@@ -117,16 +122,21 @@ class TransitionVariableGroup(ABC):
     """
 
     def __init__(self,
+                 name,
                  origin,
                  transition_type,
                  transition_variables):
         """
+        :param name: str,
+            user-specified name for compartment
         :param transition_type: str,
             only values defined in TransitionTypes Enum are valid, specifying
             probability distribution of transitions between compartments
 
         See class docstring for other parameters.
         """
+
+        self.name = name
 
         self.origin = origin
         self.transition_variables = transition_variables
@@ -143,7 +153,7 @@ class TransitionVariableGroup(ABC):
         # getattr fetches a method by name
         self.get_joint_realization = getattr(self, "get_" + transition_type + "_realization")
 
-        self.current_realizations_list = []
+        self.current_vals_list = []
 
     @property
     def transition_type(self):
@@ -372,11 +382,11 @@ class TransitionVariableGroup(ABC):
         return self.get_current_rates_array() / num_timesteps
 
     def reset(self):
-        self.current_realizations_list = []
+        self.current_vals_list = []
 
     def update_transition_variable_realizations(self):
         """
-        Updates current_realization attribute on all
+        Updates current_val attribute on all
         TransitionVariable instances contained in this
         transition variable group
         """
@@ -386,8 +396,8 @@ class TransitionVariableGroup(ABC):
         #   also corresponds to the ith transition variable in transition_variables
         # Update the current realization of the transition variables contained in this group
         for ix in range(len(self.transition_variables)):
-            self.transition_variables[ix].current_realization = \
-                self.current_realizations_list[ix, :, :]
+            self.transition_variables[ix].current_val = \
+                self.current_vals_list[ix, :, :]
 
 
 class TransitionVariable(ABC):
@@ -415,19 +425,27 @@ class TransitionVariable(ABC):
     :ivar current_rate: np.ndarray,
         holds output from get_current_rate method -- used to generate
         random variable realizations for transitions between compartments
-    :ivar current_realization: np.ndarray,
+    :ivar current_val: np.ndarray,
         holds realization of random variable parameterized by current_rate
         attribute
+    :ivar history_vals_list: list of np.ndarrays,
+        each element is the same size of current_val, holds
+        history of transition variable realizations for age-risk
+        groups -- element t corresponds to previous current_val value
+        at end of simulation day t
 
     See __init__ docstring for other attributes.
     """
 
     def __init__(self,
+                 name,
                  origin,
                  destination,
                  transition_type,
                  is_jointly_distributed=False):
         """
+        :param name: str,
+            user-specified name for compartment
         :param origin: EpiCompartment,
             the compartment from which Transition Variable exits
         :param destination: EpiCompartment,
@@ -438,8 +456,9 @@ class TransitionVariable(ABC):
         :param is_jointly_distributed: Boolean,
             indicates if transition quantity must be jointly computed
             (i.e. if there are multiple outflows from the origin compartment)
-
         """
+
+        self.name = name
 
         self.origin = origin
         self.destination = destination
@@ -455,7 +474,9 @@ class TransitionVariable(ABC):
             self.get_realization = getattr(self, "get_" + transition_type + "_realization")
 
         self.current_rate = 0
-        self.current_realization = 0
+        self.current_val = 0
+
+        self.history_vals_list = []
 
     @abstractmethod
     def get_current_rate(self, sim_state, epi_params) -> np.ndarray:
@@ -480,10 +501,24 @@ class TransitionVariable(ABC):
         pass
 
     def update_origin_outflow(self):
-        self.origin.current_outflow += self.current_realization
+        self.origin.current_outflow += self.current_val
 
     def update_destination_inflow(self):
-        self.destination.current_inflow += self.current_realization
+        self.destination.current_inflow += self.current_val
+
+    def update_history(self):
+        """
+        Saves current value to history by appending current_val attribute
+            to history_vals_list in place
+
+        WARNING: deep copying is CRUCIAL because current_val is a mutable
+            np.ndarray -- without deep copying, history_vals_list would
+            have the same value for all elements
+        """
+        self.history_vals_list.append(copy.deepcopy(self.current_val))
+
+    def clear_history(self):
+        self.history_vals_list = []
 
     @property
     def transition_type(self):
@@ -548,21 +583,8 @@ class EpiCompartment:
     def __init__(self,
                  name,
                  init_val):
-        """
-        :param name: str,
-            user-specified name for compartment
-        :param init_val: 2D np.ndarray of integers,
-            corresponding to initial population in compartment,
-            where i,jth entry corresponds to age group i
-            and risk group j
-
-            If only one age group and risk group, init_val still
-            must be 2D -- e.g. np.array([[100]]), not np.array([100])
-        """
-
         self.name = name
-        self.init_val = init_val
-
+        self.init_val = copy.deepcopy(init_val)
         self.current_val = copy.deepcopy(init_val)
         self.current_inflow = np.zeros(np.shape(init_val))
         self.current_outflow = np.zeros(np.shape(init_val))
@@ -635,8 +657,7 @@ class StateVariable(ABC):
         """
 
         self.name = name
-        self.init_val = init_val
-
+        self.init_val = copy.deepcopy(init_val)
         self.current_val = copy.deepcopy(init_val)
         self.change_in_current_val = None
 
@@ -713,6 +734,10 @@ class TransmissionModel:
         list of all the model's TransitionVariableGroup instances
     :ivar state_variables: list-like,
         list of all the model's StateVariable instances
+    :ivar sim_objects: set,
+        set of all the model's EpiCompartment, TransitionVariable,
+        TransitionVariableGroup, and StateVariable instances --
+        used to group objects for convenience
     :ivar sim_state: DataClass,
         data container for the model's current values of
         EpiCompartment instances and StateVariable instances --
@@ -732,6 +757,10 @@ class TransmissionModel:
         tracks current simulation day -- incremented by +1
         when config.timesteps_per_day discretized timesteps
         have completed
+    :ivar lookup_by_name: dict,
+        keys are names of EpiCompartment, TransitionVariable,
+        TransitionVariableGroup, and StateVariable instances
+        associated with the model, values are the actual object
 
     See __init__ docstring for other attributes.
     """
@@ -760,6 +789,9 @@ class TransmissionModel:
         self.transition_variable_groups = transition_variable_groups
         self.state_variables = state_variables
 
+        self.sim_objects = set(compartments + transition_variables +
+                               transition_variable_groups + state_variables)
+
         self.sim_state = sim_state
         self.epi_params = epi_params
         self.config = config
@@ -769,6 +801,34 @@ class TransmissionModel:
         self.RNG = np.random.Generator(self._bit_generator)
 
         self.current_day_counter = 0
+
+        self.lookup_by_name = self.create_lookup_by_name()
+
+    def modify_random_seed(self, new_seed_number):
+        """
+        Modifies model's RNG attribute in-place to new generator
+        seeded at new_seed_number.
+
+        :param new_seed_number: int,
+            used to re-seed model's random number generator
+        """
+
+        self._bit_generator = np.random.MT19937(seed=new_seed_number)
+        self.RNG = np.random.Generator(self._bit_generator)
+
+    def create_lookup_by_name(self):
+        """
+        Create lookup_by_name attribute -- keys are names of EpiCompartment,
+        TransitionVariable, TransitionVariableGroup, and StateVariable
+        instances associated with the model, values are the actual object
+        """
+
+        lookup_by_name = {}
+
+        for object in self.sim_objects:
+            lookup_by_name[object.name] = object
+
+        return lookup_by_name
 
     def simulate_until_time_period(self, last_simulation_day):
         """
@@ -785,6 +845,10 @@ class TransmissionModel:
             stop simulation at last_simulation_day (i.e. exclusive,
             simulate up to but not including last_simulation_day)
         """
+
+        if self.current_day_counter > last_simulation_day:
+            raise TransmissionModelError(f"Current day counter ({self.current_day_counter}) "
+                                         f"exceeds last simulation day ({self.last_simulation_day}).")
 
         # last_simulation_day is exclusive endpoint
         while self.current_day_counter < last_simulation_day:
@@ -820,8 +884,8 @@ class TransmissionModel:
             # Obtain transition variable realizations for jointly distributed transition variables
             #   (i.e. when there are multiple transition variable outflows from an epi compartment)
             for tvargroup in self.transition_variable_groups:
-                tvargroup.current_realizations_list = tvargroup.get_joint_realization(self.RNG,
-                                                                                      timesteps_per_day)
+                tvargroup.current_vals_list = tvargroup.get_joint_realization(self.RNG,
+                                                                              timesteps_per_day)
                 tvargroup.update_transition_variable_realizations()
 
             # Obtain transition variable realizations for marginally distributed transition variables
@@ -833,7 +897,7 @@ class TransmissionModel:
                 if tvar.is_jointly_distributed:
                     continue
                 else:
-                    tvar.current_realization = tvar.get_realization(self.RNG, timesteps_per_day)
+                    tvar.current_val = tvar.get_realization(self.RNG, timesteps_per_day)
 
             """
             ###############################################
@@ -856,17 +920,62 @@ class TransmissionModel:
                 compartment.reset_inflow()
                 compartment.reset_outflow()
 
-        # Update state variable history and compartment history
-        #   at end of each day, not at end of every discretization timestep,
-        #   to be efficient
-        for svar in self.state_variables:
-            svar.update_history()
-
-        for compartment in self.compartments:
-            compartment.update_history()
+        # Update history at end of each day, not at end of every
+        #   discretization timestep, to be efficient
+        # Update history of epi compartments, transition variables,
+        #   and state variables -- transition variable groups do not
+        #   have history, so do not include transition variable groups
+        #   in update step
+        # Note: the order in which objects' histories are updated
+        #   does not matter -- therefore, can use set difference rather than lists
+        for object in self.sim_objects - set(self.transition_variable_groups):
+            object.update_history()
 
         # Move to next day in simulation
         self.current_day_counter += 1
+
+    def reset_sim_state(self):
+        """
+        Reset sim_state dataclass values to initial values
+        specified by the model's EpiCompartment and StateVariable
+        instances
+        """
+
+        sim_state = self.sim_state
+
+        # AGAIN, MUST BE CAREFUL ABOUT MUTABLE NUMPY ARRAYS --
+        # MUST USE DEEP COPY
+        for object in self.compartments + self.state_variables:
+            setattr(sim_state, object.name, copy.deepcopy(object.init_val))
+
+    def reset_simulation(self):
+        """
+        Reset simulation in-place. Subsequent method calls of
+        simulate_until_time_period start from day 0, with original
+        day 0 state.
+
+        Returns current_day_counter to 0.
+        Restores sim_state dataclass values to initial values.
+        Clears history on model's compartments, transition variables,
+        and state variables.
+
+        WARNING: DOES NOT RESET THE MODEL'S RANDOM NUMBER GENERATOR TO
+        ITS INITIAL STARTING SEED. RANDOM NUMBER GENERATOR WILL CONTINUE
+        WHERE IT LEFT OFF.
+
+        Use method modify_random_seed to reset model's RNG to its
+        initial starting seed.
+        """
+
+        self.current_day_counter = 0
+
+        self.reset_sim_state()
+
+        for object in self.compartments + self.state_variables:
+            object.current_val = copy.deepcopy(object.init_val)
+
+        for object in self.sim_objects - set(self.transition_variable_groups):
+            object.clear_history()
 
 
 def dataclass_instance_from_json(dataclass_ref, json_filepath):

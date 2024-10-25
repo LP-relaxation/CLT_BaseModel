@@ -344,22 +344,24 @@ class ImmunoSEIRSConstructor:
 
         # Reordering the tuples to put the transition function first
         transition_mapping = {
-            "new_susceptible": (NewSusceptible, compartments["R"], compartments["S"]),
-            "new_exposed": (NewExposed, compartments["S"], compartments["E"]),
-            "new_infected": (NewInfected, compartments["E"], compartments["I"]),
-            "new_recovered_home": (NewRecoveredHome, compartments["I"], compartments["R"], True),
-            "new_hosp": (NewHosp, compartments["I"], compartments["H"], True),
-            "new_recovered_hosp": (NewRecoveredHosp, compartments["H"], compartments["R"], True),
-            "new_dead": (NewDead, compartments["H"], compartments["D"], True)
+            "new_susceptible": (NewSusceptible, "new_susceptible", compartments["R"], compartments["S"]),
+            "new_exposed": (NewExposed, "new_exposed", compartments["S"], compartments["E"]),
+            "new_infected": (NewInfected, "new_infected", compartments["E"], compartments["I"]),
+            "new_recovered_home": (
+                NewRecoveredHome, "new_recovered_home", compartments["I"], compartments["R"], True),
+            "new_hosp": (NewHosp, "new_hosp", compartments["I"], compartments["H"], True),
+            "new_recovered_hosp": (
+                NewRecoveredHosp, "new_recovered_hosp", compartments["H"], compartments["R"], True),
+            "new_dead": (NewDead, "new_dead", compartments["H"], compartments["D"], True)
         }
 
         # Create transition variables dynamically
         # params[0] is the TransitionVariable subclass (e.g. NewSusceptible)
-        # params[1:3] refers to the origin compartment and destination compartment
-        # params[3:] contains the Boolean indicating if the transition variable is jointly
+        # params[1:4] refers to the name, origin compartment, destination compartment
+        # params[4:] contains the Boolean indicating if the transition variable is jointly
         #   distributed (True if jointly distributed)
         self.transition_variable_lookup = {
-            name: params[0](*params[1:3], transition_type, *params[3:])
+            name: params[0](*params[1:4], transition_type, *params[4:])
             for name, params in transition_mapping.items()
         }
 
@@ -376,11 +378,13 @@ class ImmunoSEIRSConstructor:
         transition_type = self.config.transition_type
 
         self.transition_variable_group_lookup = {
-            "I_out": TransitionVariableGroup(compartment_lookup["I"],
+            "I_out": TransitionVariableGroup("I_out",
+                                             compartment_lookup["I"],
                                              transition_type,
                                              (tvar_lookup["new_recovered_home"],
                                               tvar_lookup["new_hosp"])),
-            "H_out": TransitionVariableGroup(compartment_lookup["H"],
+            "H_out": TransitionVariableGroup("H_out",
+                                             compartment_lookup["H"],
                                              transition_type,
                                              (tvar_lookup["new_recovered_hosp"],
                                               tvar_lookup["new_dead"]))
