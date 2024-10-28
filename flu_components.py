@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 
 from base_components import approx_binomial_probability_from_rate, \
     Config, TransitionVariableGroup, TransitionVariable, StateVariable, \
-    EpiCompartment, TransmissionModel, dataclass_instance_from_json
+    EpiCompartment, TransmissionModel, ModelConstructor
 from plotting import create_basic_compartment_history_plot
 
 
@@ -29,6 +29,11 @@ class FluEpiParams:
     Along with FluSimState, is passed to get_current_rate
     and get_change_in_current_val
 
+    Assume that FluEpiParams fields are constant or piecewise
+    constant throughout the simulation. For variables that
+    are more complicated and time-dependent, use a StateVariable
+    isntead.
+
     Each field of datatype np.ndarray must be A x L,
     where A is the number of age groups and L is the number of
     risk groups. Note: this means all arrays should be 2D.
@@ -44,8 +49,8 @@ class FluEpiParams:
             math variable: $|A|$, where $A$ is the set of age groups
     :ivar num_risk_groups: number of risk groups
             math variable: $|L|$, where $L$ is the set of risk groups
-    :ivar beta: transmission rate
-            math variable: $\beta$
+    :ivar beta_baseline: transmission rate
+            math variable: $\beta_0$
     :ivar total_population_val: total number in population,
         summed across all age-risk groups
             math variable: $N$
@@ -97,7 +102,7 @@ class FluEpiParams:
 
     num_age_groups: Optional[int] = None
     num_risk_groups: Optional[int] = None
-    beta: Optional[float] = None
+    beta_baseline: Optional[float] = None
     total_population_val: Optional[np.ndarray] = None
     immunity_hosp_increase_factor: Optional[float] = None
     immunity_inf_increase_factor: Optional[float] = None
@@ -169,7 +174,7 @@ class FluSimState:
 class NewExposed(TransitionVariable):
     def get_current_rate(self, sim_state, epi_params):
         force_of_immunity = (1 + epi_params.inf_risk_reduction * sim_state.population_immunity_inf)
-        return np.asarray(epi_params.beta * sim_state.I
+        return np.asarray(epi_params.beta_baseline * sim_state.I
                           / (epi_params.total_population_val * force_of_immunity))
 
 
@@ -227,7 +232,7 @@ class PopulationImmunityInf(StateVariable):
         return np.asarray(immunity_gain - immunity_loss) / num_timesteps
 
 
-class ImmunoSEIRSConstructor:
+class ImmunoSEIRSConstructor(ModelConstructor):
     """
     Class for creating ImmunoSEIRS model with predetermined fixed
     structure -- initial values and epidemiological structure are
@@ -296,8 +301,6 @@ class ImmunoSEIRSConstructor:
         using values from respective JSON files, and save these instances
         on the ImmunoSEIRSConstructor to construct a model.
 
-        The main method
-
         :param config_filepath: str,
             path to config JSON file (path includes actual filename
             with suffix ".json") -- all JSON fields must match
@@ -313,17 +316,24 @@ class ImmunoSEIRSConstructor:
             -- all JSON fields must match name and datatype of
             EpiCompartment instance attributes
         """
-        self.config = dataclass_instance_from_json(Config, config_filepath)
-        self.epi_params = dataclass_instance_from_json(FluEpiParams, epi_params_filepath)
-        self.sim_state = dataclass_instance_from_json(FluSimState,
-                                                      epi_compartments_state_vars_init_vals_filepath)
 
-        self.transition_variable_lookup = {}
-        self.transition_variable_group_lookup = {}
-        self.compartment_lookup = {}
-        self.state_variable_lookup = {}
+        # Use same init method as abstract class --
+        # creates "lookup" attributes (dictionaries for easy access)
+        # and creates attributes config, epi_params, and sim_state
+        super().__init__()
 
-    def setup_epi_compartments(self):
+        # Assign config, epi_params, and sim_state to model-specific
+        # types of dataclasses that have epidemiological parameter information
+        # and sim state information
+        self.config = self.dataclass_instance_from_json(Config,
+                                                        config_filepath)
+        self.epi_params = self.dataclass_instance_from_json(FluEpiParams,
+                                                            epi_params_filepath)
+        self.sim_state = \
+            self.dataclass_instance_from_json(FluSimState,
+                                              epi_compartments_state_vars_init_vals_filepath)
+
+    def setup_epi_compartments(self) -> None:
         """
         Create compartments S-E-I-H-R-D (6 compartments total)
         and add them to compartment_lookup for dictionary access
@@ -332,7 +342,7 @@ class ImmunoSEIRSConstructor:
         for name in ("S", "E", "I", "H", "R", "D"):
             self.compartment_lookup[name] = EpiCompartment(name, getattr(self.sim_state, name))
 
-    def setup_transition_variables(self):
+    def setup_transition_variables(self) -> None:
         """
         Create all transition variables described in docstring (7 transition
         variables total) and add them to transition_variable_lookup attribute
@@ -365,7 +375,7 @@ class ImmunoSEIRSConstructor:
             for name, params in transition_mapping.items()
         }
 
-    def setup_transition_variable_groups(self):
+    def setup_transition_variable_groups(self) -> None:
         """
         Create all transition variable groups described in docstring (2 transition
         variable groups total) and add them to transition_variable_group_lookup attribute
@@ -390,7 +400,7 @@ class ImmunoSEIRSConstructor:
                                               tvar_lookup["new_dead"]))
         }
 
-    def setup_state_variables(self):
+    def setup_state_variables(self) -> None:
         """
         Create all state variable groups described in docstring (2 state
         variables total) and add them to state_variable_lookup attribute
@@ -404,38 +414,3 @@ class ImmunoSEIRSConstructor:
         self.state_variable_lookup["population_immunity_hosp"] = \
             PopulationImmunityHosp("population_immunity_hosp",
                                    getattr(self.sim_state, "population_immunity_hosp"))
-
-    def create_transmission_model(self, RNG_seed):
-        """
-        :param RNG_seed: int,
-            used to initialize the model's RNG for generating
-            random variables and random transitions
-        :return: TransmissionModel instance,
-            S-E-I-H-R-D model with 7 transition variables,
-            2 transition variable groups, and 2 state variables
-            for population-level immunity -- see class docstring
-            for details -- initial values and epidemiological parameters
-            are loaded from user-specified JSON files during
-            ImmunoSEIRConstructor initialization.
-        """
-
-        # Setup objects for model
-        self.setup_epi_compartments()
-        self.setup_transition_variables()
-        self.setup_transition_variable_groups()
-        self.setup_state_variables()
-
-        # Get dictionary values as lists to pass as TransmissionModel __init__ arguments
-        flu_compartments = list(self.compartment_lookup.values())
-        flu_transition_variables = list(self.transition_variable_lookup.values())
-        flu_transition_variable_groups = list(self.transition_variable_group_lookup.values())
-        flu_state_variables = list(self.state_variable_lookup.values())
-
-        return TransmissionModel(flu_compartments,
-                                 flu_transition_variables,
-                                 flu_transition_variable_groups,
-                                 flu_state_variables,
-                                 self.sim_state,
-                                 self.epi_params,
-                                 self.config,
-                                 RNG_seed)

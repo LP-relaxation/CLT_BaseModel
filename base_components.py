@@ -30,7 +30,8 @@ class JointTransitionTypes(str, Enum):
     POISSON_DETERMINISTIC = "poisson_deterministic"
 
 
-def approx_binomial_probability_from_rate(rate, interval_length):
+def approx_binomial_probability_from_rate(rate: np.ndarray,
+                                          interval_length: int) -> np.ndarray:
     """
     Converts a rate (events per time) to the probability of any event
     occurring in the next time interval of length interval_length,
@@ -156,10 +157,10 @@ class TransitionVariableGroup:
         self.current_vals_list = []
 
     @property
-    def transition_type(self):
+    def transition_type(self) -> JointTransitionTypes:
         return self._transition_type
 
-    def get_total_rate(self):
+    def get_total_rate(self) -> np.ndarray:
         """
         Return the age-risk-specific total transition rate,
         which is the sum of the current rate of each transition variable
@@ -180,7 +181,8 @@ class TransitionVariableGroup:
         # --> summing over axis 0 gives the total rate for each age-risk group
         return np.sum(self.get_current_rates_array(), axis=0)
 
-    def get_probabilities_array(self, num_timesteps):
+    def get_probabilities_array(self,
+                                num_timesteps: int) -> list:
         """
         Returns an array of probabilities used for joint binomial
         (multinomial) transitions (get_multinomial_realization method)
@@ -214,7 +216,7 @@ class TransitionVariableGroup:
 
         return np.asarray(probabilities_list)
 
-    def get_current_rates_array(self):
+    def get_current_rates_array(self) -> np.ndarray:
         """
         Returns an array of current rates of transition variables in
         self.transition_variables -- ith element in array
@@ -231,10 +233,21 @@ class TransitionVariableGroup:
 
         return np.asarray(current_rates_list)
 
-    def get_joint_realization(self):
+    def get_joint_realization(self) -> np.ndarray:
+        """
+        This function is dynamically assigned based on the Transition
+        Variable Group's transition type -- this function is set to
+        one of the following methods: get_multinomial_realization,
+        get_multinomial_taylor_approx_realization, get_poisson_realization,
+        get_multinomial_deterministic_realization,
+        get_multinomial_taylor_approx_deterministic_realization,
+        get_poisson_deterministic_realization
+        """
         pass
 
-    def get_multinomial_realization(self, RNG, num_timesteps):
+    def get_multinomial_realization(self,
+                                    RNG: np.random.Generator,
+                                    num_timesteps: int) -> np.ndarray:
         """
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from multinomial distribution
@@ -265,7 +278,9 @@ class TransitionVariableGroup:
 
         return realizations_array
 
-    def get_multinomial_taylor_approx_realization(self, RNG, num_timesteps):
+    def get_multinomial_taylor_approx_realization(self,
+                                                  RNG: np.random.Generator,
+                                                  num_timesteps: int) -> np.ndarray:
         """
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from multinomial distribution
@@ -307,7 +322,9 @@ class TransitionVariableGroup:
 
         return realizations_array
 
-    def get_poisson_realization(self, RNG, num_timesteps):
+    def get_poisson_realization(self,
+                                RNG: np.random.Generator,
+                                num_timesteps: int) -> np.ndarray:
         """
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from Poisson distribution
@@ -335,7 +352,8 @@ class TransitionVariableGroup:
 
         return realizations_array
 
-    def get_multinomial_deterministic_realization(self, num_timesteps):
+    def get_multinomial_deterministic_realization(self,
+                                                  num_timesteps: int) -> np.ndarray:
         """
         Deterministic counterpart to get_multinomial_realization --
         uses mean (n x p, i.e. total counts x probability array) as realization
@@ -352,7 +370,8 @@ class TransitionVariableGroup:
         probabilities_array = self.get_probabilities_array(num_timesteps)
         return self.origin.current_val * probabilities_array
 
-    def get_multinomial_taylor_approx_deterministic_realization(self, num_timesteps):
+    def get_multinomial_taylor_approx_deterministic_realization(self,
+                                                                num_timesteps: int) -> np.ndarray:
         """
         Deterministic counterpart to get_multinomial_taylor_approx_realization --
         uses mean (n x p, i.e. total counts x probability array) as realization
@@ -369,7 +388,8 @@ class TransitionVariableGroup:
         current_rates_array = self.get_current_rates_array()
         return self.origin.current_val * current_rates_array / num_timesteps
 
-    def get_poisson_deterministic_realization(self, num_timesteps):
+    def get_poisson_deterministic_realization(self,
+                                              num_timesteps: int) -> np.ndarray:
         """
         Deterministic counterpart to get_poisson_realization --
         uses mean (rate array) as realization rather than randomly sampling
@@ -381,10 +401,10 @@ class TransitionVariableGroup:
 
         return self.get_current_rates_array() / num_timesteps
 
-    def reset(self):
+    def reset(self) -> None:
         self.current_vals_list = []
 
-    def update_transition_variable_realizations(self):
+    def update_transition_variable_realizations(self) -> None:
         """
         Updates current_val attribute on all
         TransitionVariable instances contained in this
@@ -500,13 +520,13 @@ class TransitionVariable(ABC):
         """
         pass
 
-    def update_origin_outflow(self):
+    def update_origin_outflow(self) -> None:
         self.origin.current_outflow += self.current_val
 
-    def update_destination_inflow(self):
+    def update_destination_inflow(self) -> None:
         self.destination.current_inflow += self.current_val
 
-    def update_history(self):
+    def update_history(self) -> None:
         """
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
@@ -517,41 +537,50 @@ class TransitionVariable(ABC):
         """
         self.history_vals_list.append(copy.deepcopy(self.current_val))
 
-    def clear_history(self):
+    def clear_history(self) -> None:
         self.history_vals_list = []
 
     @property
-    def transition_type(self):
+    def transition_type(self) -> TransitionTypes:
         return self._transition_type
 
     @property
-    def is_jointly_distributed(self):
+    def is_jointly_distributed(self) -> bool:
         return self._is_jointly_distributed
 
-    def get_binomial_realization(self, RNG, num_timesteps):
+    def get_binomial_realization(self,
+                                 RNG: np.random.Generator,
+                                 num_timesteps: int) -> np.ndarray:
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
                             p=approx_binomial_probability_from_rate(self.current_rate, 1 / num_timesteps))
 
-    def get_binomial_taylor_approx_realization(self, RNG, num_timesteps):
+    def get_binomial_taylor_approx_realization(self,
+                                               RNG: np.random.Generator,
+                                               num_timesteps: int) -> np.ndarray:
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
                             p=self.current_rate * (1 / num_timesteps))
 
-    def get_poisson_realization(self, RNG, num_timesteps):
+    def get_poisson_realization(self,
+                                RNG: np.random.Generator,
+                                num_timesteps: int) -> np.ndarray:
         return RNG.poisson(self.base_count * self.current_rate * (1 / num_timesteps))
 
-    def get_binomial_deterministic_realization(self, num_timesteps):
+    def get_binomial_deterministic_realization(self,
+                                               num_timesteps: int) -> np.ndarray:
         return np.asarray(self.base_count *
                           approx_binomial_probability_from_rate(self.current_rate, 1 / num_timesteps),
                           dtype=int)
 
-    def get_binomial_taylor_approx_deterministic_realization(self, num_timesteps):
+    def get_binomial_taylor_approx_deterministic_realization(self,
+                                                             num_timesteps: int) -> np.ndarray:
         return np.asarray(self.base_count * self.current_rate * (1 / num_timesteps), dtype=int)
 
-    def get_poisson_deterministic_realization(self, num_timesteps):
+    def get_poisson_deterministic_realization(self,
+                                              num_timesteps: int) -> np.ndarray:
         return np.asarray(self.base_count * self.current_rate * (1 / num_timesteps), dtype=int)
 
     @property
-    def base_count(self):
+    def base_count(self) -> np.ndarray:
         return self.origin.current_val
 
 
@@ -591,19 +620,20 @@ class EpiCompartment:
 
         self.history_vals_list = []
 
-    def update_current_val(self):
+    def update_current_val(self) -> None:
         self.current_val += self.current_inflow - self.current_outflow
 
-    def update_sim_state(self, sim_state):
+    def update_sim_state(self,
+                         sim_state: dataclass) -> None:
         setattr(sim_state, self.name, self.current_val)
 
-    def reset_inflow(self):
+    def reset_inflow(self) -> None:
         self.current_inflow = np.zeros(np.shape(self.current_inflow))
 
-    def reset_outflow(self):
+    def reset_outflow(self) -> None:
         self.current_outflow = np.zeros(np.shape(self.current_outflow))
 
-    def update_history(self):
+    def update_history(self) -> None:
         """
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
@@ -614,7 +644,7 @@ class EpiCompartment:
         """
         self.history_vals_list.append(copy.deepcopy(self.current_val))
 
-    def clear_history(self):
+    def clear_history(self) -> None:
         self.history_vals_list = []
 
 
@@ -664,7 +694,10 @@ class StateVariable(ABC):
         self.history_vals_list = []
 
     @abstractmethod
-    def get_change_in_current_val(self, sim_state, epi_params, num_timesteps) -> np.ndarray:
+    def get_change_in_current_val(self,
+                                  sim_state: dataclass,
+                                  epi_params: dataclass,
+                                  num_timesteps: int) -> np.ndarray:
         """
         Computes and returns change in current value of state variable,
         based on current state of the simulation and epidemiological parameters.
@@ -686,13 +719,13 @@ class StateVariable(ABC):
         """
         pass
 
-    def update_current_val(self):
+    def update_current_val(self) -> None:
         self.current_val += self.change_in_current_val
 
-    def update_sim_state(self, sim_state):
+    def update_sim_state(self, sim_state) -> None:
         setattr(sim_state, self.name, self.current_val)
 
-    def update_history(self):
+    def update_history(self) -> None:
         """
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
@@ -703,7 +736,7 @@ class StateVariable(ABC):
         """
         self.history_vals_list.append(copy.deepcopy(self.current_val))
 
-    def clear_history(self):
+    def clear_history(self) -> None:
         self.history_vals_list = []
 
 
@@ -804,7 +837,7 @@ class TransmissionModel:
 
         self.lookup_by_name = self.create_lookup_by_name()
 
-    def modify_random_seed(self, new_seed_number):
+    def modify_random_seed(self, new_seed_number) -> None:
         """
         Modifies model's RNG attribute in-place to new generator
         seeded at new_seed_number.
@@ -816,7 +849,7 @@ class TransmissionModel:
         self._bit_generator = np.random.MT19937(seed=new_seed_number)
         self.RNG = np.random.Generator(self._bit_generator)
 
-    def create_lookup_by_name(self):
+    def create_lookup_by_name(self) -> dict:
         """
         Create lookup_by_name attribute -- keys are names of EpiCompartment,
         TransitionVariable, TransitionVariableGroup, and StateVariable
@@ -830,7 +863,7 @@ class TransmissionModel:
 
         return lookup_by_name
 
-    def simulate_until_time_period(self, last_simulation_day):
+    def simulate_until_time_period(self, last_simulation_day) -> None:
         """
         Advance simulation model time until last_simulation_day
 
@@ -854,7 +887,7 @@ class TransmissionModel:
         while self.current_day_counter < last_simulation_day:
             self.simulate_discretized_timesteps()
 
-    def simulate_discretized_timesteps(self):
+    def simulate_discretized_timesteps(self) -> None:
         """
         Subroutine for simulate_until_time_period
 
@@ -934,7 +967,7 @@ class TransmissionModel:
         # Move to next day in simulation
         self.current_day_counter += 1
 
-    def reset_sim_state(self):
+    def reset_sim_state(self) -> None:
         """
         Reset sim_state dataclass values to initial values
         specified by the model's EpiCompartment and StateVariable
@@ -948,7 +981,7 @@ class TransmissionModel:
         for object in self.compartments + self.state_variables:
             setattr(sim_state, object.name, copy.deepcopy(object.init_val))
 
-    def reset_simulation(self):
+    def reset_simulation(self) -> None:
         """
         Reset simulation in-place. Subsequent method calls of
         simulate_until_time_period start from day 0, with original
@@ -971,37 +1004,152 @@ class TransmissionModel:
 
         self.reset_sim_state()
 
+        # Reset the current val to initial val for compartments
+        # and state variables
         for object in self.compartments + self.state_variables:
             object.current_val = copy.deepcopy(object.init_val)
 
+        # Clear history on sim objects except for transition variable groups,
+        #  which do not have history
         for object in self.sim_objects - set(self.transition_variable_groups):
             object.clear_history()
 
 
-def dataclass_instance_from_json(dataclass_ref, json_filepath):
+class ModelConstructor(ABC):
     """
-    Create instance of DataClass from class dataclass_ref,
-    based on information in json_filepath
+    Abstract base class for model constructors that create
+    model with predetermined fixed structure --
+    initial values and epidemiological structure are
+    populated by user-specified JSON files.
 
-    :param dataclass_ref: DataClass class (class, not instance)
-        from which to create instance
-    :param json_filepath: str,
-        path to json file (path includes actual filename
-        with suffix ".json") -- all json fields must
-        match name and datatype of dataclass_ref instance
-        attributes
-    :return: DataClass,
-        instance of dataclass_ref with attributes dynamically
-        assigned by json_filepath file contents
+    Attributes
+    ----------
+    :ivar config: Config dataclass instance,
+        holds configuration values
+    :ivar epi_params: dataclass instance,
+        holds epidemiological parameter values, read
+        from user-specified JSON
+    :ivar sim_state: dataclass instance,
+        holds current simulation state information,
+        such as current values of epidemiological compartments
+        and state variables, read from user-specified JSON
+    :ivar transition_variable_lookup: dict,
+        maps string to corresponding TransitionVariable
+    :ivar transition_variable_group_lookup: dict,
+        maps string to corresponding TransitionVariableGroup
+    :ivar compartment_lookup: dict,
+        maps string to corresponding EpiCompartment,
+        using the value of the EpiCompartment's "name" attribute
+    :ivar state_variable_lookup: dict,
+        maps string to corresponding StateVariable,
+        using the value of the StateVariable's "name" attribute
     """
 
-    with open(json_filepath, 'r') as file:
-        data = json.load(file)
+    def __init__(self):
+        """
+        Note: concrete subclasses should specifically assign
+        config, epi_params, and sim_state attributes to problem-specific
+        dataclasses
+        """
 
-    # convert lists to numpy arrays to support numpy operations
-    #   since json does not have direct support for numpy
-    for key, val in data.items():
-        if type(val) is list:
-            data[key] = np.asarray(val)
+        self.config = None
+        self.epi_params = None
+        self.sim_state = None
 
-    return dataclass_ref(**data)
+        self.transition_variable_lookup = {}
+        self.transition_variable_group_lookup = {}
+        self.compartment_lookup = {}
+        self.state_variable_lookup = {}
+
+    @staticmethod
+    def dataclass_instance_from_json(dataclass_ref, json_filepath) -> dataclass:
+        """
+        Create instance of DataClass from class dataclass_ref,
+        based on information in json_filepath
+
+        :param dataclass_ref: DataClass class (class, not instance)
+            from which to create instance
+        :param json_filepath: str,
+            path to json file (path includes actual filename
+            with suffix ".json") -- all json fields must
+            match name and datatype of dataclass_ref instance
+            attributes
+        :return: DataClass,
+            instance of dataclass_ref with attributes dynamically
+            assigned by json_filepath file contents
+        """
+
+        with open(json_filepath, 'r') as file:
+            data = json.load(file)
+
+        # convert lists to numpy arrays to support numpy operations
+        #   since json does not have direct support for numpy
+        for key, val in data.items():
+            if type(val) is list:
+                data[key] = np.asarray(val)
+
+        return dataclass_ref(**data)
+
+    @abstractmethod
+    def setup_epi_compartments(self) -> None:
+        """
+        Create compartments and add them to compartment_lookup for dictionary access
+        """
+        pass
+
+    @abstractmethod
+    def setup_transition_variables(self) -> None:
+        """
+        Create transition variables and add them to transition_variable_lookup
+        attribute for dictionary access
+        """
+        pass
+
+    @abstractmethod
+    def setup_transition_variable_groups(self) -> None:
+        """
+        Create transition variable groups and add them to
+        transition_variable_group_lookup attribute for dictionary access
+        """
+
+        pass
+
+    @abstractmethod
+    def setup_state_variables(self) -> None:
+        """
+        Create all state variable groups and add them to
+        state_variable_lookup attribute for dictionary access
+        """
+        pass
+
+    def create_transmission_model(self, RNG_seed) -> TransmissionModel:
+        """
+        :param RNG_seed: int,
+            used to initialize the model's RNG for generating
+            random variables and random transitions
+        :return: TransmissionModel instance,
+            initial values and epidemiological parameters
+            are loaded from user-specified JSON files during
+            ModelConstructor initialization
+        """
+
+        # Setup objects for model
+        self.setup_epi_compartments()
+        self.setup_transition_variables()
+        self.setup_transition_variable_groups()
+        self.setup_state_variables()
+
+        # Get dictionary values as lists to pass as TransmissionModel __init__ arguments
+        flu_compartments = list(self.compartment_lookup.values())
+        flu_transition_variables = list(self.transition_variable_lookup.values())
+        flu_transition_variable_groups = list(self.transition_variable_group_lookup.values())
+        flu_state_variables = list(self.state_variable_lookup.values())
+
+        return TransmissionModel(flu_compartments,
+                                 flu_transition_variables,
+                                 flu_transition_variable_groups,
+                                 flu_state_variables,
+                                 self.sim_state,
+                                 self.epi_params,
+                                 self.config,
+                                 RNG_seed)

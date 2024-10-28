@@ -58,11 +58,11 @@ modelB_variations_list = create_models_all_transition_types_list(modelB_construc
                          modelA_variations_list + modelB_variations_list)
 def test_beta(model):
     '''
-    If the transmission rate beta = 0, then S should not decrease over time
+    If the transmission rate beta_baseline = 0, then S should not decrease over time
     '''
 
     model.reset_simulation()
-    model.epi_params.beta = 0
+    model.epi_params.beta_baseline = 0
     model.simulate_until_time_period(last_simulation_day=365)
 
     S_history = model.lookup_by_name["S"].history_vals_list
