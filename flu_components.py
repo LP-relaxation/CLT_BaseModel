@@ -26,7 +26,7 @@ class FluEpiParams:
     Data container for pre-specified and fixed epidemiological
     parameters in ImmunoSEIRS flu model.
 
-    Along with FluSimState, is passed to get_current_rate
+    Along with FluModelState, is passed to get_current_rate
     and get_change_in_current_val
 
     Assume that FluEpiParams fields are constant or piecewise
@@ -37,7 +37,7 @@ class FluEpiParams:
     Each field of datatype np.ndarray must be A x L,
     where A is the number of age groups and L is the number of
     risk groups. Note: this means all arrays should be 2D.
-    See FluSimState docstring for important formatting note
+    See FluModelState docstring for important formatting note
     on 2D arrays.
 
     TODO: when adding multiple strains, need to add subscripts
@@ -123,7 +123,7 @@ class FluEpiParams:
 
 
 @dataclass
-class FluSimState:
+class FluModelState:
     """
     Data container for pre-specified and fixed set of
     EpiCompartment initial values and StateVariable initial values
@@ -172,62 +172,62 @@ class FluSimState:
 
 
 class NewExposed(TransitionVariable):
-    def get_current_rate(self, sim_state, epi_params):
-        force_of_immunity = (1 + epi_params.inf_risk_reduction * sim_state.population_immunity_inf)
-        return np.asarray(epi_params.beta_baseline * sim_state.I
+    def get_current_rate(self, model_state, epi_params):
+        force_of_immunity = (1 + epi_params.inf_risk_reduction * model_state.population_immunity_inf)
+        return np.asarray(epi_params.beta_baseline * model_state.I
                           / (epi_params.total_population_val * force_of_immunity))
 
 
 class NewSusceptible(TransitionVariable):
-    def get_current_rate(self, sim_state, epi_params):
+    def get_current_rate(self, model_state, epi_params):
         return np.full((epi_params.num_age_groups, epi_params.num_risk_groups), epi_params.R_to_S_rate)
 
 
 class NewInfected(TransitionVariable):
-    def get_current_rate(self, sim_state, epi_params):
+    def get_current_rate(self, model_state, epi_params):
         return np.full((epi_params.num_age_groups, epi_params.num_age_groups), epi_params.E_to_I_rate)
 
 
 class NewRecoveredHome(TransitionVariable):
-    def get_current_rate(self, sim_state, epi_params):
+    def get_current_rate(self, model_state, epi_params):
         return np.full((epi_params.num_age_groups, epi_params.num_risk_groups),
                        (1 - epi_params.I_to_H_adjusted_proportion) * epi_params.I_to_R_rate)
 
 
 class NewRecoveredHosp(TransitionVariable):
-    def get_current_rate(self, sim_state, epi_params):
+    def get_current_rate(self, model_state, epi_params):
         return np.full((epi_params.num_age_groups, epi_params.num_risk_groups),
                        (1 - epi_params.H_to_D_adjusted_proportion) * epi_params.H_to_R_rate)
 
 
 class NewHosp(TransitionVariable):
-    def get_current_rate(self, sim_state, epi_params):
+    def get_current_rate(self, model_state, epi_params):
         return np.asarray(epi_params.I_to_H_rate * epi_params.I_to_H_adjusted_proportion /
-                          (1 + epi_params.hosp_risk_reduction * sim_state.population_immunity_hosp))
+                          (1 + epi_params.hosp_risk_reduction * model_state.population_immunity_hosp))
 
 
 class NewDead(TransitionVariable):
-    def get_current_rate(self, sim_state, epi_params):
+    def get_current_rate(self, model_state, epi_params):
         return np.asarray(epi_params.H_to_D_adjusted_proportion * epi_params.H_to_D_rate /
-                          (1 + epi_params.death_risk_reduction * sim_state.population_immunity_hosp))
+                          (1 + epi_params.death_risk_reduction * model_state.population_immunity_hosp))
 
 
 class PopulationImmunityHosp(StateVariable):
-    def get_change_in_current_val(self, sim_state, epi_params, num_timesteps):
-        immunity_gain = (epi_params.immunity_hosp_increase_factor * sim_state.R) / \
+    def get_change_in_current_val(self, model_state, epi_params, num_timesteps):
+        immunity_gain = (epi_params.immunity_hosp_increase_factor * model_state.R) / \
                         (epi_params.total_population_val *
-                         (1 + epi_params.immunity_saturation_constant * sim_state.population_immunity_hosp))
-        immunity_loss = epi_params.waning_factor_hosp * sim_state.population_immunity_hosp
+                         (1 + epi_params.immunity_saturation_constant * model_state.population_immunity_hosp))
+        immunity_loss = epi_params.waning_factor_hosp * model_state.population_immunity_hosp
 
         return np.asarray(immunity_gain - immunity_loss) / num_timesteps
 
 
 class PopulationImmunityInf(StateVariable):
-    def get_change_in_current_val(self, sim_state, epi_params, num_timesteps):
-        immunity_gain = (epi_params.immunity_inf_increase_factor * sim_state.R) / \
+    def get_change_in_current_val(self, model_state, epi_params, num_timesteps):
+        immunity_gain = (epi_params.immunity_inf_increase_factor * model_state.R) / \
                         (epi_params.total_population_val * (1 + epi_params.immunity_saturation_constant *
-                                                            sim_state.population_immunity_inf))
-        immunity_loss = epi_params.waning_factor_inf * sim_state.population_immunity_inf
+                                                            model_state.population_immunity_inf))
+        immunity_loss = epi_params.waning_factor_inf * model_state.population_immunity_inf
 
         return np.asarray(immunity_gain - immunity_loss) / num_timesteps
 
@@ -276,7 +276,7 @@ class ImmunoSEIRSConstructor(ModelConstructor):
     :ivar epi_params: FluEpiParams dataclass instance,
         holds epidemiological parameter values, read-in
         from user-specified JSON
-    :ivar sim_state: FluSimState dataclass instance,
+    :ivar model_state: FluModelState dataclass instance,
         holds current simulation state information,
         such as current values of epidemiological compartments
         and state variables, read in from user-specified JSON
@@ -297,7 +297,7 @@ class ImmunoSEIRSConstructor(ModelConstructor):
                  epi_params_filepath,
                  epi_compartments_state_vars_init_vals_filepath):
         """
-        Create Config, FluEpiParams, and FluSimState instances
+        Create Config, FluEpiParams, and FluModelState instances
         using values from respective JSON files, and save these instances
         on the ImmunoSEIRSConstructor to construct a model.
 
@@ -319,18 +319,18 @@ class ImmunoSEIRSConstructor(ModelConstructor):
 
         # Use same init method as abstract class --
         # creates "lookup" attributes (dictionaries for easy access)
-        # and creates attributes config, epi_params, and sim_state
+        # and creates attributes config, epi_params, and model_state
         super().__init__()
 
-        # Assign config, epi_params, and sim_state to model-specific
+        # Assign config, epi_params, and model_state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
         self.config = self.dataclass_instance_from_json(Config,
                                                         config_filepath)
         self.epi_params = self.dataclass_instance_from_json(FluEpiParams,
                                                             epi_params_filepath)
-        self.sim_state = \
-            self.dataclass_instance_from_json(FluSimState,
+        self.model_state = \
+            self.dataclass_instance_from_json(FluModelState,
                                               epi_compartments_state_vars_init_vals_filepath)
 
     def setup_epi_compartments(self) -> None:
@@ -340,7 +340,7 @@ class ImmunoSEIRSConstructor(ModelConstructor):
         """
 
         for name in ("S", "E", "I", "H", "R", "D"):
-            self.compartment_lookup[name] = EpiCompartment(name, getattr(self.sim_state, name))
+            self.compartment_lookup[name] = EpiCompartment(name, getattr(self.model_state, name))
 
     def setup_transition_variables(self) -> None:
         """
@@ -409,8 +409,8 @@ class ImmunoSEIRSConstructor(ModelConstructor):
 
         self.state_variable_lookup["population_immunity_inf"] = \
             PopulationImmunityInf("population_immunity_inf",
-                                  getattr(self.sim_state, "population_immunity_inf"))
+                                  getattr(self.model_state, "population_immunity_inf"))
 
         self.state_variable_lookup["population_immunity_hosp"] = \
             PopulationImmunityHosp("population_immunity_hosp",
-                                   getattr(self.sim_state, "population_immunity_hosp"))
+                                   getattr(self.model_state, "population_immunity_hosp"))

@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 from enum import Enum
+from datetime import date
 
 
 class TransmissionModelError(Exception):
@@ -499,14 +500,14 @@ class TransitionVariable(ABC):
         self.history_vals_list = []
 
     @abstractmethod
-    def get_current_rate(self, sim_state, epi_params) -> np.ndarray:
+    def get_current_rate(self, model_state, epi_params) -> np.ndarray:
         """
         Computes and returns current rate of transition variable,
         based on current state of the simulation and epidemiological parameters.
         Output should be a numpy array of size A x L, where A is
-        sim_state.num_age_groups and L is sim_state.num_risk_groups
+        model_state.num_age_groups and L is model_state.num_risk_groups
 
-        :param sim_state: DataClass,
+        :param model_state: DataClass,
             holds simulation state (current values of
             EpiCompartment instances and StateVariable
             instances)
@@ -515,8 +516,8 @@ class TransitionVariable(ABC):
         :return: np.ndarray,
             holds age-risk transition rate,
             must be same shape as origin.init_val,
-            i.e. be size A x L, where A is sim_state.num_age_groups
-            and L is sim_state.num_risk_groups
+            i.e. be size A x L, where A is model_state.num_age_groups
+            and L is model_state.num_risk_groups
         """
         pass
 
@@ -584,7 +585,39 @@ class TransitionVariable(ABC):
         return self.origin.current_val
 
 
-class EpiCompartment:
+@dataclass
+class ModelStateManager:
+    """
+    Container for holding ModelStateObject instances --
+    this includes EpiCompartment, StateVariable, and
+    CalendarVariable instances. Note that TransitionVariable
+    and TransitionVariableGroup instances are NOT included here.
+    """
+
+    compartments: Optional[list] = None
+    state_variables: Optional[list] = None
+    calendar_variables: Optional[list] = None
+    model_state: Optional[dataclass] = None
+
+    def update_model_state(self):
+        for object in self.compartments + self.state_variables + \
+                      self.calendar_variables:
+            setattr(self.model_state, object.name, object.current_val)
+
+
+class ModelStateObject(ABC):
+    """
+    Abstract base class for EpiCompartment, StateVariable, and
+    CalendarVariable subclasses. All subclasses have the common attributes
+    "name", and "current_val"
+    """
+
+    def __init__(self, name):
+        self.name = name
+        self.current_val = None
+
+
+class EpiCompartment(ModelStateObject):
     """
     Class for epidemiological compartments (e.g. Susceptible,
         Exposed, Infected, etc...)
@@ -612,7 +645,7 @@ class EpiCompartment:
     def __init__(self,
                  name,
                  init_val):
-        self.name = name
+        super().__init__(name)
         self.init_val = copy.deepcopy(init_val)
         self.current_val = copy.deepcopy(init_val)
         self.current_inflow = np.zeros(np.shape(init_val))
@@ -623,9 +656,9 @@ class EpiCompartment:
     def update_current_val(self) -> None:
         self.current_val += self.current_inflow - self.current_outflow
 
-    def update_sim_state(self,
-                         sim_state: dataclass) -> None:
-        setattr(sim_state, self.name, self.current_val)
+    def update_model_state(self,
+                           model_state: dataclass) -> None:
+        setattr(model_state, self.name, self.current_val)
 
     def reset_inflow(self) -> None:
         self.current_inflow = np.zeros(np.shape(self.current_inflow))
@@ -648,7 +681,7 @@ class EpiCompartment:
         self.history_vals_list = []
 
 
-class StateVariable(ABC):
+class StateVariable(ModelStateObject):
     """
     Abstract base class for state variables in epidemiological model.
 
@@ -686,7 +719,7 @@ class StateVariable(ABC):
             risk group j
         """
 
-        self.name = name
+        super().__init__(name)
         self.init_val = copy.deepcopy(init_val)
         self.current_val = copy.deepcopy(init_val)
         self.change_in_current_val = None
@@ -695,16 +728,16 @@ class StateVariable(ABC):
 
     @abstractmethod
     def get_change_in_current_val(self,
-                                  sim_state: dataclass,
+                                  model_state: dataclass,
                                   epi_params: dataclass,
                                   num_timesteps: int) -> np.ndarray:
         """
         Computes and returns change in current value of state variable,
         based on current state of the simulation and epidemiological parameters.
         Output should be a numpy array of size A x L, where A is
-        sim_state.num_age_groups and L is sim_state.num_risk_groups
+        model_state.num_age_groups and L is model_state.num_risk_groups
 
-        :param sim_state: DataClass,
+        :param model_state: DataClass,
             holds simulation state (current values of
             EpiCompartment instances and StateVariable
             instances)
@@ -714,16 +747,16 @@ class StateVariable(ABC):
             number of timesteps -- used to determine time interval
             length for discretization
         :return: np.ndarray,
-            size A x L, where A is sim_state.num_age_groups and L is
-            sim_state.num_risk_groups
+            size A x L, where A is model_state.num_age_groups and L is
+            model_state.num_risk_groups
         """
         pass
 
     def update_current_val(self) -> None:
         self.current_val += self.change_in_current_val
 
-    def update_sim_state(self, sim_state) -> None:
-        setattr(sim_state, self.name, self.current_val)
+    def update_model_state(self, model_state) -> None:
+        setattr(model_state, self.name, self.current_val)
 
     def update_history(self) -> None:
         """
@@ -738,6 +771,43 @@ class StateVariable(ABC):
 
     def clear_history(self) -> None:
         self.history_vals_list = []
+
+
+@dataclass
+class CalendarVariable(ModelStateObject):
+    """
+    Abstract base class for variables that are functions of real-world
+    dates -- for example, contact matrices (which depend on the day of
+    the week and whether the current day is a holiday), historical
+    vaccination data, and seasonality
+
+    See __init__ docstring for other attributes.
+    """
+
+    def __init__(self, name, time_series_df):
+        """
+        :param name: str,
+            unique identifier for calendar variable
+        :param time_series_df: DataFrame,
+            must have the following specific column structure:
+            index column must contain strings of dates in
+            ISO 8601 format: "YY-MM-DD", column named "values"
+            must contain corresponding values
+        """
+        super().__init__(name)
+        self.time_series_df = time_series_df
+
+    @abstractmethod
+    def update_current_val(self, current_date: date) -> None:
+        """
+        Subclasses must provide a concrete implementation of
+        updating self.current_val in-place
+
+        :param current_date: date,
+            real-world date corresponding to
+            model's current simulation day
+        """
+        pass
 
 
 class TransmissionModel:
@@ -771,7 +841,7 @@ class TransmissionModel:
         set of all the model's EpiCompartment, TransitionVariable,
         TransitionVariableGroup, and StateVariable instances --
         used to group objects for convenience
-    :ivar sim_state: DataClass,
+    :ivar model_state: DataClass,
         data container for the model's current values of
         EpiCompartment instances and StateVariable instances --
         there must be one field for each EpiCompartment instance
@@ -803,7 +873,7 @@ class TransmissionModel:
                  transition_variables,
                  transition_variable_groups,
                  state_variables,
-                 sim_state,
+                 model_state,
                  epi_params,
                  config,
                  RNG_seed):
@@ -825,7 +895,7 @@ class TransmissionModel:
         self.sim_objects = set(compartments + transition_variables +
                                transition_variable_groups + state_variables)
 
-        self.sim_state = sim_state
+        self.model_state = model_state
         self.epi_params = epi_params
         self.config = config
 
@@ -901,16 +971,16 @@ class TransmissionModel:
 
         # Attribute lookup shortcuts
         timesteps_per_day = self.config.timesteps_per_day
-        sim_state = self.sim_state
+        model_state = self.model_state
         epi_params = self.epi_params
 
         for timestep in range(timesteps_per_day):
 
             for tvar in self.transition_variables:
-                tvar.current_rate = tvar.get_current_rate(self.sim_state, epi_params)
+                tvar.current_rate = tvar.get_current_rate(self.model_state, epi_params)
 
             for svar in self.state_variables:
-                svar.change_in_current_val = svar.get_change_in_current_val(sim_state,
+                svar.change_in_current_val = svar.get_change_in_current_val(model_state,
                                                                             epi_params,
                                                                             timesteps_per_day)
 
@@ -944,11 +1014,11 @@ class TransmissionModel:
 
             for svar in self.state_variables:
                 svar.update_current_val()
-                svar.update_sim_state(sim_state)
+                svar.update_model_state(model_state)
 
             for compartment in self.compartments:
                 compartment.update_current_val()
-                compartment.update_sim_state(sim_state)
+                compartment.update_model_state(model_state)
 
                 compartment.reset_inflow()
                 compartment.reset_outflow()
@@ -967,19 +1037,19 @@ class TransmissionModel:
         # Move to next day in simulation
         self.current_day_counter += 1
 
-    def reset_sim_state(self) -> None:
+    def reset_model_state(self) -> None:
         """
-        Reset sim_state dataclass values to initial values
+        Reset model_state dataclass values to initial values
         specified by the model's EpiCompartment and StateVariable
         instances
         """
 
-        sim_state = self.sim_state
+        model_state = self.model_state
 
         # AGAIN, MUST BE CAREFUL ABOUT MUTABLE NUMPY ARRAYS --
         # MUST USE DEEP COPY
         for object in self.compartments + self.state_variables:
-            setattr(sim_state, object.name, copy.deepcopy(object.init_val))
+            setattr(model_state, object.name, copy.deepcopy(object.init_val))
 
     def reset_simulation(self) -> None:
         """
@@ -988,7 +1058,7 @@ class TransmissionModel:
         day 0 state.
 
         Returns current_day_counter to 0.
-        Restores sim_state dataclass values to initial values.
+        Restores model_state dataclass values to initial values.
         Clears history on model's compartments, transition variables,
         and state variables.
 
@@ -1002,7 +1072,7 @@ class TransmissionModel:
 
         self.current_day_counter = 0
 
-        self.reset_sim_state()
+        self.reset_model_state()
 
         # Reset the current val to initial val for compartments
         # and state variables
@@ -1029,7 +1099,7 @@ class ModelConstructor(ABC):
     :ivar epi_params: dataclass instance,
         holds epidemiological parameter values, read
         from user-specified JSON
-    :ivar sim_state: dataclass instance,
+    :ivar model_state: dataclass instance,
         holds current simulation state information,
         such as current values of epidemiological compartments
         and state variables, read from user-specified JSON
@@ -1048,13 +1118,13 @@ class ModelConstructor(ABC):
     def __init__(self):
         """
         Note: concrete subclasses should specifically assign
-        config, epi_params, and sim_state attributes to problem-specific
+        config, epi_params, and model_state attributes to problem-specific
         dataclasses
         """
 
         self.config = None
         self.epi_params = None
-        self.sim_state = None
+        self.model_state = None
 
         self.transition_variable_lookup = {}
         self.transition_variable_group_lookup = {}
@@ -1149,7 +1219,7 @@ class ModelConstructor(ABC):
                                  flu_transition_variables,
                                  flu_transition_variable_groups,
                                  flu_state_variables,
-                                 self.sim_state,
+                                 self.model_state,
                                  self.epi_params,
                                  self.config,
                                  RNG_seed)
