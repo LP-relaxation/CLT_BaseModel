@@ -3,7 +3,7 @@ import json
 import copy
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union, Type
 from enum import Enum
 from datetime import date
 
@@ -80,6 +80,21 @@ class Config:
 
     timesteps_per_day: int = 7
     transition_type: str = TransitionTypes.BINOMIAL
+
+
+@dataclass
+class EpiParams:
+    """
+    Stores epidemiological parameters.
+    """
+    pass
+
+
+@dataclass
+class SimState:
+    """
+    Holds current values of simulation state.
+    """
 
 
 class TransitionVariableGroup:
@@ -507,11 +522,11 @@ class TransitionVariable(ABC):
         Output should be a numpy array of size A x L, where A is
         model_state.num_age_groups and L is model_state.num_risk_groups
 
-        :param model_state: DataClass,
+        :param model_state: SimState,
             holds simulation state (current values of
-            EpiCompartment instances and StateVariable
+            EpiCompartment instances and EpiMetric
             instances)
-        :param epi_params: DataClass,
+        :param epi_params: EpiParams,
             holds values of epidemiological parameters
         :return: np.ndarray,
             holds age-risk transition rate,
@@ -586,30 +601,45 @@ class TransitionVariable(ABC):
 
 
 @dataclass
-class ModelStateManager:
+class StateManager:
     """
-    Container for holding ModelStateObject instances --
-    this includes EpiCompartment, StateVariable, and
-    CalendarVariable instances. Note that TransitionVariable
+    Container for holding StateVariable instances --
+    this includes EpiCompartment, EpiMetric, and
+    Schedule instances. Note that TransitionVariable
     and TransitionVariableGroup instances are NOT included here.
+
+    Attributes
+    ----------
+    :ivar compartments: list,
+        list of all the model's EpiCompartment instances
+    :ivar epi_metrics: list,
+        list of all the model's EpiMetric instances
+    :ivar schedules: list,
+        list of all the model's Schedule instances
+    :ivar model_state: ModelState,
+        data container for the model's current values of its
+        EpiCompartment, EpiMetric, and Schedule instances --
+        there must be one field for each EpiCompartment, EpiMetric,
+        and Schedule instance -- each field's name must
+        match the "name" attribute of a corresponding EpiCompartment,
+        EpiMetric, or Schedule instance
     """
 
     compartments: Optional[list] = None
-    state_variables: Optional[list] = None
-    calendar_variables: Optional[list] = None
-    model_state: Optional[dataclass] = None
+    epi_metrics: Optional[list] = None
+    schedules: Optional[list] = None
+    model_state: Optional[SimState] = None
 
     def update_model_state(self):
-        for object in self.compartments + self.state_variables + \
-                      self.calendar_variables:
+        for object in self.compartments + self.epi_metrics + \
+                      self.schedules:
             setattr(self.model_state, object.name, object.current_val)
 
 
-class ModelStateObject(ABC):
+class StateVariable:
     """
-    Abstract base class for EpiCompartment, StateVariable, and
-    CalendarVariable subclasses. All subclasses have the common attributes
-    "name", and "current_val"
+    Parent class of EpiCompartment, EpiMetric, and Schedule
+    classes. All subclasses have the common attributes "name", and "current_val"
     """
 
     def __init__(self, name):
@@ -617,7 +647,7 @@ class ModelStateObject(ABC):
         self.current_val = None
 
 
-class EpiCompartment(ModelStateObject):
+class EpiCompartment(StateVariable):
     """
     Class for epidemiological compartments (e.g. Susceptible,
         Exposed, Infected, etc...)
@@ -657,7 +687,7 @@ class EpiCompartment(ModelStateObject):
         self.current_val += self.current_inflow - self.current_outflow
 
     def update_model_state(self,
-                           model_state: dataclass) -> None:
+                           model_state: SimState) -> None:
         setattr(model_state, self.name, self.current_val)
 
     def reset_inflow(self) -> None:
@@ -681,16 +711,16 @@ class EpiCompartment(ModelStateObject):
         self.history_vals_list = []
 
 
-class StateVariable(ModelStateObject):
+class EpiMetric(StateVariable):
     """
-    Abstract base class for state variables in epidemiological model.
+    Abstract base class for epi metrics in epidemiological model.
 
     This is intended for variables that are deterministic functions of
     the simulation state (including epi compartment values, other parameters,
     and time.)
 
     For example, population-level immunity variables should be
-    modeled as a StateVariable subclass, with a concrete
+    modeled as a EpiMetric subclass, with a concrete
     implementation of the abstract method get_change_in_current_val.
 
     Attributes
@@ -700,7 +730,7 @@ class StateVariable(ModelStateObject):
         for age-risk groups
     :ivar change_in_current_val: np.ndarray,
         initialized to None, but during simulation holds change in
-        current value of StateVariable for age-risk groups
+        current value of EpiMetric for age-risk groups
         (size A x L, where A is number of risk groups and L is number
         of age groups)
 
@@ -712,9 +742,9 @@ class StateVariable(ModelStateObject):
                  init_val):
         """
         :param name: str,
-            name of StateVariable
+            name of EpiMetric
         :param init_val: 2D np.ndarray of nonnegative floats,
-            corresponding to initial value of state variable,
+            corresponding to initial value of epi metric,
             where i,jth entry corresponds to age group i and
             risk group j
         """
@@ -728,20 +758,20 @@ class StateVariable(ModelStateObject):
 
     @abstractmethod
     def get_change_in_current_val(self,
-                                  model_state: dataclass,
-                                  epi_params: dataclass,
+                                  model_state: SimState,
+                                  epi_params: EpiParams,
                                   num_timesteps: int) -> np.ndarray:
         """
-        Computes and returns change in current value of state variable,
+        Computes and returns change in current value of epi metric,
         based on current state of the simulation and epidemiological parameters.
         Output should be a numpy array of size A x L, where A is
         model_state.num_age_groups and L is model_state.num_risk_groups
 
-        :param model_state: DataClass,
+        :param model_state: SimState,
             holds simulation state (current values of
-            EpiCompartment instances and StateVariable
+            EpiCompartment instances and EpiMetric
             instances)
-        :param epi_params: DataClass,
+        :param epi_params: EpiParams,
             holds values of epidemiological parameters
         :param num_timesteps: int,
             number of timesteps -- used to determine time interval
@@ -774,7 +804,7 @@ class StateVariable(ModelStateObject):
 
 
 @dataclass
-class CalendarVariable(ModelStateObject):
+class Schedule(StateVariable):
     """
     Abstract base class for variables that are functions of real-world
     dates -- for example, contact matrices (which depend on the day of
@@ -787,7 +817,7 @@ class CalendarVariable(ModelStateObject):
     def __init__(self, name, time_series_df):
         """
         :param name: str,
-            unique identifier for calendar variable
+            unique identifier for schedule
         :param time_series_df: DataFrame,
             must have the following specific column structure:
             index column must contain strings of dates in
@@ -815,7 +845,7 @@ class TransmissionModel:
     Contains and manages all necessary components for
     simulating a compartmental model, including compartments,
     transition variables and transition variable groups,
-    state variables, a data container for the current simulation state,
+    epi metrics, a data container for the current simulation state,
     epidemiological parameters, simulation experiment configuration
     parameters, and a random number generator.
 
@@ -824,35 +854,21 @@ class TransmissionModel:
 
     When creating an instance, the order of elements does not matter
     within compartments, transition_variables, transition_variable_groups,
-    and state_variables. The "flow" and "physics" information are stored
+    and epi_metrics. The "flow" and "physics" information are stored
     on the objects.
 
     Attributes
     ----------
-    :ivar compartments: list-like,
-        list of all the model's EpiCompartment instances
+
     :ivar transition_variables: list-like,
         list of all the model's TransitionVariable instances
     :ivar transition_variable_groups: list-like,
         list of all the model's TransitionVariableGroup instances
-    :ivar state_variables: list-like,
-        list of all the model's StateVariable instances
-    :ivar sim_objects: set,
-        set of all the model's EpiCompartment, TransitionVariable,
-        TransitionVariableGroup, and StateVariable instances --
-        used to group objects for convenience
-    :ivar model_state: DataClass,
-        data container for the model's current values of
-        EpiCompartment instances and StateVariable instances --
-        there must be one field for each EpiCompartment instance
-        and for each StateVariable instance -- each field's name must
-        match the "name" attribute of the corresponding EpiCompartment
-        or StateVariable instance
-    :ivar epi_params: DataClass,
+    :ivar epi_params: EpiParams,
         data container for the model's epidemiological parameters,
         such as the "Greek letters" characterizing sojourn times
         in compartments
-    :ivar config: DataClass,
+    :ivar config: Config,
         data container for the model's simulation configuration values
     :ivar RNG: np.random.Generator object,
         used to generate random variables and control reproducibility
@@ -862,7 +878,7 @@ class TransmissionModel:
         have completed
     :ivar lookup_by_name: dict,
         keys are names of EpiCompartment, TransitionVariable,
-        TransitionVariableGroup, and StateVariable instances
+        TransitionVariableGroup, and EpiMetric instances
         associated with the model, values are the actual object
 
     See __init__ docstring for other attributes.
@@ -872,13 +888,13 @@ class TransmissionModel:
                  compartments,
                  transition_variables,
                  transition_variable_groups,
-                 state_variables,
+                 epi_metrics,
                  model_state,
                  epi_params,
                  config,
                  RNG_seed):
         """
-        TODO: maybe group arguments together into DataClass to simplify?
+        TODO: maybe group arguments together into dataclass to simplify?
 
         :param RNG_seed: positive int,
             used to initialize the model's RNG for generating
@@ -890,10 +906,10 @@ class TransmissionModel:
         self.compartments = compartments
         self.transition_variables = transition_variables
         self.transition_variable_groups = transition_variable_groups
-        self.state_variables = state_variables
+        self.epi_metrics = epi_metrics
 
         self.sim_objects = set(compartments + transition_variables +
-                               transition_variable_groups + state_variables)
+                               transition_variable_groups + epi_metrics)
 
         self.model_state = model_state
         self.epi_params = epi_params
@@ -922,7 +938,7 @@ class TransmissionModel:
     def create_lookup_by_name(self) -> dict:
         """
         Create lookup_by_name attribute -- keys are names of EpiCompartment,
-        TransitionVariable, TransitionVariableGroup, and StateVariable
+        TransitionVariable, TransitionVariableGroup, and EpiMetric
         instances associated with the model, values are the actual object
         """
 
@@ -966,7 +982,7 @@ class TransmissionModel:
         attribute config.timesteps_per_day
 
         Properly scales transition variable realizations and changes
-        in state variables by specified timesteps per day
+        in epi metrics by specified timesteps per day
         """
 
         # Attribute lookup shortcuts
@@ -979,7 +995,7 @@ class TransmissionModel:
             for tvar in self.transition_variables:
                 tvar.current_rate = tvar.get_current_rate(self.model_state, epi_params)
 
-            for svar in self.state_variables:
+            for svar in self.epi_metrics:
                 svar.change_in_current_val = svar.get_change_in_current_val(model_state,
                                                                             epi_params,
                                                                             timesteps_per_day)
@@ -1012,7 +1028,7 @@ class TransmissionModel:
                 tvar.update_origin_outflow()
                 tvar.update_destination_inflow()
 
-            for svar in self.state_variables:
+            for svar in self.epi_metrics:
                 svar.update_current_val()
                 svar.update_model_state(model_state)
 
@@ -1026,7 +1042,7 @@ class TransmissionModel:
         # Update history at end of each day, not at end of every
         #   discretization timestep, to be efficient
         # Update history of epi compartments, transition variables,
-        #   and state variables -- transition variable groups do not
+        #   and epi metrics -- transition variable groups do not
         #   have history, so do not include transition variable groups
         #   in update step
         # Note: the order in which objects' histories are updated
@@ -1039,8 +1055,8 @@ class TransmissionModel:
 
     def reset_model_state(self) -> None:
         """
-        Reset model_state dataclass values to initial values
-        specified by the model's EpiCompartment and StateVariable
+        Reset model_state values to initial values
+        specified by the model's EpiCompartment and EpiMetric
         instances
         """
 
@@ -1048,7 +1064,7 @@ class TransmissionModel:
 
         # AGAIN, MUST BE CAREFUL ABOUT MUTABLE NUMPY ARRAYS --
         # MUST USE DEEP COPY
-        for object in self.compartments + self.state_variables:
+        for object in self.compartments + self.epi_metrics:
             setattr(model_state, object.name, copy.deepcopy(object.init_val))
 
     def reset_simulation(self) -> None:
@@ -1058,9 +1074,9 @@ class TransmissionModel:
         day 0 state.
 
         Returns current_day_counter to 0.
-        Restores model_state dataclass values to initial values.
+        Restores model_state values to initial values.
         Clears history on model's compartments, transition variables,
-        and state variables.
+        and epi metrics.
 
         WARNING: DOES NOT RESET THE MODEL'S RANDOM NUMBER GENERATOR TO
         ITS INITIAL STARTING SEED. RANDOM NUMBER GENERATOR WILL CONTINUE
@@ -1075,8 +1091,8 @@ class TransmissionModel:
         self.reset_model_state()
 
         # Reset the current val to initial val for compartments
-        # and state variables
-        for object in self.compartments + self.state_variables:
+        # and epi metrics
+        for object in self.compartments + self.epi_metrics:
             object.current_val = copy.deepcopy(object.init_val)
 
         # Clear history on sim objects except for transition variable groups,
@@ -1094,15 +1110,15 @@ class ModelConstructor(ABC):
 
     Attributes
     ----------
-    :ivar config: Config dataclass instance,
+    :ivar config: Config,
         holds configuration values
-    :ivar epi_params: dataclass instance,
+    :ivar epi_params: EpiParams,
         holds epidemiological parameter values, read
         from user-specified JSON
-    :ivar model_state: dataclass instance,
+    :ivar model_state: SimState,
         holds current simulation state information,
         such as current values of epidemiological compartments
-        and state variables, read from user-specified JSON
+        and epi metrics, read from user-specified JSON
     :ivar transition_variable_lookup: dict,
         maps string to corresponding TransitionVariable
     :ivar transition_variable_group_lookup: dict,
@@ -1110,9 +1126,9 @@ class ModelConstructor(ABC):
     :ivar compartment_lookup: dict,
         maps string to corresponding EpiCompartment,
         using the value of the EpiCompartment's "name" attribute
-    :ivar state_variable_lookup: dict,
-        maps string to corresponding StateVariable,
-        using the value of the StateVariable's "name" attribute
+    :ivar epi_metric_lookup: dict,
+        maps string to corresponding EpiMetric,
+        using the value of the EpiMetric's "name" attribute
     """
 
     def __init__(self):
@@ -1129,22 +1145,23 @@ class ModelConstructor(ABC):
         self.transition_variable_lookup = {}
         self.transition_variable_group_lookup = {}
         self.compartment_lookup = {}
-        self.state_variable_lookup = {}
+        self.epi_metric_lookup = {}
 
     @staticmethod
-    def dataclass_instance_from_json(dataclass_ref, json_filepath) -> dataclass:
+    def dataclass_instance_from_json(dataclass_ref: Type[Union[Config, SimState, EpiParams]],
+                                     json_filepath: str) -> Union[Config, SimState, EpiParams]:
         """
-        Create instance of DataClass from class dataclass_ref,
+        Create instance of class dataclass_ref,
         based on information in json_filepath
 
-        :param dataclass_ref: DataClass class (class, not instance)
+        :param dataclass_ref: dataclass class (class, not instance)
             from which to create instance
         :param json_filepath: str,
             path to json file (path includes actual filename
             with suffix ".json") -- all json fields must
             match name and datatype of dataclass_ref instance
             attributes
-        :return: DataClass,
+        :return: Config, SimState, or EpiParams,
             instance of dataclass_ref with attributes dynamically
             assigned by json_filepath file contents
         """
@@ -1185,10 +1202,10 @@ class ModelConstructor(ABC):
         pass
 
     @abstractmethod
-    def setup_state_variables(self) -> None:
+    def setup_epi_metrics(self) -> None:
         """
-        Create all state variable groups and add them to
-        state_variable_lookup attribute for dictionary access
+        Create all epi metric groups and add them to
+        epi_metric_lookup attribute for dictionary access
         """
         pass
 
@@ -1207,18 +1224,18 @@ class ModelConstructor(ABC):
         self.setup_epi_compartments()
         self.setup_transition_variables()
         self.setup_transition_variable_groups()
-        self.setup_state_variables()
+        self.setup_epi_metrics()
 
         # Get dictionary values as lists to pass as TransmissionModel __init__ arguments
         flu_compartments = list(self.compartment_lookup.values())
         flu_transition_variables = list(self.transition_variable_lookup.values())
         flu_transition_variable_groups = list(self.transition_variable_group_lookup.values())
-        flu_state_variables = list(self.state_variable_lookup.values())
+        flu_epi_metrics = list(self.epi_metric_lookup.values())
 
         return TransmissionModel(flu_compartments,
                                  flu_transition_variables,
                                  flu_transition_variable_groups,
-                                 flu_state_variables,
+                                 flu_epi_metrics,
                                  self.model_state,
                                  self.epi_params,
                                  self.config,

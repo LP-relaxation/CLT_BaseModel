@@ -2,8 +2,7 @@ import numpy as np
 from flu_components import ImmunoSEIRSConstructor
 from plotting import create_basic_compartment_history_plot
 
-from base_components import TransitionTypes
-
+import base_components as base
 import numpy as np
 import copy
 import pytest
@@ -38,7 +37,7 @@ modelB_constructor = ImmunoSEIRSConstructor(instanceB_config_filepath,
 def create_models_all_transition_types_list(model_constructor, RNG_seed):
     models_list = []
 
-    for transition_type in TransitionTypes:
+    for transition_type in base.TransitionTypes:
 
         model_constructor.config.transition_type = transition_type
 
@@ -114,7 +113,7 @@ def test_constructor_methods(model):
     '''
     Based on this model, there should be 6 epi compartments,
         7 transition variables, 2 transition variable groups,
-        and 2 state variables
+        and 2 epi metrics
     '''
 
     model.reset_simulation()
@@ -122,7 +121,7 @@ def test_constructor_methods(model):
     assert len(model.compartments) == 6
     assert len(model.transition_variables) == 7
     assert len(model.transition_variable_groups) == 2
-    assert len(model.state_variables) == 2
+    assert len(model.epi_metrics) == 2
 
 
 @pytest.mark.parametrize("model",
