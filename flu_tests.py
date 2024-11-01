@@ -1,5 +1,5 @@
 import numpy as np
-from flu_components import ImmunoSEIRSConstructor
+from flu_components import FluModelConstructor
 from plotting import create_basic_compartment_history_plot
 
 import base_components as base
@@ -16,21 +16,21 @@ base_path = Path(__file__).parent
 instanceA_folder = "instance1_1age_1risk_test"
 
 instanceA_config_filepath = base_path / instanceA_folder / "config.json"
-instanceA_epi_params_filepath = base_path / instanceA_folder / "epi_params.json"
-instanceA_init_vals_filepath = base_path / instanceA_folder / "epi_compartments_state_vars_init_vals.json"
+instanceA_fixed_params_filepath = base_path / instanceA_folder / "fixed_params.json"
+instanceA_init_vals_filepath = base_path / instanceA_folder / "state_variables_init_vals.json"
 
-modelA_constructor = ImmunoSEIRSConstructor(instanceA_config_filepath,
-                                            instanceA_epi_params_filepath,
+modelA_constructor = FluModelConstructor(instanceA_config_filepath,
+                                            instanceA_fixed_params_filepath,
                                             instanceA_init_vals_filepath)
 
 instanceB_folder = "instance2_2age_2risk_test"
 
 instanceB_config_filepath = base_path / instanceB_folder / "config.json"
-instanceB_epi_params_filepath = base_path / instanceB_folder / "epi_params.json"
-instanceB_init_vals_filepath = base_path / instanceB_folder / "epi_compartments_state_vars_init_vals.json"
+instanceB_fixed_params_filepath = base_path / instanceB_folder / "fixed_params.json"
+instanceB_init_vals_filepath = base_path / instanceB_folder / "state_variables_init_vals.json"
 
-modelB_constructor = ImmunoSEIRSConstructor(instanceB_config_filepath,
-                                            instanceB_epi_params_filepath,
+modelB_constructor = FluModelConstructor(instanceB_config_filepath,
+                                            instanceB_fixed_params_filepath,
                                             instanceB_init_vals_filepath)
 
 
@@ -61,7 +61,7 @@ def test_beta(model):
     '''
 
     model.reset_simulation()
-    model.epi_params.beta_baseline = 0
+    model.fixed_params.beta_baseline = 0
     model.simulate_until_time_period(last_simulation_day=365)
 
     S_history = model.lookup_by_name["S"].history_vals_list
@@ -78,7 +78,7 @@ def test_deaths(model):
     '''
 
     model.reset_simulation()
-    model.epi_params.beta = 2
+    model.fixed_params.beta = 2
     model.simulate_until_time_period(last_simulation_day=365)
 
     D_history = model.lookup_by_name["D"].history_vals_list
@@ -95,7 +95,7 @@ def test_population_is_constant(model):
     '''
 
     model.reset_simulation()
-    model.epi_params.beta = 2
+    model.fixed_params.beta = 2
 
     for day in range(365):
         model.simulate_until_time_period(day)
@@ -104,7 +104,7 @@ def test_population_is_constant(model):
         for compartment in model.compartments:
             current_sum_all_compartments += np.sum(compartment.current_val)
 
-        assert np.abs(current_sum_all_compartments - np.sum(model.epi_params.total_population_val)) < 1e-6
+        assert np.abs(current_sum_all_compartments - np.sum(model.fixed_params.total_population_val)) < 1e-6
 
 
 @pytest.mark.parametrize("model",
@@ -121,7 +121,7 @@ def test_constructor_methods(model):
     assert len(model.compartments) == 6
     assert len(model.transition_variables) == 7
     assert len(model.transition_variable_groups) == 2
-    assert len(model.epi_metrics) == 2
+    assert len(model.dynamic_vals) == 2
 
 
 @pytest.mark.parametrize("model",

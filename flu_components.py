@@ -4,6 +4,7 @@ import copy
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
+from numba import njit, jit
 
 from pathlib import Path
 
@@ -19,23 +20,23 @@ from plotting import create_basic_compartment_history_plot
 
 
 @dataclass
-class FluEpiParams(base.EpiParams):
+class FluFixedParams(base.FixedParams):
     """
     Data container for pre-specified and fixed epidemiological
-    parameters in ImmunoSEIRS flu model.
+    parameters in FluModel flu model.
 
-    Along with FluModelState, is passed to get_current_rate
+    Along with FluSimState, is passed to get_current_rate
     and get_change_in_current_val
 
-    Assume that FluEpiParams fields are constant or piecewise
+    Assume that FluFixedParams fields are constant or piecewise
     constant throughout the simulation. For variables that
-    are more complicated and time-dependent, use a EpiMetric
+    are more complicated and time-dependent, use a DynamicVal
     instead.
 
     Each field of datatype np.ndarray must be A x L,
     where A is the number of age groups and L is the number of
     risk groups. Note: this means all arrays should be 2D.
-    See FluModelState docstring for important formatting note
+    See FluSimState docstring for important formatting note
     on 2D arrays.
 
     TODO: when adding multiple strains, need to add subscripts
@@ -121,11 +122,11 @@ class FluEpiParams(base.EpiParams):
 
 
 @dataclass
-class FluModelState(base.SimState):
+class FluSimState(base.SimState):
     """
     Data container for pre-specified and fixed set of
-    EpiCompartment initial values and EpiMetric initial values
-    in ImmunoSEIRS flu model.
+    EpiCompartment initial values and DynamicVal initial values
+    in FluModel flu model.
 
     Each field below should be A x L np.ndarray, where
     A is the number of age groups and L is the number of risk groups.
@@ -170,69 +171,118 @@ class FluModelState(base.SimState):
 
 
 class NewExposed(base.TransitionVariable):
-    def get_current_rate(self, model_state, epi_params):
-        force_of_immunity = (1 + epi_params.inf_risk_reduction * model_state.population_immunity_inf)
-        return np.asarray(epi_params.beta_baseline * model_state.I
-                          / (epi_params.total_population_val * force_of_immunity))
+    def get_current_rate(self,
+                         sim_state: base.SimState,
+                         fixed_params):
+        """
+        :param sim_state:
+        :param fixed_params:
+        :return:
+        """
+        force_of_immunity = (1 + fixed_params.inf_risk_reduction * sim_state.population_immunity_inf)
+        return np.asarray(fixed_params.beta_baseline * sim_state.I
+                          / (fixed_params.total_population_val * force_of_immunity))
 
 
 class NewSusceptible(base.TransitionVariable):
-    def get_current_rate(self, model_state, epi_params):
-        return np.full((epi_params.num_age_groups, epi_params.num_risk_groups), epi_params.R_to_S_rate)
+    def get_current_rate(self, sim_state, fixed_params):
+        """
+        :param sim_state:
+        :param fixed_params:
+        :return:
+        """
+        return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups), fixed_params.R_to_S_rate)
 
 
 class NewInfected(base.TransitionVariable):
-    def get_current_rate(self, model_state, epi_params):
-        return np.full((epi_params.num_age_groups, epi_params.num_age_groups), epi_params.E_to_I_rate)
+    def get_current_rate(self, sim_state, fixed_params):
+        """
+        :param sim_state:
+        :param fixed_params:
+        :return:
+        """
+        return np.full((fixed_params.num_age_groups, fixed_params.num_age_groups), fixed_params.E_to_I_rate)
 
 
 class NewRecoveredHome(base.TransitionVariable):
-    def get_current_rate(self, model_state, epi_params):
-        return np.full((epi_params.num_age_groups, epi_params.num_risk_groups),
-                       (1 - epi_params.I_to_H_adjusted_proportion) * epi_params.I_to_R_rate)
+    def get_current_rate(self, sim_state, fixed_params):
+        """
+        :param sim_state:
+        :param fixed_params:
+        :return:
+        """
+        return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups),
+                       (1 - fixed_params.I_to_H_adjusted_proportion) * fixed_params.I_to_R_rate)
 
 
 class NewRecoveredHosp(base.TransitionVariable):
-    def get_current_rate(self, model_state, epi_params):
-        return np.full((epi_params.num_age_groups, epi_params.num_risk_groups),
-                       (1 - epi_params.H_to_D_adjusted_proportion) * epi_params.H_to_R_rate)
+    def get_current_rate(self, sim_state, fixed_params):
+        """
+        :param sim_state:
+        :param fixed_params:
+        :return:
+        """
+        return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups),
+                       (1 - fixed_params.H_to_D_adjusted_proportion) * fixed_params.H_to_R_rate)
 
 
 class NewHosp(base.TransitionVariable):
-    def get_current_rate(self, model_state, epi_params):
-        return np.asarray(epi_params.I_to_H_rate * epi_params.I_to_H_adjusted_proportion /
-                          (1 + epi_params.hosp_risk_reduction * model_state.population_immunity_hosp))
+    def get_current_rate(self, sim_state, fixed_params):
+        """
+        :param sim_state:
+        :param fixed_params:
+        :return:
+        """
+        return np.asarray(fixed_params.I_to_H_rate * fixed_params.I_to_H_adjusted_proportion /
+                          (1 + fixed_params.hosp_risk_reduction * sim_state.population_immunity_hosp))
 
 
 class NewDead(base.TransitionVariable):
-    def get_current_rate(self, model_state, epi_params):
-        return np.asarray(epi_params.H_to_D_adjusted_proportion * epi_params.H_to_D_rate /
-                          (1 + epi_params.death_risk_reduction * model_state.population_immunity_hosp))
+    def get_current_rate(self, sim_state, fixed_params):
+        """
+        :param sim_state:
+        :param fixed_params:
+        :return:
+        """
+        return np.asarray(fixed_params.H_to_D_adjusted_proportion * fixed_params.H_to_D_rate /
+                          (1 + fixed_params.death_risk_reduction * sim_state.population_immunity_hosp))
 
 
-class PopulationImmunityHosp(base.EpiMetric):
-    def get_change_in_current_val(self, model_state, epi_params, num_timesteps):
-        immunity_gain = (epi_params.immunity_hosp_increase_factor * model_state.R) / \
-                        (epi_params.total_population_val *
-                         (1 + epi_params.immunity_saturation_constant * model_state.population_immunity_hosp))
-        immunity_loss = epi_params.waning_factor_hosp * model_state.population_immunity_hosp
+class PopulationImmunityHosp(base.DynamicVal):
+    def get_change_in_current_val(self, sim_state, fixed_params, num_timesteps):
+        """
+        :param sim_state:
+        :param fixed_params:
+        :param num_timesteps
+        :return:
+        """
+        immunity_gain = (fixed_params.immunity_hosp_increase_factor * sim_state.R) / \
+                        (fixed_params.total_population_val *
+                         (1 + fixed_params.immunity_saturation_constant * sim_state.population_immunity_hosp))
+        immunity_loss = fixed_params.waning_factor_hosp * sim_state.population_immunity_hosp
 
         return np.asarray(immunity_gain - immunity_loss) / num_timesteps
 
 
-class PopulationImmunityInf(base.EpiMetric):
-    def get_change_in_current_val(self, model_state, epi_params, num_timesteps):
-        immunity_gain = (epi_params.immunity_inf_increase_factor * model_state.R) / \
-                        (epi_params.total_population_val * (1 + epi_params.immunity_saturation_constant *
-                                                            model_state.population_immunity_inf))
-        immunity_loss = epi_params.waning_factor_inf * model_state.population_immunity_inf
+class PopulationImmunityInf(base.DynamicVal):
+    def get_change_in_current_val(self, sim_state, fixed_params, num_timesteps):
+        """
+        :param sim_state:
+        :param fixed_params:
+        :param num_timesteps
+        :return:
+        """
+        immunity_gain = (fixed_params.immunity_inf_increase_factor * sim_state.R) / \
+                        (fixed_params.total_population_val * (1 + fixed_params.immunity_saturation_constant *
+                                                              sim_state.population_immunity_inf))
+        immunity_loss = fixed_params.waning_factor_inf * sim_state.population_immunity_inf
 
         return np.asarray(immunity_gain - immunity_loss) / num_timesteps
 
 
-class ImmunoSEIRSConstructor(base.ModelConstructor):
+class FluModelConstructor(base.ModelConstructor):
     """
-    Class for creating ImmunoSEIRS model with predetermined fixed
+    Class for creating ImmunoSEIRS flu model with predetermined fixed
     structure -- initial values and epidemiological structure are
     populated by user-specified JSON files.
 
@@ -260,7 +310,7 @@ class ImmunoSEIRSConstructor(base.ModelConstructor):
         I_out (since new_recovered_home and new_hospitalized are joint random variables)
         H_out (since new_recovered_hosp and new_dead are joint random variables)
 
-    The following are EpiMetric instances:
+    The following are DynamicVal instances:
         population_immunity_inf is a PopulationImmunityInf instance
         population_immunity_hosp is a PopulationImmunityHosp instance
 
@@ -271,10 +321,10 @@ class ImmunoSEIRSConstructor(base.ModelConstructor):
     ----------
     :ivar config: Config dataclass instance,
         holds configuration values
-    :ivar epi_params: FluEpiParams dataclass instance,
+    :ivar fixed_params: FluFixedParams dataclass instance,
         holds epidemiological parameter values, read-in
         from user-specified JSON
-    :ivar model_state: FluModelState dataclass instance,
+    :ivar sim_state: FluSimState dataclass instance,
         holds current simulation state information,
         such as current values of epidemiological compartments
         and epi metrics, read in from user-specified JSON
@@ -285,29 +335,29 @@ class ImmunoSEIRSConstructor(base.ModelConstructor):
     :ivar compartment_lookup: dict,
         maps string to corresponding EpiCompartment,
         using the value of the EpiCompartment's "name" attribute
-    :ivar epi_metric_lookup: dict,
-        maps string to corresponding EpiMetric,
-        using the value of the EpiMetric's "name" attribute
+    :ivar dynamic_val_lookup: dict,
+        maps string to corresponding DynamicVal,
+        using the value of the DynamicVal's "name" attribute
     """
 
     def __init__(self,
                  config_filepath,
-                 epi_params_filepath,
+                 fixed_params_filepath,
                  epi_compartments_state_vars_init_vals_filepath):
         """
-        Create Config, FluEpiParams, and FluModelState instances
+        Create Config, FluFixedParams, and FluSimState instances
         using values from respective JSON files, and save these instances
-        on the ImmunoSEIRSConstructor to construct a model.
+        on the FluModelConstructor to construct a model.
 
         :param config_filepath: str,
             path to config JSON file (path includes actual filename
             with suffix ".json") -- all JSON fields must match
             name and datatype of Config instance attributes
-        :param epi_params_filepath: str,
+        :param fixed_params_filepath: str,
             path to epidemiological parameters JSON file
             (path includes actual filename with suffix ".json")
             -- all JSON fields must match name and datatype of
-            EpiParams instance attributes
+            FixedParams instance attributes
         :param epi_compartments_state_vars_init_vals_filepath: str,
             path to epidemiological compartments JSON file
             (path includes actual filename with suffix ".json")
@@ -317,19 +367,27 @@ class ImmunoSEIRSConstructor(base.ModelConstructor):
 
         # Use same init method as abstract class --
         # creates "lookup" attributes (dictionaries for easy access)
-        # and creates attributes config, epi_params, and model_state
+        # and creates attributes config, fixed_params, and sim_state
         super().__init__()
 
-        # Assign config, epi_params, and model_state to model-specific
+        # Assign config, fixed_params, and sim_state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
         self.config = self.dataclass_instance_from_json(base.Config,
                                                         config_filepath)
-        self.epi_params = self.dataclass_instance_from_json(FluEpiParams,
-                                                            epi_params_filepath)
-        self.model_state = \
-            self.dataclass_instance_from_json(FluModelState,
+        self.fixed_params = self.dataclass_instance_from_json(FluFixedParams,
+                                                              fixed_params_filepath)
+        self.sim_state = \
+            self.dataclass_instance_from_json(FluSimState,
                                               epi_compartments_state_vars_init_vals_filepath)
+
+    def setup_sim_state(self) -> None:
+        """
+        Create instance of FluSimState and assign it to sim_state.
+        This will hold the model's current state values.
+        """
+
+        self.sim_state = FluSimState()
 
     def setup_epi_compartments(self) -> None:
         """
@@ -338,7 +396,25 @@ class ImmunoSEIRSConstructor(base.ModelConstructor):
         """
 
         for name in ("S", "E", "I", "H", "R", "D"):
-            self.compartment_lookup[name] = base.EpiCompartment(name, getattr(self.model_state, name))
+            self.compartment_lookup[name] = base.EpiCompartment(name, getattr(self.sim_state, name))
+
+    def setup_dynamic_vals(self) -> None:
+        """
+        Create all epi metric described in docstring (2 state
+        variables total) and add them to dynamic_val_lookup attribute
+        for dictionary access
+        """
+
+        self.dynamic_val_lookup["population_immunity_inf"] = \
+            PopulationImmunityInf("population_immunity_inf",
+                                  getattr(self.sim_state, "population_immunity_inf"))
+
+        self.dynamic_val_lookup["population_immunity_hosp"] = \
+            PopulationImmunityHosp("population_immunity_hosp",
+                                   getattr(self.sim_state, "population_immunity_hosp"))
+
+    def setup_schedules(self) -> None:
+        pass
 
     def setup_transition_variables(self) -> None:
         """
@@ -387,28 +463,13 @@ class ImmunoSEIRSConstructor(base.ModelConstructor):
 
         self.transition_variable_group_lookup = {
             "I_out": base.TransitionVariableGroup("I_out",
-                                                             compartment_lookup["I"],
-                                                             transition_type,
-                                                             (tvar_lookup["new_recovered_home"],
-                                              tvar_lookup["new_hosp"])),
+                                                  compartment_lookup["I"],
+                                                  transition_type,
+                                                  (tvar_lookup["new_recovered_home"],
+                                                   tvar_lookup["new_hosp"])),
             "H_out": base.TransitionVariableGroup("H_out",
-                                                             compartment_lookup["H"],
-                                                             transition_type,
-                                                             (tvar_lookup["new_recovered_hosp"],
-                                              tvar_lookup["new_dead"]))
+                                                  compartment_lookup["H"],
+                                                  transition_type,
+                                                  (tvar_lookup["new_recovered_hosp"],
+                                                   tvar_lookup["new_dead"]))
         }
-
-    def setup_epi_metrics(self) -> None:
-        """
-        Create all epi metric described in docstring (2 state
-        variables total) and add them to epi_metric_lookup attribute
-        for dictionary access
-        """
-
-        self.epi_metric_lookup["population_immunity_inf"] = \
-            PopulationImmunityInf("population_immunity_inf",
-                                  getattr(self.model_state, "population_immunity_inf"))
-
-        self.epi_metric_lookup["population_immunity_hosp"] = \
-            PopulationImmunityHosp("population_immunity_hosp",
-                                   getattr(self.model_state, "population_immunity_hosp"))
