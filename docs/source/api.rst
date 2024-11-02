@@ -2,7 +2,7 @@ API
 ===
 
 .. autosummary::
-   :toctree: stubs
+    :toctree: generated
 
-   BaseModel
-   ImmunoSEIRSModel
+    base_components
+    flu_components

@@ -6,5 +6,6 @@
 	"R": [[0.0, 0.0], [0.0, 0.0]],
 	"D": [[0.0, 0.0], [0.0, 0.0]],
 	"population_immunity_inf": [[0.5, 0.5], [0.5, 0.5]],
-	"population_immunity_hosp": [[0.5, 0.5], [0.5, 0.5]]
+	"population_immunity_hosp": [[0.5, 0.5], [0.5, 0.5]],
+	"absolute_humidity": null
 }

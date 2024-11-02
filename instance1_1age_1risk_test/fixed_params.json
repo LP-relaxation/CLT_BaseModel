@@ -3,6 +3,7 @@
 	"num_risk_groups":1,
 	"beta_baseline": 2,
 	"total_population_val": [[1e6]],
+	"humidity_impact": 0.015,
 	"immunity_hosp_increase_factor": 0.1,
 	"immunity_inf_increase_factor": 0.1,
 	"immunity_saturation_constant": 0.5,

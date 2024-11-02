@@ -20,8 +20,8 @@ instanceA_fixed_params_filepath = base_path / instanceA_folder / "fixed_params.j
 instanceA_init_vals_filepath = base_path / instanceA_folder / "state_variables_init_vals.json"
 
 modelA_constructor = FluModelConstructor(instanceA_config_filepath,
-                                            instanceA_fixed_params_filepath,
-                                            instanceA_init_vals_filepath)
+                                         instanceA_fixed_params_filepath,
+                                         instanceA_init_vals_filepath)
 
 instanceB_folder = "instance2_2age_2risk_test"
 
@@ -30,15 +30,14 @@ instanceB_fixed_params_filepath = base_path / instanceB_folder / "fixed_params.j
 instanceB_init_vals_filepath = base_path / instanceB_folder / "state_variables_init_vals.json"
 
 modelB_constructor = FluModelConstructor(instanceB_config_filepath,
-                                            instanceB_fixed_params_filepath,
-                                            instanceB_init_vals_filepath)
+                                         instanceB_fixed_params_filepath,
+                                         instanceB_init_vals_filepath)
 
 
 def create_models_all_transition_types_list(model_constructor, RNG_seed):
     models_list = []
 
     for transition_type in base.TransitionTypes:
-
         model_constructor.config.transition_type = transition_type
 
         models_list.append(model_constructor.create_transmission_model(RNG_seed))
@@ -121,7 +120,8 @@ def test_constructor_methods(model):
     assert len(model.compartments) == 6
     assert len(model.transition_variables) == 7
     assert len(model.transition_variable_groups) == 2
-    assert len(model.dynamic_vals) == 2
+    assert len(model.epi_metrics) == 2
+    assert len(model.dynamic_vals) == 1
 
 
 @pytest.mark.parametrize("model",
@@ -153,4 +153,3 @@ def test_reproducible_RNG(model):
     for compartment_name in original_model_history_dict.keys():
         assert np.array_equal(np.array(original_model_history_dict[compartment_name]), \
                               np.array(reset_model_history_dict[compartment_name]))
-        

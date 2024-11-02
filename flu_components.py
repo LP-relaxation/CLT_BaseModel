@@ -4,14 +4,14 @@ import copy
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
-from numba import njit, jit
-
 from pathlib import Path
 
-import matplotlib.pyplot as plt
-
 import base_components as base
+
+import matplotlib.pyplot as plt
 from plotting import create_basic_compartment_history_plot
+
+from datetime import date
 
 
 # Note: for dataclasses, Optional is used to help with static type checking
@@ -19,18 +19,53 @@ from plotting import create_basic_compartment_history_plot
 # datatype or it can be None
 
 
+def absolute_humidity_func(current_date: date):
+    """
+    Note: this is a dummy function loosely based off of
+    the absolute humidity data from Kaiming and Shraddha's
+    new burden averted draft.
+
+    TODO: replace this function with real humidity function
+
+    :param current_date: datetime.date,
+        datetime.date object corresponding to
+        real-world date
+    :return: float,
+        nonnegative float between 3.8 and 12.5
+        corresponding to absolute humidity
+        that day of the year
+    """
+
+    # Convert datetime.date to integer between 1 and 365
+    #   corresponding to day of the year
+    day_of_year = current_date.timetuple().tm_yday
+
+    # Vertex of the parabola
+    h = 180
+    k = 3.8
+
+    # This calculation is used to achieve the correct
+    #   upside-down parabola with the right min and max
+    #   values and location
+    # max_value = 12.5
+    # 0.00027 = (max_value - k) / ((0 - h) ** 2)
+
+    # Calculate the value of the function
+    # Shift by 180 (6 months roughly), because minimum humidity occurs in
+    #   January, but Kaiming and Shraddha's graph starts in July
+    return k + 0.00027 * (day_of_year - 180 - h) ** 2
+
+
 @dataclass
 class FluFixedParams(base.FixedParams):
     """
     Data container for pre-specified and fixed epidemiological
-    parameters in FluModel flu model.
-
-    Along with FluSimState, is passed to get_current_rate
-    and get_change_in_current_val
+    parameters in FluModel flu model. Along with FluSimState,
+    is passed to get_current_rate and get_change_in_current_val.
 
     Assume that FluFixedParams fields are constant or piecewise
     constant throughout the simulation. For variables that
-    are more complicated and time-dependent, use a DynamicVal
+    are more complicated and time-dependent, use a EpiMetric
     instead.
 
     Each field of datatype np.ndarray must be A x L,
@@ -42,6 +77,10 @@ class FluFixedParams(base.FixedParams):
     TODO: when adding multiple strains, need to add subscripts
         to math of attributes and add strain-specific description
 
+    Note: for attribute description, "pseudo-LaTeX" is used --
+    backslashes are omitted due to their incompatibility
+    with Python docstrings.
+
     Attributes
     ----------
     :ivar num_age_groups: number of age groups
@@ -49,10 +88,13 @@ class FluFixedParams(base.FixedParams):
     :ivar num_risk_groups: number of risk groups
             math variable: $|L|$, where $L$ is the set of risk groups
     :ivar beta_baseline: transmission rate
-            math variable: $\beta_0$
+            math variable: $beta_0$
     :ivar total_population_val: total number in population,
         summed across all age-risk groups
             math variable: $N$
+    :ivar humidity_impact: coefficient that determines
+        how much absolute humidity affects beta_baseline
+            math variable: $xi$
     :ivar immunity_hosp_increase_factor: factor by which
         population-level immunity against hospitalization
         grows after each case that recovers
@@ -80,29 +122,30 @@ class FluFixedParams(base.FixedParams):
         from infection-induced immunity
             math variable: $K^D$
     :ivar R_to_S_rate: rate at which people in R move to S
-            math variable: $\eta$
+            math variable: $eta$
     :ivar E_to_I_rate: rate at which people in E move to I
-            math variable: $\omega$
+            math variable: $omega$
     :ivar I_to_R_rate: rate at which people in I move to R
-            math variable: $\gamma$
+            math variable: $gamma$
     :ivar I_to_H_rate: rate at which people in I move to H
-            math variable: $\zeta$
+            math variable: $zeta$
     :ivar H_to_R_rate: rate at which people in H move to R
-            math variable: $\gamma_H$
+            math variable: $gamma_H$
     :ivar H_to_D_rate: rate at which people in H move to D
-            math variable: $\pi$
+            math variable: $pi$
     :ivar I_to_H_adjusted_proportion: rate-adjusted proportion
         infected who are hospitalized based on age-risk groups
-            math variable: $[\tilde{\mu}_{a, \ell}]$
+            math variable: $[tilde{mu}_{a, ell}]$
     :ivar H_to_D_adjusted_proportion: rate-adjusted proportion
         hospitalized who die based on age-risk groups
-            math variable: $[\tilde{\nu}_{a, \ell}]$
+            math variable: $[tilde{nu}_{a, ell}]$
     """
 
     num_age_groups: Optional[int] = None
     num_risk_groups: Optional[int] = None
     beta_baseline: Optional[float] = None
     total_population_val: Optional[np.ndarray] = None
+    humidity_impact: Optional[float] = None
     immunity_hosp_increase_factor: Optional[float] = None
     immunity_inf_increase_factor: Optional[float] = None
     immunity_saturation_constant: Optional[float] = None
@@ -125,7 +168,7 @@ class FluFixedParams(base.FixedParams):
 class FluSimState(base.SimState):
     """
     Data container for pre-specified and fixed set of
-    EpiCompartment initial values and DynamicVal initial values
+    EpiCompartment initial values and EpiMetric initial values
     in FluModel flu model.
 
     Each field below should be A x L np.ndarray, where
@@ -138,26 +181,37 @@ class FluSimState(base.SimState):
 
     Attributes
     ----------
-    :ivar S: susceptible compartment for age-risk groups
+    :param S: susceptible compartment for age-risk groups
+        (EpiCompartment current_val)
             math variable: $S$
-    :ivar E: exposed compartment for age-risk groups
+    :param E: exposed compartment for age-risk groups
+        (EpiCompartment current_val)
             math variable: $E$
-    :ivar I: infected compartment for age-risk groups
+    :param I: infected compartment for age-risk groups
+        (EpiCompartment current_val)
             math variable: $I$
-    :ivar H: hospital compartment for age-risk groups
+    :param H: hospital compartment for age-risk groups
+        (EpiCompartment current_val)
             math variable: $H$
-    :ivar R: recovered compartment for age-risk groups
+    :param R: recovered compartment for age-risk groups
+        (EpiCompartment current_val)
             math variable: $R$
-    :ivar D: dead compartment for age-risk groups
+    :param D: dead compartment for age-risk groups
+        (EpiCompartment current_val)
             math variable: $D$
-    :ivar population_immunity_hosp: infection-induced
+    :param population_immunity_hosp: infection-induced
         population-level immunity against hospitalization, for
-        age-risk groups
+        age-risk groups (EpiMetric current_val)
             math variable: $M^H$
-    :ivar population_immunity_inf: infection-induced
+    :param population_immunity_inf: infection-induced
         population-level immunity against infection, for
-        age-risk groups
+        age-risk groups (EpiMetric current_val)
             math variable: $M^I$
+    :param absolute_humidity:
+        grams of water vapor per cubic meter g/m^3,
+        used as seasonality parameter that influences
+        transmission rate beta_baseline
+            math variable: $q$
     """
 
     S: Optional[np.ndarray] = None
@@ -168,6 +222,7 @@ class FluSimState(base.SimState):
     D: Optional[np.ndarray] = None
     population_immunity_hosp: Optional[np.ndarray] = None
     population_immunity_inf: Optional[np.ndarray] = None
+    absolute_humidity: Optional[float] = None
 
 
 class NewExposed(base.TransitionVariable):
@@ -180,7 +235,11 @@ class NewExposed(base.TransitionVariable):
         :return:
         """
         force_of_immunity = (1 + fixed_params.inf_risk_reduction * sim_state.population_immunity_inf)
-        return np.asarray(fixed_params.beta_baseline * sim_state.I
+
+        beta_humidity_adjusted = (1 - sim_state.absolute_humidity * fixed_params.humidity_impact) * \
+                                 fixed_params.beta_baseline
+
+        return np.asarray((1-sim_state.beta_reduct) * beta_humidity_adjusted * sim_state.I
                           / (fixed_params.total_population_val * force_of_immunity))
 
 
@@ -248,8 +307,11 @@ class NewDead(base.TransitionVariable):
                           (1 + fixed_params.death_risk_reduction * sim_state.population_immunity_hosp))
 
 
-class PopulationImmunityHosp(base.DynamicVal):
-    def get_change_in_current_val(self, sim_state, fixed_params, num_timesteps):
+class PopulationImmunityHosp(base.EpiMetric):
+    def get_change_in_current_val(self,
+                                  sim_state,
+                                  fixed_params: FluFixedParams,
+                                  num_timesteps):
         """
         :param sim_state:
         :param fixed_params:
@@ -264,8 +326,11 @@ class PopulationImmunityHosp(base.DynamicVal):
         return np.asarray(immunity_gain - immunity_loss) / num_timesteps
 
 
-class PopulationImmunityInf(base.DynamicVal):
-    def get_change_in_current_val(self, sim_state, fixed_params, num_timesteps):
+class PopulationImmunityInf(base.EpiMetric):
+    def get_change_in_current_val(self,
+                                  sim_state,
+                                  fixed_params: FluFixedParams,
+                                  num_timesteps):
         """
         :param sim_state:
         :param fixed_params:
@@ -278,6 +343,26 @@ class PopulationImmunityInf(base.DynamicVal):
         immunity_loss = fixed_params.waning_factor_inf * sim_state.population_immunity_inf
 
         return np.asarray(immunity_gain - immunity_loss) / num_timesteps
+
+
+class BetaReduct(base.DynamicVal):
+
+    def __init__(self, name):
+        super().__init__(name)
+        self.permanent_lockdown = False
+
+    def update_current_val(self, sim_state, fixed_params):
+        if np.sum(sim_state.I) / np.sum(fixed_params.total_population_val) > 0.05:
+            self.current_val = 1
+            self.permanent_lockdown = True
+        else:
+            if not self.permanent_lockdown:
+                self.current_val = 0
+
+
+class AbsoluteHumidity(base.Schedule):
+    def update_current_val(self, current_date: date) -> None:
+        self.current_val = absolute_humidity_func(current_date)
 
 
 class FluModelConstructor(base.ModelConstructor):
@@ -310,7 +395,7 @@ class FluModelConstructor(base.ModelConstructor):
         I_out (since new_recovered_home and new_hospitalized are joint random variables)
         H_out (since new_recovered_hosp and new_dead are joint random variables)
 
-    The following are DynamicVal instances:
+    The following are EpiMetric instances:
         population_immunity_inf is a PopulationImmunityInf instance
         population_immunity_hosp is a PopulationImmunityHosp instance
 
@@ -335,34 +420,39 @@ class FluModelConstructor(base.ModelConstructor):
     :ivar compartment_lookup: dict,
         maps string to corresponding EpiCompartment,
         using the value of the EpiCompartment's "name" attribute
-    :ivar dynamic_val_lookup: dict,
-        maps string to corresponding DynamicVal,
-        using the value of the DynamicVal's "name" attribute
+    :ivar epi_metric_lookup: dict,
+        maps string to corresponding EpiMetric,
+        using the value of the EpiMetric's "name" attribute
     """
 
     def __init__(self,
-                 config_filepath,
-                 fixed_params_filepath,
-                 epi_compartments_state_vars_init_vals_filepath):
+                 config_filepath: Optional[str] = None,
+                 fixed_params_filepath: Optional[str] = None,
+                 state_vars_init_vals_filepath: Optional[str] = None):
         """
         Create Config, FluFixedParams, and FluSimState instances
         using values from respective JSON files, and save these instances
         on the FluModelConstructor to construct a model.
 
-        :param config_filepath: str,
+        If any filepath is not specified, then user must manually assign
+        the respective attribute (config, fixed_params, or sim_state)
+        before using constructor to create a model.
+
+        :param config_filepath: Optional[str],
             path to config JSON file (path includes actual filename
             with suffix ".json") -- all JSON fields must match
             name and datatype of Config instance attributes
-        :param fixed_params_filepath: str,
+        :param fixed_params_filepath: Optional[str],
             path to epidemiological parameters JSON file
             (path includes actual filename with suffix ".json")
             -- all JSON fields must match name and datatype of
             FixedParams instance attributes
-        :param epi_compartments_state_vars_init_vals_filepath: str,
+        :param state_vars_init_vals_filepath: Optional[str],
             path to epidemiological compartments JSON file
             (path includes actual filename with suffix ".json")
             -- all JSON fields must match name and datatype of
-            EpiCompartment instance attributes
+            StateVariable instance attributes -- these initial
+            values are used to populate sim_state attribute
         """
 
         # Use same init method as abstract class --
@@ -373,21 +463,18 @@ class FluModelConstructor(base.ModelConstructor):
         # Assign config, fixed_params, and sim_state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
-        self.config = self.dataclass_instance_from_json(base.Config,
-                                                        config_filepath)
-        self.fixed_params = self.dataclass_instance_from_json(FluFixedParams,
-                                                              fixed_params_filepath)
-        self.sim_state = \
-            self.dataclass_instance_from_json(FluSimState,
-                                              epi_compartments_state_vars_init_vals_filepath)
+        if config_filepath:
+            self.config = self.dataclass_instance_from_json(base.Config,
+                                                            config_filepath)
 
-    def setup_sim_state(self) -> None:
-        """
-        Create instance of FluSimState and assign it to sim_state.
-        This will hold the model's current state values.
-        """
+        if fixed_params_filepath:
+            self.fixed_params = self.dataclass_instance_from_json(FluFixedParams,
+                                                                  fixed_params_filepath)
 
-        self.sim_state = FluSimState()
+        if state_vars_init_vals_filepath:
+            self.sim_state = \
+                self.dataclass_instance_from_json(FluSimState,
+                                                  state_vars_init_vals_filepath)
 
     def setup_epi_compartments(self) -> None:
         """
@@ -398,23 +485,26 @@ class FluModelConstructor(base.ModelConstructor):
         for name in ("S", "E", "I", "H", "R", "D"):
             self.compartment_lookup[name] = base.EpiCompartment(name, getattr(self.sim_state, name))
 
-    def setup_dynamic_vals(self) -> None:
+    def setup_epi_metrics(self) -> None:
         """
         Create all epi metric described in docstring (2 state
-        variables total) and add them to dynamic_val_lookup attribute
+        variables total) and add them to epi_metric_lookup attribute
         for dictionary access
         """
 
-        self.dynamic_val_lookup["population_immunity_inf"] = \
+        self.epi_metric_lookup["population_immunity_inf"] = \
             PopulationImmunityInf("population_immunity_inf",
                                   getattr(self.sim_state, "population_immunity_inf"))
 
-        self.dynamic_val_lookup["population_immunity_hosp"] = \
+        self.epi_metric_lookup["population_immunity_hosp"] = \
             PopulationImmunityHosp("population_immunity_hosp",
                                    getattr(self.sim_state, "population_immunity_hosp"))
 
+    def setup_dynamic_vals(self) -> None:
+        self.dynamic_val_lookup["beta_reduct"] = BetaReduct("beta_reduct")
+
     def setup_schedules(self) -> None:
-        pass
+        self.schedule_lookup["absolute_humidity"] = AbsoluteHumidity("absolute_humidity")
 
     def setup_transition_variables(self) -> None:
         """

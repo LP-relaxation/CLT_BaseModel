@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional, Union, Type
 from enum import Enum
-from datetime import date
-from numba import njit, jit
+import datetime
+import pandas as pd
 
 
 class TransmissionModelError(Exception):
@@ -77,10 +77,13 @@ class Config:
     :ivar transition_type: str,
         valid value must be from TransitionTypes, specifying the
         probability distribution of transitions between compartments
+    :ivar start_real_date: datetime.date,
+        actual date that aligns with the beginning of the simulation
     """
 
     timesteps_per_day: int = 7
     transition_type: str = TransitionTypes.BINOMIAL
+    start_real_date: datetime.time = datetime.datetime.strptime("2024-10-31", "%Y-%m-%d").date()
 
 
 @dataclass
@@ -134,7 +137,7 @@ class TransitionVariableGroup:
         risk groups
     :ivar current_vals_list: list,
         used to store results from get_joint_realization --
-        has either M or M+1 np.ndarrays of size A x L
+        has either M or M+1 arrays of size A x L
 
     See __init__ docstring for other attributes.
     """
@@ -320,7 +323,7 @@ class TransitionVariableGroup:
         # Multiply current rates array by length of time interval (1 / num_timesteps)
         # Also append additional value corresponding to probability of
         #   remaining in current epi compartment (not transitioning at all)
-        # Note: vstack function here works better than append function because append
+        # Note: "vstack" function here works better than append function because append
         #   automatically flattens the resulting array, resulting in dimension issues
         current_scaled_rates_array = np.vstack((current_rates_array / num_timesteps,
                                                 np.expand_dims(1 - total_rate / num_timesteps, axis=0)))
@@ -464,8 +467,7 @@ class TransitionVariable(ABC):
         random variable realizations for transitions between compartments
     :ivar current_val: np.ndarray,
         holds realization of random variable parameterized by current_rate
-        attribute
-    :ivar history_vals_list: list of np.ndarrays,
+    :ivar history_vals_list: list[np.ndarray],
         each element is the same size of current_val, holds
         history of transition variable realizations for age-risk
         groups -- element t corresponds to previous current_val value
@@ -524,9 +526,7 @@ class TransitionVariable(ABC):
         sim_state.num_age_groups and L is sim_state.num_risk_groups
 
         :param sim_state: SimState,
-            holds simulation state (current values of
-            EpiCompartment instances and DynamicVal
-            instances)
+            holds simulation state (current values of StateVariable instances)
         :param fixed_params: FixedParams,
             holds values of epidemiological parameters
         :return: np.ndarray,
@@ -605,7 +605,7 @@ class TransitionVariable(ABC):
 class StateVariableManager:
     """
     Container for holding StateVariable instances --
-    this includes EpiCompartment, DynamicVal, and
+    this includes EpiCompartment, EpiMetric, DynamicVal, and
     Schedule instances. Note that TransitionVariable
     and TransitionVariableGroup instances are NOT included here.
 
@@ -613,43 +613,44 @@ class StateVariableManager:
     ----------
     :ivar compartments: list,
         list of all the model's EpiCompartment instances
+    :ivar epi_metrics: list,
+        list of all the model's EpiMetric instances
     :ivar dynamic_vals: list,
         list of all the model's DynamicVal instances
     :ivar schedules: list,
         list of all the model's Schedule instances
     :ivar sim_state: SimState,
         data container for the model's current values of its
-        EpiCompartment, DynamicVal, and Schedule instances --
-        there must be one field for each EpiCompartment, DynamicVal,
-        and Schedule instance -- each field's name must
-        match the "name" attribute of a corresponding EpiCompartment,
-        DynamicVal, or Schedule instance
+        StateVariable instances -- the name of each field
+        nust match the "name" attribute of a corresponding
+        StateVariable
     """
 
     compartments: Optional[list] = None
+    epi_metrics: Optional[list] = None
     dynamic_vals: Optional[list] = None
     schedules: Optional[list] = None
     sim_state: Optional[SimState] = None
 
     def update_sim_state(self):
-        for object in self.compartments + self.dynamic_vals + self.schedules:
-            setattr(self.sim_state, object.name, object.current_val)
+        for unit in self.compartments + self.epi_metrics + self.dynamic_vals + self.schedules:
+            setattr(self.sim_state, unit.name, unit.current_val)
 
     def reset_sim_state(self):
         # AGAIN, MUST BE CAREFUL ABOUT MUTABLE NUMPY ARRAYS --
         # MUST USE DEEP COPY
-        for svar in self.compartments + self.dynamic_vals + self.schedules:
+        for svar in self.compartments + self.epi_metrics + self.dynamic_vals + self.schedules:
             setattr(svar, svar.name, copy.deepcopy(svar.init_val))
 
     def clear_history(self):
         # Schedules do not have history since they are deterministic
-        for svar in self.compartments + self.dynamic_vals:
+        for svar in self.compartments + self.epi_metrics + self.dynamic_vals:
             svar.clear_history()
 
 
 class StateVariable:
     """
-    Parent class of EpiCompartment, DynamicVal, and Schedule
+    Parent class of EpiCompartment, EpiMetric, DynamicVal, and Schedule
     classes. All subclasses have the common attributes "name", "init_val",
     and "current_val"
     """
@@ -665,8 +666,10 @@ class EpiCompartment(StateVariable):
     Class for epidemiological compartments (e.g. Susceptible,
         Exposed, Infected, etc...)
 
-    Attributes
-    ----------
+    Inherits attributes from StateVariable.
+
+    Additional Attributes
+    ---------------------
     :ivar current_val: np.ndarray,
         same size as init_val, holds current value of EpiCompartment
         for age-risk groups
@@ -678,7 +681,7 @@ class EpiCompartment(StateVariable):
         same size of current_val, used to sum up all
         transition variable realizations outgoing from this compartment
         for age-risk groups
-    :ivar history_vals_list: list of np.ndarrays,
+    :ivar history_vals_list: list[np.ndarray],
         each element is the same size of current_val, holds
         history of compartment states for age-risk groups --
         element t corresponds to previous current_val value at
@@ -697,10 +700,6 @@ class EpiCompartment(StateVariable):
 
     def update_current_val(self) -> None:
         self.current_val += self.current_inflow - self.current_outflow
-
-    def update_sim_state(self,
-                         sim_state: SimState) -> None:
-        setattr(sim_state, self.name, self.current_val)
 
     def reset_inflow(self) -> None:
         self.current_inflow = np.zeros(np.shape(self.current_inflow))
@@ -723,28 +722,35 @@ class EpiCompartment(StateVariable):
         self.history_vals_list = []
 
 
-class DynamicVal(StateVariable):
+class EpiMetric(StateVariable, ABC):
     """
-    Abstract base class for dynamic vals in epidemiological model.
+    Abstract base class for epi metrics in epidemiological model.
 
-    This is intended for variables that are deterministic functions of
+    This is intended for variables that are aggregate deterministic functions of
     the simulation state (including epi compartment values, other parameters,
     and time.)
 
     For example, population-level immunity variables should be
-    modeled as a DynamicVal subclass, with a concrete
+    modeled as a EpiMetric subclass, with a concrete
     implementation of the abstract method get_change_in_current_val.
 
-    Attributes
-    ----------
+    Inherits attributes from StateVariable.
+
+    Additional Attributes
+    ---------------------
     :ivar current_val: np.ndarray,
         same size as init_val, holds current value of State Variable
         for age-risk groups
     :ivar change_in_current_val: np.ndarray,
         initialized to None, but during simulation holds change in
-        current value of DynamicVal for age-risk groups
+        current value of EpiMetric for age-risk groups
         (size A x L, where A is number of risk groups and L is number
         of age groups)
+    :ivar history_vals_list: list[np.ndarray],
+        each element is the same size of current_val, holds
+        history of transition variable realizations for age-risk
+        groups -- element t corresponds to previous current_val value
+        at end of simulation day t
 
     See __init__ docstring for other attributes.
     """
@@ -754,7 +760,7 @@ class DynamicVal(StateVariable):
                  init_val):
         """
         :param name: str,
-            name of DynamicVal
+            name of EpiMetric
         :param init_val: 2D np.ndarray of nonnegative floats,
             corresponding to initial value of dynamic val,
             where i,jth entry corresponds to age group i and
@@ -774,13 +780,12 @@ class DynamicVal(StateVariable):
         """
         Computes and returns change in current value of dynamic val,
         based on current state of the simulation and epidemiological parameters.
-        ***NOTE: OUTPUT SHOULD ALREADY BY SCALED BY NUM_TIMESTEPS.
+        ***NOTE: OUTPUT SHOULD ALREADY BE SCALED BY NUM_TIMESTEPS.
         Output should be a numpy array of size A x L, where A is
         sim_state.num_age_groups and L is sim_state.num_risk_groups
 
         :param sim_state: SimState,
-            holds simulation state (current values of
-            EpiCompartment instances and DynamicVal
+            holds simulation state (current values of StateVariable
             instances)
         :param fixed_params: FixedParams,
             holds values of epidemiological parameters
@@ -796,8 +801,59 @@ class DynamicVal(StateVariable):
     def update_current_val(self) -> None:
         self.current_val += self.change_in_current_val
 
-    def update_sim_state(self, sim_state) -> None:
-        setattr(sim_state, self.name, self.current_val)
+    def update_history(self) -> None:
+        """
+        Saves current value to history by appending current_val attribute
+            to history_vals_list in place
+
+        WARNING: deep copying is CRUCIAL because current_val is a mutable
+            np.ndarray -- without deep copying, history_vals_list would
+            have the same value for all elements
+        """
+        self.history_vals_list.append(copy.deepcopy(self.current_val))
+
+    def clear_history(self) -> None:
+        self.history_vals_list = []
+
+
+class DynamicVal(StateVariable, ABC):
+    """
+    Abstract base class for variables that dynamically adjust
+    their values based the current values of other StateVariable instances.
+
+    This class should model social distancing (and more broadly,
+    staged-alert policies). For example, if we consider a
+    case where transmission rates decrease when number infected
+    increase above a certain level, we can create a subclass of
+    DynamicVal that models a coefficient that modifies transmission
+    rates, depending on the epi compartments corresponding to
+    infected people.
+
+    Inherits attributes from StateVariable.
+
+    Additional Attributes
+    ---------------------
+    :ivar history_vals_list: list[np.ndarrays],
+        each element is the same size of current_val, holds
+        history of transition variable realizations for age-risk
+        groups -- element t corresponds to previous current_val value
+        at end of simulation day t
+
+    See __init__ docstring for other attributes.
+    """
+
+    def __init__(self,
+                 name: str,
+                 init_val: Optional[Union[np.ndarray, float]] = None):
+        """
+        :param name: str,
+            unique identifier for dynamic val
+        :param init_val: Optional[Union[np.ndarray, float]]
+            starting value(s) at the beginning of the simulation
+        """
+
+        super().__init__(name, init_val)
+        self.history_vals_list = []
 
     def update_history(self) -> None:
         """
@@ -815,31 +871,36 @@ class DynamicVal(StateVariable):
 
 
 @dataclass
-class Schedule(StateVariable):
+class Schedule(StateVariable, ABC):
     """
     Abstract base class for variables that are functions of real-world
     dates -- for example, contact matrices (which depend on the day of
     the week and whether the current day is a holiday), historical
     vaccination data, and seasonality
 
+    Inherits attributes from StateVariable.
+
     See __init__ docstring for other attributes.
     """
 
-    def __init__(self, name, init_val, time_series_df):
+    def __init__(self,
+                 name: str,
+                 init_val: Optional[Union[np.ndarray, float]] = None,
+                 date_to_val_lookup: Optional[dict] = None):
         """
         :param name: str,
             unique identifier for schedule
-        :param time_series_df: DataFrame,
-            must have the following specific column structure:
-            index column must contain strings of dates in
-            ISO 8601 format: "YY-MM-DD", column named "values"
-            must contain corresponding values
+        :param init_val: Optional[Union[np.ndarray, float]]
+            starting value(s) at the beginning of the simulation
+        :param date_to_val_lookup: Optional[dict] = None,
+            maps datetime.date to value on that date
         """
+
         super().__init__(name, init_val)
-        self.time_series_df = time_series_df
+        self.date_to_val_lookup = date_to_val_lookup
 
     @abstractmethod
-    def update_current_val(self, current_date: date) -> None:
+    def update_current_val(self, current_date: datetime.date) -> None:
         """
         Subclasses must provide a concrete implementation of
         updating self.current_val in-place
@@ -854,9 +915,9 @@ class Schedule(StateVariable):
 class TransmissionModel:
     """
     Contains and manages all necessary components for
-    simulating a compartmental model, including compartments,
-    transition variables and transition variable groups,
-    dynamic vals, a data container for the current simulation state,
+    simulating a compartmental model, including compartments
+    epi metrics, dynamic vals, a data container for the current simulation
+    state, transition variables and transition variable groups,
     epidemiological parameters, simulation experiment configuration
     parameters, and a random number generator.
 
@@ -864,16 +925,14 @@ class TransmissionModel:
     compartment/transition structure, are instances of this class.
 
     When creating an instance, the order of elements does not matter
-    within compartments, transition_variables, transition_variable_groups,
-    and dynamic_vals. The "flow" and "physics" information are stored
-    on the objects.
+    within compartments, epi_metrics, dynamic_vals,
+    transition_variables, and transition_variable_groups.
+    The "flow" and "physics" information are stored on the objects.
 
     Attributes
     ----------
-
     :ivar state_variable_manager: StateVariableManager,
-        holds all of the model's Compartment, DynamicVal,
-        and Schedule instances
+        holds all the model's StateVariable instances
     :ivar transition_variables: list-like,
         list of all the model's TransitionVariable instances
     :ivar transition_variable_groups: list-like,
@@ -886,7 +945,7 @@ class TransmissionModel:
         data container for the model's simulation configuration values
     :ivar RNG: np.random.Generator object,
         used to generate random variables and control reproducibility
-    :ivar current_day_counter: int,
+    :ivar current_simulation_day: int,
         tracks current simulation day -- incremented by +1
         when config.timesteps_per_day discretized timesteps
         have completed
@@ -917,6 +976,7 @@ class TransmissionModel:
 
         self.state_variable_manager = state_variable_manager
         self.compartments = state_variable_manager.compartments
+        self.epi_metrics = state_variable_manager.epi_metrics
         self.dynamic_vals = state_variable_manager.dynamic_vals
         self.schedules = state_variable_manager.schedules
 
@@ -930,7 +990,16 @@ class TransmissionModel:
         self._bit_generator = np.random.MT19937(seed=RNG_seed)
         self.RNG = np.random.Generator(self._bit_generator)
 
-        self.current_day_counter = 0
+        self.current_simulation_day = 0
+
+        if isinstance(config.start_real_date, datetime.date):
+            self.start_real_date = config.start_real_date
+        else:
+            try:
+                self.start_real_date = datetime.datetime.strptime(config.start_real_date, "%Y-%m-%d").date()
+            except ValueError:
+                print("Error: The date format should be YYYY-MM-DD.")
+        self.current_real_date = self.start_real_date
 
         self.lookup_by_name = self.create_lookup_by_name()
 
@@ -956,8 +1025,9 @@ class TransmissionModel:
 
         lookup_by_name = {}
 
-        for unit in self.compartments + self.dynamic_vals + self.schedules + \
-                self.transition_variables + self.transition_variable_groups:
+        for unit in self.compartments + self.epi_metrics + \
+                    self.dynamic_vals + self.schedules + \
+                    self.transition_variables + self.transition_variable_groups:
             lookup_by_name[unit.name] = unit
 
         return lookup_by_name
@@ -978,14 +1048,13 @@ class TransmissionModel:
             simulate up to but not including last_simulation_day)
         """
 
-        if self.current_day_counter > last_simulation_day:
-            raise TransmissionModelError(f"Current day counter ({self.current_day_counter}) "
-                                         f"exceeds last simulation day ({self.last_simulation_day}).")
+        if self.current_simulation_day > last_simulation_day:
+            raise TransmissionModelError(f"Current day counter ({self.current_simulation_day}) "
+                                         f"exceeds last simulation day ({last_simulation_day}).")
 
         # last_simulation_day is exclusive endpoint
-        while self.current_day_counter < last_simulation_day:
+        while self.current_simulation_day < last_simulation_day:
             self.simulate_discretized_timesteps()
-
 
     def simulate_discretized_timesteps(self) -> None:
         """
@@ -1004,21 +1073,33 @@ class TransmissionModel:
         sim_state = self.state_variable_manager.sim_state
         fixed_params = self.fixed_params
 
+        current_real_date = self.current_real_date
+
         compartments = self.compartments
+        epi_metrics = self.epi_metrics
         dynamic_vals = self.dynamic_vals
         schedules = self.schedules
         transition_variable_groups = self.transition_variable_groups
         transition_variables = self.transition_variables
+
+        for schedule in self.schedules:
+            schedule.update_current_val(current_real_date)
+
+        # TODO: need to fix
+        for dval in self.dynamic_vals:
+            dval.update_current_val(sim_state, fixed_params)
+
+        self.state_variable_manager.update_sim_state()
 
         for timestep in range(timesteps_per_day):
 
             for tvar in transition_variables:
                 tvar.current_rate = tvar.get_current_rate(sim_state, fixed_params)
 
-            for svar in self.dynamic_vals:
-                svar.change_in_current_val = svar.get_change_in_current_val(sim_state,
-                                                                            fixed_params,
-                                                                            timesteps_per_day)
+            for metric in epi_metrics:
+                metric.change_in_current_val = metric.get_change_in_current_val(sim_state,
+                                                                                fixed_params,
+                                                                                timesteps_per_day)
 
             # Obtain transition variable realizations for jointly distributed transition variables
             #   (i.e. when there are multiple transition variable outflows from an epi compartment)
@@ -1048,8 +1129,8 @@ class TransmissionModel:
                 tvar.update_origin_outflow()
                 tvar.update_destination_inflow()
 
-            for svar in dynamic_vals:
-                svar.update_current_val()
+            for metric in epi_metrics:
+                metric.update_current_val()
 
             for compartment in compartments:
                 compartment.update_current_val()
@@ -1061,15 +1142,16 @@ class TransmissionModel:
 
         # Update history at end of each day, not at end of every
         #   discretization timestep, to be efficient
-        # Update history of epi compartments, transition variables,
-        #   and dynamic vals -- transition variable groups do not
-        #   have history, so do not include transition variable groups
-        #   in update step
-        for svar in compartments + dynamic_vals + schedules:
+        # Update history of state variables other than Schedule
+        #   instances -- schedules do not have history
+        #   TransitionVariableGroup instances also do not
+        #   have history, so do not include
+        for svar in compartments + epi_metrics + dynamic_vals:
             svar.update_history()
 
         # Move to next day in simulation
-        self.current_day_counter += 1
+        self.current_simulation_day += 1
+        self.current_real_date += datetime.timedelta(days=1)
 
     def reset_simulation(self) -> None:
         """
@@ -1077,7 +1159,7 @@ class TransmissionModel:
         simulate_until_time_period start from day 0, with original
         day 0 state.
 
-        Returns current_day_counter to 0.
+        Returns current_simulation_day to 0.
         Restores sim_state values to initial values.
         Clears history on model's compartments, transition variables,
         and dynamic vals.
@@ -1090,7 +1172,9 @@ class TransmissionModel:
         initial starting seed.
         """
 
-        self.current_day_counter = 0
+        self.current_simulation_day = 0
+
+        self.current_real_date = self.start_real_date
 
         self.state_variable_manager.reset_sim_state()
 
@@ -1106,40 +1190,31 @@ class ModelConstructor(ABC):
 
     Attributes
     ----------
-    :ivar sim_state_class_ref: Type[SimState]
-        (a class that is a subtype of SimState --
-        must be the actual class, not an instance of the class),
-        used to specify data container for state variable
-        values depending on the structure of the model
     :ivar config: Config,
         holds configuration values
     :ivar fixed_params: FixedParams,
         holds epidemiological parameter values, read
         from user-specified JSON
     :ivar sim_state: SimState,
-        holds current simulation state information,
-        such as current values of epidemiological compartments
-        and dynamic vals, read from user-specified JSON
+        holds current values of StateVariable instances,
+        read from user-specified JSON
     :ivar compartment_lookup: dict,
-        maps string to corresponding EpiCompartment,
-        using the value of its "name" attribute
+        maps "name" attribute to EpiCompartment
+    :ivar epi_metric_lookup: dict,
+        maps "name" attribute to EpiMetric
     :ivar dynamic_val_lookup: dict,
-        maps string to corresponding DynamicVal,
-        using the value of its "name" attribute
+        maps "name" attribute to DynamicVal
     :ivar schedule_lookup: dict,
-        maps string to corresponding Schedule,
-        using the value of its "name" attribute
+        maps "name" attribute to Schedule
     :ivar transition_variable_lookup: dict,
-        maps string to corresponding TransitionVariable,
-        using the value of its "name" attribute
+        maps "name" attribute to TransitionVariable
     :ivar transition_variable_group_lookup: dict,
-        maps string to corresponding TransitionVariableGroup,
-        using the value of its "name" attribute
+        maps "name" attribute to TransitionVariableGroup
     """
 
     def __init__(self):
         """
-        Note: concrete subclasses should specifically assign sim_state_class_ref,
+        Note: concrete subclasses should specifically assign
         config, fixed_params, and sim_state attributes to problem-specific
         dataclasses
         """
@@ -1149,6 +1224,7 @@ class ModelConstructor(ABC):
         self.sim_state = None
 
         self.compartment_lookup = {}
+        self.epi_metric_lookup = {}
         self.dynamic_val_lookup = {}
         self.schedule_lookup = {}
 
@@ -1188,15 +1264,24 @@ class ModelConstructor(ABC):
     @abstractmethod
     def setup_epi_compartments(self) -> None:
         """
-        Create compartments and add them to compartment_lookup for dictionary access
+        Create compartments and add them to compartment_lookup
+        attribute for dictionary access
+        """
+        pass
+
+    @abstractmethod
+    def setup_epi_metrics(self) -> None:
+        """
+        Create epi metrics and add them to epi_metric_lookup
+        attribute for dictionary access
         """
         pass
 
     @abstractmethod
     def setup_dynamic_vals(self) -> None:
         """
-        Create all dynamic vals and add them to
-        dynamic_val_lookup attribute for dictionary access
+        Create dynamic vals and add them to dynamic_val_lookup
+        attribute for dictionary access
         """
         pass
 
@@ -1205,14 +1290,6 @@ class ModelConstructor(ABC):
         """
         Create all schedules and add them to
         schedule_lookup attribute for dictionary access
-        """
-        pass
-
-    @abstractmethod
-    def setup_sim_state(self) -> None:
-        """
-        Assign self.sim_state to instance of a
-        subclass of SimState
         """
         pass
 
@@ -1234,6 +1311,7 @@ class ModelConstructor(ABC):
 
     def create_state_variable_manager(self,
                                       compartments_list: list[EpiCompartment],
+                                      epi_metrics_list: list[EpiMetric],
                                       dynamic_vals_list: list[DynamicVal],
                                       schedules_list: list[Schedule]) -> StateVariableManager:
         """
@@ -1243,6 +1321,8 @@ class ModelConstructor(ABC):
 
         :param compartments_list: list,
             list of all the model's EpiCompartment instances
+        :param epi_metrics_list: list,
+            list of all the model's EpiMetric instances
         :param dynamic_vals_list: list,
             list of all the model's DynamicVal instances
         :param schedules_list: list,
@@ -1252,6 +1332,7 @@ class ModelConstructor(ABC):
             schedules for the model
         """
         state_variable_manager = StateVariableManager(compartments=compartments_list,
+                                                      epi_metrics=epi_metrics_list,
                                                       dynamic_vals=dynamic_vals_list,
                                                       schedules=schedules_list,
                                                       sim_state=self.sim_state)
@@ -1273,16 +1354,16 @@ class ModelConstructor(ABC):
 
         # Setup objects for model
         self.setup_epi_compartments()
+        self.setup_epi_metrics()
         self.setup_dynamic_vals()
         self.setup_schedules()
 
         self.setup_transition_variables()
         self.setup_transition_variable_groups()
 
-        self.setup_sim_state()
-
         # Get dictionary values as lists
         compartments_list = list(self.compartment_lookup.values())
+        epi_metrics_list = list(self.epi_metric_lookup.values())
         dynamic_vals_list = list(self.dynamic_val_lookup.values())
         schedules_list = list(self.schedule_lookup.values())
 
@@ -1290,6 +1371,7 @@ class ModelConstructor(ABC):
         flu_transition_variable_groups_list = list(self.transition_variable_group_lookup.values())
 
         state_variable_manager = self.create_state_variable_manager(compartments_list,
+                                                                    epi_metrics_list,
                                                                     dynamic_vals_list,
                                                                     schedules_list)
 
