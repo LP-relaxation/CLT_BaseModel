@@ -27,6 +27,12 @@ def absolute_humidity_func(current_date: date):
 
     TODO: replace this function with real humidity function
 
+    # The following calculation is used to achieve the correct
+    #   upside-down parabola with the right min and max
+    #   values and location
+    # max_value = 12.5
+    # 0.00027 = (max_value - k) / ((0 - h) ** 2)
+
     :param current_date: datetime.date,
         datetime.date object corresponding to
         real-world date
@@ -44,13 +50,6 @@ def absolute_humidity_func(current_date: date):
     h = 180
     k = 3.8
 
-    # This calculation is used to achieve the correct
-    #   upside-down parabola with the right min and max
-    #   values and location
-    # max_value = 12.5
-    # 0.00027 = (max_value - k) / ((0 - h) ** 2)
-
-    # Calculate the value of the function
     # Shift by 180 (6 months roughly), because minimum humidity occurs in
     #   January, but Kaiming and Shraddha's graph starts in July
     return k + 0.00027 * (day_of_year - 180 - h) ** 2
@@ -227,97 +226,69 @@ class FluSimState(base.SimState):
 
 class NewExposed(base.TransitionVariable):
     def get_current_rate(self,
-                         sim_state: base.SimState,
-                         fixed_params):
-        """
-        :param sim_state:
-        :param fixed_params:
-        :return:
-        """
+                         sim_state: FluSimState,
+                         fixed_params: FluFixedParams):
+
         force_of_immunity = (1 + fixed_params.inf_risk_reduction * sim_state.population_immunity_inf)
 
         beta_humidity_adjusted = (1 - sim_state.absolute_humidity * fixed_params.humidity_impact) * \
                                  fixed_params.beta_baseline
 
-        return np.asarray((1-sim_state.beta_reduct) * beta_humidity_adjusted * sim_state.I
+        return np.asarray((1 - sim_state.beta_reduct) * beta_humidity_adjusted * sim_state.I
                           / (fixed_params.total_population_val * force_of_immunity))
 
 
 class NewSusceptible(base.TransitionVariable):
-    def get_current_rate(self, sim_state, fixed_params):
-        """
-        :param sim_state:
-        :param fixed_params:
-        :return:
-        """
+    def get_current_rate(self,
+                         sim_state: FluSimState,
+                         fixed_params: FluFixedParams):
         return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups), fixed_params.R_to_S_rate)
 
 
 class NewInfected(base.TransitionVariable):
-    def get_current_rate(self, sim_state, fixed_params):
-        """
-        :param sim_state:
-        :param fixed_params:
-        :return:
-        """
+    def get_current_rate(self,
+                         sim_state: FluSimState,
+                         fixed_params: FluFixedParams):
         return np.full((fixed_params.num_age_groups, fixed_params.num_age_groups), fixed_params.E_to_I_rate)
 
 
 class NewRecoveredHome(base.TransitionVariable):
-    def get_current_rate(self, sim_state, fixed_params):
-        """
-        :param sim_state:
-        :param fixed_params:
-        :return:
-        """
+    def get_current_rate(self,
+                         sim_state: FluSimState,
+                         fixed_params: FluFixedParams):
         return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups),
                        (1 - fixed_params.I_to_H_adjusted_proportion) * fixed_params.I_to_R_rate)
 
 
 class NewRecoveredHosp(base.TransitionVariable):
-    def get_current_rate(self, sim_state, fixed_params):
-        """
-        :param sim_state:
-        :param fixed_params:
-        :return:
-        """
+    def get_current_rate(self,
+                         sim_state: FluSimState,
+                         fixed_params: FluFixedParams):
         return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups),
                        (1 - fixed_params.H_to_D_adjusted_proportion) * fixed_params.H_to_R_rate)
 
 
 class NewHosp(base.TransitionVariable):
-    def get_current_rate(self, sim_state, fixed_params):
-        """
-        :param sim_state:
-        :param fixed_params:
-        :return:
-        """
+    def get_current_rate(self,
+                         sim_state: FluSimState,
+                         fixed_params: FluFixedParams):
         return np.asarray(fixed_params.I_to_H_rate * fixed_params.I_to_H_adjusted_proportion /
                           (1 + fixed_params.hosp_risk_reduction * sim_state.population_immunity_hosp))
 
 
 class NewDead(base.TransitionVariable):
-    def get_current_rate(self, sim_state, fixed_params):
-        """
-        :param sim_state:
-        :param fixed_params:
-        :return:
-        """
+    def get_current_rate(self,
+                         sim_state: FluSimState,
+                         fixed_params: FluFixedParams):
         return np.asarray(fixed_params.H_to_D_adjusted_proportion * fixed_params.H_to_D_rate /
                           (1 + fixed_params.death_risk_reduction * sim_state.population_immunity_hosp))
 
 
 class PopulationImmunityHosp(base.EpiMetric):
     def get_change_in_current_val(self,
-                                  sim_state,
+                                  sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
-                                  num_timesteps):
-        """
-        :param sim_state:
-        :param fixed_params:
-        :param num_timesteps
-        :return:
-        """
+                                  num_timesteps: int):
         immunity_gain = (fixed_params.immunity_hosp_increase_factor * sim_state.R) / \
                         (fixed_params.total_population_val *
                          (1 + fixed_params.immunity_saturation_constant * sim_state.population_immunity_hosp))
@@ -328,15 +299,9 @@ class PopulationImmunityHosp(base.EpiMetric):
 
 class PopulationImmunityInf(base.EpiMetric):
     def get_change_in_current_val(self,
-                                  sim_state,
+                                  sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
-                                  num_timesteps):
-        """
-        :param sim_state:
-        :param fixed_params:
-        :param num_timesteps
-        :return:
-        """
+                                  num_timesteps: int):
         immunity_gain = (fixed_params.immunity_inf_increase_factor * sim_state.R) / \
                         (fixed_params.total_population_val * (1 + fixed_params.immunity_saturation_constant *
                                                               sim_state.population_immunity_inf))

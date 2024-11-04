@@ -79,11 +79,16 @@ class Config:
         probability distribution of transitions between compartments
     :ivar start_real_date: datetime.date,
         actual date that aligns with the beginning of the simulation
+    :ivar save_daily_history: bool,
+        True if each StateVariable saves state to history after
+        each simulation day -- set to False if want speedier performance
     """
 
     timesteps_per_day: int = 7
     transition_type: str = TransitionTypes.BINOMIAL
-    start_real_date: datetime.time = datetime.datetime.strptime("2024-10-31", "%Y-%m-%d").date()
+    start_real_date: datetime.time = datetime.datetime.strptime("2024-10-31",
+                                                                "%Y-%m-%d").date()
+    save_daily_history: bool = True
 
 
 @dataclass
@@ -543,7 +548,7 @@ class TransitionVariable(ABC):
     def update_destination_inflow(self) -> None:
         self.destination.current_inflow += self.current_val
 
-    def update_history(self) -> None:
+    def save_history(self) -> None:
         """
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
@@ -601,6 +606,19 @@ class TransitionVariable(ABC):
         return self.origin.current_val
 
 
+class StateVariable:
+    """
+    Parent class of EpiCompartment, EpiMetric, DynamicVal, and Schedule
+    classes. All subclasses have the common attributes "name", "init_val",
+    and "current_val"
+    """
+
+    def __init__(self, name, init_val):
+        self.name = name
+        self.init_val = init_val
+        self.current_val = copy.deepcopy(init_val)
+
+
 @dataclass
 class StateVariableManager:
     """
@@ -632,8 +650,8 @@ class StateVariableManager:
     schedules: Optional[list] = None
     sim_state: Optional[SimState] = None
 
-    def update_sim_state(self):
-        for unit in self.compartments + self.epi_metrics + self.dynamic_vals + self.schedules:
+    def update_sim_state(self, unit_list: list[StateVariable]) -> None:
+        for unit in unit_list:
             setattr(self.sim_state, unit.name, unit.current_val)
 
     def reset_sim_state(self):
@@ -646,19 +664,6 @@ class StateVariableManager:
         # Schedules do not have history since they are deterministic
         for svar in self.compartments + self.epi_metrics + self.dynamic_vals:
             svar.clear_history()
-
-
-class StateVariable:
-    """
-    Parent class of EpiCompartment, EpiMetric, DynamicVal, and Schedule
-    classes. All subclasses have the common attributes "name", "init_val",
-    and "current_val"
-    """
-
-    def __init__(self, name, init_val):
-        self.name = name
-        self.init_val = init_val
-        self.current_val = copy.deepcopy(init_val)
 
 
 class EpiCompartment(StateVariable):
@@ -707,7 +712,7 @@ class EpiCompartment(StateVariable):
     def reset_outflow(self) -> None:
         self.current_outflow = np.zeros(np.shape(self.current_outflow))
 
-    def update_history(self) -> None:
+    def save_history(self) -> None:
         """
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
@@ -801,7 +806,7 @@ class EpiMetric(StateVariable, ABC):
     def update_current_val(self) -> None:
         self.current_val += self.change_in_current_val
 
-    def update_history(self) -> None:
+    def save_history(self) -> None:
         """
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
@@ -855,7 +860,7 @@ class DynamicVal(StateVariable, ABC):
         super().__init__(name, init_val)
         self.history_vals_list = []
 
-    def update_history(self) -> None:
+    def save_history(self) -> None:
         """
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
@@ -996,7 +1001,8 @@ class TransmissionModel:
             self.start_real_date = config.start_real_date
         else:
             try:
-                self.start_real_date = datetime.datetime.strptime(config.start_real_date, "%Y-%m-%d").date()
+                self.start_real_date = \
+                    datetime.datetime.strptime(config.start_real_date, "%Y-%m-%d").date()
             except ValueError:
                 print("Error: The date format should be YYYY-MM-DD.")
         self.current_real_date = self.start_real_date
@@ -1052,11 +1058,21 @@ class TransmissionModel:
             raise TransmissionModelError(f"Current day counter ({self.current_simulation_day}) "
                                          f"exceeds last simulation day ({last_simulation_day}).")
 
+        save_daily_history = self.config.save_daily_history
+
         # last_simulation_day is exclusive endpoint
         while self.current_simulation_day < last_simulation_day:
-            self.simulate_discretized_timesteps()
 
-    def simulate_discretized_timesteps(self) -> None:
+            self._prepare_daily_state()
+
+            self._simulate_timesteps()
+
+            if save_daily_history:
+                self._save_daily_history()
+
+            self._increment_simulation_day()
+
+    def _simulate_timesteps(self) -> None:
         """
         Subroutine for simulate_until_time_period
 
@@ -1068,90 +1084,117 @@ class TransmissionModel:
         in dynamic vals by specified timesteps per day
         """
 
-        # Attribute lookup shortcuts
+        for timestep in range(self.config.timesteps_per_day):
+
+            self._update_epi_metrics()
+
+            self._update_transition_rates()
+            
+            self._sample_transitions()
+
+            self._update_compartments()
+            
+            self.state_variable_manager.update_sim_state(self.epi_metrics +
+                                                         self.compartments)
+
+    def _prepare_daily_state(self) -> None:
+        """
+        At beginning of each day, update current value of
+        schedules and dynamic values -- note that schedules
+        and dynamic values are only updated once a day, not
+        for every discretized timestep
+        """
+
+        sim_state = self.state_variable_manager.sim_state
+        fixed_params = self.fixed_params
+        current_real_date = self.current_real_date
+
+        schedules = self.schedules
+        dynamic_vals = self.dynamic_vals
+
+        # Update schedules for current day
+        for schedule in schedules:
+            schedule.update_current_val(current_real_date)
+
+        # Update dynamic values for current day
+        for dval in dynamic_vals:
+            dval.update_current_val(sim_state, fixed_params)
+
+        # Sync simulation state
+        self.state_variable_manager.update_sim_state(schedules + dynamic_vals)
+
+    def _update_epi_metrics(self):
+
+        sim_state = self.state_variable_manager.sim_state
+        fixed_params = self.fixed_params
         timesteps_per_day = self.config.timesteps_per_day
+
+        for metric in self.epi_metrics:
+            metric.change_in_current_val = metric.get_change_in_current_val(sim_state,
+                                                                            fixed_params,
+                                                                            timesteps_per_day)
+            metric.update_current_val()
+
+    def _update_transition_rates(self):
+
         sim_state = self.state_variable_manager.sim_state
         fixed_params = self.fixed_params
 
-        current_real_date = self.current_real_date
+        for tvar in self.transition_variables:
+            tvar.current_rate = tvar.get_current_rate(sim_state, fixed_params)
 
-        compartments = self.compartments
-        epi_metrics = self.epi_metrics
-        dynamic_vals = self.dynamic_vals
-        schedules = self.schedules
-        transition_variable_groups = self.transition_variable_groups
-        transition_variables = self.transition_variables
+    def _sample_transitions(self):
 
-        for schedule in self.schedules:
-            schedule.update_current_val(current_real_date)
+        RNG = self.RNG
+        timesteps_per_day = self.config.timesteps_per_day
 
-        # TODO: need to fix
-        for dval in self.dynamic_vals:
-            dval.update_current_val(sim_state, fixed_params)
+        # Obtain transition variable realizations for jointly distributed transition variables
+        #   (i.e. when there are multiple transition variable outflows from an epi compartment)
+        for tvargroup in self.transition_variable_groups:
+            tvargroup.current_vals_list = tvargroup.get_joint_realization(RNG,
+                                                                          timesteps_per_day)
+            tvargroup.update_transition_variable_realizations()
 
-        self.state_variable_manager.update_sim_state()
+        # Obtain transition variable realizations for marginally distributed transition variables
+        #   (i.e. when there is only one transition variable outflow from an epi compartment)
+        # If transition variable is jointly distributed, then its realization has already
+        #   been computed by its transition variable group container previously,
+        #   so skip the marginal computation
+        for tvar in self.transition_variables:
+            if not tvar.is_jointly_distributed:
+                tvar.current_val = tvar.get_realization(RNG, timesteps_per_day)
 
-        for timestep in range(timesteps_per_day):
+    def _update_compartments(self):
 
-            for tvar in transition_variables:
-                tvar.current_rate = tvar.get_current_rate(sim_state, fixed_params)
+        for tvar in self.transition_variables:
+            tvar.update_origin_outflow()
+            tvar.update_destination_inflow()
 
-            for metric in epi_metrics:
-                metric.change_in_current_val = metric.get_change_in_current_val(sim_state,
-                                                                                fixed_params,
-                                                                                timesteps_per_day)
+        for compartment in self.compartments:
+            compartment.update_current_val()
 
-            # Obtain transition variable realizations for jointly distributed transition variables
-            #   (i.e. when there are multiple transition variable outflows from an epi compartment)
-            for tvargroup in transition_variable_groups:
-                tvargroup.current_vals_list = tvargroup.get_joint_realization(self.RNG,
-                                                                              timesteps_per_day)
-                tvargroup.update_transition_variable_realizations()
+            compartment.reset_inflow()
+            compartment.reset_outflow()
 
-            # Obtain transition variable realizations for marginally distributed transition variables
-            #   (i.e. when there is only one transition variable outflow from an epi compartment)
-            # If transition variable is jointly distributed, then its realization has already
-            #   been computed by its transition variable group container previously,
-            #   so skip the marginal computation
-            for tvar in self.transition_variables:
-                if tvar.is_jointly_distributed:
-                    continue
-                else:
-                    tvar.current_val = tvar.get_realization(self.RNG, timesteps_per_day)
+    def _increment_simulation_day(self) -> None:
+        """
+        Move to next day in simulation
+        """
 
-            """
-            ###############################################
-            ##### IN-PLACE UPDATE OF SIMULATION STATE #####
-            ###############################################
-            """
-
-            for tvar in transition_variables:
-                tvar.update_origin_outflow()
-                tvar.update_destination_inflow()
-
-            for metric in epi_metrics:
-                metric.update_current_val()
-
-            for compartment in compartments:
-                compartment.update_current_val()
-
-                compartment.reset_inflow()
-                compartment.reset_outflow()
-
-            self.state_variable_manager.update_sim_state()
-
-        # Update history at end of each day, not at end of every
-        #   discretization timestep, to be efficient
-        # Update history of state variables other than Schedule
-        #   instances -- schedules do not have history
-        #   TransitionVariableGroup instances also do not
-        #   have history, so do not include
-        for svar in compartments + epi_metrics + dynamic_vals:
-            svar.update_history()
-
-        # Move to next day in simulation
         self.current_simulation_day += 1
         self.current_real_date += datetime.timedelta(days=1)
+
+    def _save_daily_history(self):
+        """
+        Update history at end of each day, not at end of every
+           discretization timestep, to be efficient
+        Update history of state variables other than Schedule
+           instances -- schedules do not have history
+           TransitionVariableGroup instances also do not
+           have history, so do not include
+        """
+        for svar in self.compartments + self.epi_metrics + self.dynamic_vals:
+            svar.save_history()
 
     def reset_simulation(self) -> None:
         """
@@ -1337,7 +1380,8 @@ class ModelConstructor(ABC):
                                                       schedules=schedules_list,
                                                       sim_state=self.sim_state)
 
-        state_variable_manager.update_sim_state()
+        state_variable_manager.update_sim_state(compartments_list + epi_metrics_list +
+                                                dynamic_vals_list + schedules_list)
 
         return state_variable_manager
 
