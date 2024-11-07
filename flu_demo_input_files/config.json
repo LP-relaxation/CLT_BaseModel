@@ -1,0 +1,6 @@
+{
+	"timesteps_per_day":7,
+	"transition_type":"binomial",
+	"start_real_date": "2022-08-08",
+	"save_daily_history": true
+}

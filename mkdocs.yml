@@ -1,0 +1,4 @@
+site_name: CLT Base Model Code
+nav:
+- Home: index.md
+theme: readthedocs
