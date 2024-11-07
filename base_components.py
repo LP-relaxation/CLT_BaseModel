@@ -493,7 +493,7 @@ class TransitionVariable(ABC):
         :param origin: EpiCompartment,
             the compartment from which Transition Variable exits
         :param destination: EpiCompartment,
-            the compartment which Transition Variable enters
+            compartment that the TransitionVariable enters
         :param transition_type: str,
             only values defined in TransitionTypes Enum are valid, specifying
             probability distribution of transitions between compartments
@@ -891,18 +891,20 @@ class Schedule(StateVariable, ABC):
     def __init__(self,
                  name: str,
                  init_val: Optional[Union[np.ndarray, float]] = None,
-                 date_to_val_lookup: Optional[dict] = None):
+                 timeseries_df: Optional[dict] = None):
         """
         :param name: str,
             unique identifier for schedule
         :param init_val: Optional[Union[np.ndarray, float]]
             starting value(s) at the beginning of the simulation
-        :param date_to_val_lookup: Optional[dict] = None,
-            maps datetime.date to value on that date
+        :param timeseries_df: Optional[pd.DataFrame] = None,
+            has a "date" column with strings in format "YYYY-MM-DD"
+            of consecutive calendar days, and other columns
+            corresponding to values on those days
         """
 
         super().__init__(name, init_val)
-        self.date_to_val_lookup = date_to_val_lookup
+        self.timeseries_df = timeseries_df
 
     @abstractmethod
     def update_current_val(self, current_date: datetime.date) -> None:
@@ -1085,15 +1087,14 @@ class TransmissionModel:
         """
 
         for timestep in range(self.config.timesteps_per_day):
-
             self._update_epi_metrics()
 
             self._update_transition_rates()
-            
+
             self._sample_transitions()
 
             self._update_compartments()
-            
+
             self.state_variable_manager.update_sim_state(self.epi_metrics +
                                                          self.compartments)
 
@@ -1130,9 +1131,10 @@ class TransmissionModel:
         timesteps_per_day = self.config.timesteps_per_day
 
         for metric in self.epi_metrics:
-            metric.change_in_current_val = metric.get_change_in_current_val(sim_state,
-                                                                            fixed_params,
-                                                                            timesteps_per_day)
+            metric.change_in_current_val = \
+                metric.get_change_in_current_val(sim_state,
+                                                 fixed_params,
+                                                 timesteps_per_day)
             metric.update_current_val()
 
     def _update_transition_rates(self):
@@ -1398,12 +1400,14 @@ class ModelConstructor(ABC):
 
         # Setup objects for model
         self.setup_epi_compartments()
+        self.setup_transition_variables()
+        self.setup_transition_variable_groups()
+
+        # Some epi metrics depend on transition variables, so
+        #   set up epi metrics after transition variables
         self.setup_epi_metrics()
         self.setup_dynamic_vals()
         self.setup_schedules()
-
-        self.setup_transition_variables()
-        self.setup_transition_variable_groups()
 
         # Get dictionary values as lists
         compartments_list = list(self.compartment_lookup.values())

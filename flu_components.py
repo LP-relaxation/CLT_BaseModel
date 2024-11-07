@@ -3,56 +3,23 @@ import json
 import copy
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union, Type
 from pathlib import Path
+base_path = Path(__file__).parent / "flu_demo_input_files"
 
 import base_components as base
 
 import matplotlib.pyplot as plt
 from plotting import create_basic_compartment_history_plot
 
-from datetime import date
+import datetime
+
+import pandas as pd
 
 
 # Note: for dataclasses, Optional is used to help with static type checking
 # -- it means that an attribute can either hold a value with the specified
 # datatype or it can be None
-
-
-def absolute_humidity_func(current_date: date):
-    """
-    Note: this is a dummy function loosely based off of
-    the absolute humidity data from Kaiming and Shraddha's
-    new burden averted draft.
-
-    TODO: replace this function with real humidity function
-
-    # The following calculation is used to achieve the correct
-    #   upside-down parabola with the right min and max
-    #   values and location
-    # max_value = 12.5
-    # 0.00027 = (max_value - k) / ((0 - h) ** 2)
-
-    :param current_date: datetime.date,
-        datetime.date object corresponding to
-        real-world date
-    :return: float,
-        nonnegative float between 3.8 and 12.5
-        corresponding to absolute humidity
-        that day of the year
-    """
-
-    # Convert datetime.date to integer between 1 and 365
-    #   corresponding to day of the year
-    day_of_year = current_date.timetuple().tm_yday
-
-    # Vertex of the parabola
-    h = 180
-    k = 3.8
-
-    # Shift by 180 (6 months roughly), because minimum humidity occurs in
-    #   January, but Kaiming and Shraddha's graph starts in July
-    return k + 0.00027 * (day_of_year - 180 - h) ** 2
 
 
 @dataclass
@@ -206,11 +173,17 @@ class FluSimState(base.SimState):
         population-level immunity against infection, for
         age-risk groups (EpiMetric current_val)
             math variable: $M^I$
-    :param absolute_humidity:
+    :param absolute_humidity: float,
         grams of water vapor per cubic meter g/m^3,
         used as seasonality parameter that influences
         transmission rate beta_baseline
             math variable: $q$
+    :param flu_contact_matrix: np.ndarray,
+        A x L x A x L array, where A is the number of age
+        groups and L is the number of risk groups --
+        element (a, l, a', l') corresponds to the number of
+        contacts that a person in age-risk group a,l
+        has with people in age-risk group a', l'
     """
 
     S: Optional[np.ndarray] = None
@@ -222,6 +195,7 @@ class FluSimState(base.SimState):
     population_immunity_hosp: Optional[np.ndarray] = None
     population_immunity_inf: Optional[np.ndarray] = None
     absolute_humidity: Optional[float] = None
+    flu_contact_matrix: Optional[np.ndarray] = None
 
 
 class NewExposed(base.TransitionVariable):
@@ -234,8 +208,18 @@ class NewExposed(base.TransitionVariable):
         beta_humidity_adjusted = (1 - sim_state.absolute_humidity * fixed_params.humidity_impact) * \
                                  fixed_params.beta_baseline
 
-        return np.asarray((1 - sim_state.beta_reduct) * beta_humidity_adjusted * sim_state.I
-                          / (fixed_params.total_population_val * force_of_immunity))
+        # Compute I / N -> original shape is (A, L)
+        # Expand ratio for broadcasting -> new shape is (1, 1, A, L)
+        I_N_ratio_expanded = (sim_state.I / fixed_params.total_population_val)[None, None, :, :]
+
+        # Expand force_of_immunity for broadcasting -> new shape is (A, L, 1, 1)
+        force_of_immunity_expanded = force_of_immunity[:, :, None, None]
+
+        # Element-wise multiplication and division by M_expanded
+        # Sum over a' and l' (last two dimensions) -> result has shape (A, L)
+        summand = np.sum(sim_state.flu_contact_matrix * I_N_ratio_expanded / force_of_immunity_expanded, axis=(2,3))
+
+        return (1 - sim_state.beta_reduct) * beta_humidity_adjusted * summand
 
 
 class NewSusceptible(base.TransitionVariable):
@@ -249,7 +233,7 @@ class NewInfected(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
-        return np.full((fixed_params.num_age_groups, fixed_params.num_age_groups), fixed_params.E_to_I_rate)
+        return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups), fixed_params.E_to_I_rate)
 
 
 class NewRecoveredHome(base.TransitionVariable):
@@ -285,11 +269,16 @@ class NewDead(base.TransitionVariable):
 
 
 class PopulationImmunityHosp(base.EpiMetric):
+
+    def __init__(self, name, init_val, new_susceptible):
+        super().__init__(name, init_val)
+        self.new_susceptible = new_susceptible
+
     def get_change_in_current_val(self,
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
-        immunity_gain = (fixed_params.immunity_hosp_increase_factor * sim_state.R) / \
+        immunity_gain = (fixed_params.immunity_hosp_increase_factor * self.new_susceptible.current_val) / \
                         (fixed_params.total_population_val *
                          (1 + fixed_params.immunity_saturation_constant * sim_state.population_immunity_hosp))
         immunity_loss = fixed_params.waning_factor_hosp * sim_state.population_immunity_hosp
@@ -298,11 +287,15 @@ class PopulationImmunityHosp(base.EpiMetric):
 
 
 class PopulationImmunityInf(base.EpiMetric):
+    def __init__(self, name, init_val, new_susceptible):
+        super().__init__(name, init_val)
+        self.new_susceptible = new_susceptible
+
     def get_change_in_current_val(self,
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
-        immunity_gain = (fixed_params.immunity_inf_increase_factor * sim_state.R) / \
+        immunity_gain = (fixed_params.immunity_inf_increase_factor * self.new_susceptible.current_val) / \
                         (fixed_params.total_population_val * (1 + fixed_params.immunity_saturation_constant *
                                                               sim_state.population_immunity_inf))
         immunity_loss = fixed_params.waning_factor_inf * sim_state.population_immunity_inf
@@ -325,9 +318,99 @@ class BetaReduct(base.DynamicVal):
                 self.current_val = 0
 
 
+def absolute_humidity_func(current_date: datetime.date):
+    """
+    Note: this is a dummy function loosely based off of
+    the absolute humidity data from Kaiming and Shraddha's
+    new burden averted draft.
+
+    TODO: replace this function with real humidity function
+
+    # The following calculation is used to achieve the correct
+    #   upside-down parabola with the right min and max
+    #   values and location
+    # max_value = 12.5
+    # 0.00027 = (max_value - k) / ((0 - h) ** 2)
+
+    :param current_date: datetime.date,
+        datetime.date object corresponding to
+        real-world date
+    :return: float,
+        nonnegative float between 3.8 and 12.5
+        corresponding to absolute humidity
+        that day of the year
+    """
+
+    # Convert datetime.date to integer between 1 and 365
+    #   corresponding to day of the year
+    day_of_year = current_date.timetuple().tm_yday
+
+    # Vertex of the parabola
+    h = 180
+    k = 3.8
+
+    # Shift by 180 (6 months roughly), because minimum humidity occurs in
+    #   January, but Kaiming and Shraddha's graph starts in July
+    return k + 0.00027 * (day_of_year - 180 - h) ** 2
+
+
 class AbsoluteHumidity(base.Schedule):
-    def update_current_val(self, current_date: date) -> None:
+    def update_current_val(self, current_date: datetime.date) -> None:
         self.current_val = absolute_humidity_func(current_date)
+
+
+class FluContactMatrix(base.Schedule):
+    """
+
+    Attributes
+    ----------
+    :ivar timeseries_df: pd.DataFrame,
+        has a "date" column with strings in format "YYYY-MM-DD"
+        of consecutive calendar days, and other columns
+        named "is_school_day" (bool) and "is_work_day" (bool)
+        corresponding to type of day
+    :ivar total_contact_matrix: np.ndarray,
+        (A x L) x (A x L) np.ndarray, where A is the number
+        of age groups and L is the number of risk groups
+
+    See parent class docstring for other attributes.
+
+    """
+
+    def __init__(self,
+                 name: str,
+                 init_val: Optional[Union[np.ndarray, float]]=None):
+        super().__init__(name, init_val)
+
+        df = pd.read_csv(base_path / "school_work_calendar.csv", index_col=0)
+        df["date"] = pd.to_datetime(df["date"]).dt.date
+
+        self.time_series_df = df
+
+        self.total_contact_matrix = np.array([[3.5, 1.5], [3, 3.5]]).reshape((2,1,2,1))
+        self.school_contact_matrix = np.array([[2, 1], [1, 1]]).reshape((2,1,2,1))
+        self.work_contact_matrix = np.array([[0, 0], [1, 2]]).reshape((2,1,2,1))
+
+    def update_current_val(self, current_date: datetime.date) -> None:
+        """
+        Subclasses must provide a concrete implementation of
+        updating self.current_val in-place
+
+        :param current_date: date,
+            real-world date corresponding to
+            model's current simulation day
+        """
+
+        df = self.time_series_df
+
+        try:
+            current_row = df[df["date"] == current_date].iloc[0]
+        except IndexError:
+            print(f"Error: {current_date} is not in the Calendar's time_series_df.")
+
+        self.current_val = self.total_contact_matrix - \
+                           (1 - current_row["is_school_day"]) * self.school_contact_matrix - \
+                           (1 - current_row["is_work_day"]) * self.work_contact_matrix
 
 
 class FluModelConstructor(base.ModelConstructor):
@@ -450,26 +533,12 @@ class FluModelConstructor(base.ModelConstructor):
         for name in ("S", "E", "I", "H", "R", "D"):
             self.compartment_lookup[name] = base.EpiCompartment(name, getattr(self.sim_state, name))
 
-    def setup_epi_metrics(self) -> None:
-        """
-        Create all epi metric described in docstring (2 state
-        variables total) and add them to epi_metric_lookup attribute
-        for dictionary access
-        """
-
-        self.epi_metric_lookup["population_immunity_inf"] = \
-            PopulationImmunityInf("population_immunity_inf",
-                                  getattr(self.sim_state, "population_immunity_inf"))
-
-        self.epi_metric_lookup["population_immunity_hosp"] = \
-            PopulationImmunityHosp("population_immunity_hosp",
-                                   getattr(self.sim_state, "population_immunity_hosp"))
-
     def setup_dynamic_vals(self) -> None:
         self.dynamic_val_lookup["beta_reduct"] = BetaReduct("beta_reduct")
 
     def setup_schedules(self) -> None:
         self.schedule_lookup["absolute_humidity"] = AbsoluteHumidity("absolute_humidity")
+        self.schedule_lookup["flu_contact_matrix"] = FluContactMatrix("flu_contact_matrix")
 
     def setup_transition_variables(self) -> None:
         """
@@ -496,7 +565,7 @@ class FluModelConstructor(base.ModelConstructor):
 
         # Create transition variables dynamically
         # params[0] is the TransitionVariable subclass (e.g. NewSusceptible)
-        # params[1:4] refers to the name, origin compartment, destination compartment
+        # params[1:4] refers to the name, origin compartment, destination compartment list
         # params[4:] contains the Boolean indicating if the transition variable is jointly
         #   distributed (True if jointly distributed)
         self.transition_variable_lookup = {
@@ -528,3 +597,20 @@ class FluModelConstructor(base.ModelConstructor):
                                                   (tvar_lookup["new_recovered_hosp"],
                                                    tvar_lookup["new_dead"]))
         }
+
+    def setup_epi_metrics(self) -> None:
+        """
+        Create all epi metric described in docstring (2 state
+        variables total) and add them to epi_metric_lookup attribute
+        for dictionary access
+        """
+
+        self.epi_metric_lookup["population_immunity_inf"] = \
+            PopulationImmunityInf("population_immunity_inf",
+                                  getattr(self.sim_state, "population_immunity_inf"),
+                                  self.transition_variable_lookup["new_susceptible"])
+
+        self.epi_metric_lookup["population_immunity_hosp"] = \
+            PopulationImmunityHosp("population_immunity_hosp",
+                                   getattr(self.sim_state, "population_immunity_hosp"),
+                                   self.transition_variable_lookup["new_susceptible"])
