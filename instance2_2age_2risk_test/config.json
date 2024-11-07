@@ -1,6 +1,0 @@
-{
-	"timesteps_per_day":7,
-	"transition_type":"binomial",
-	"start_real_date": "2024-10-31",
-	"save_daily_history": true
-}
