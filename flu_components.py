@@ -345,7 +345,8 @@ def absolute_humidity_func(current_date: datetime.date):
             real-world date
 
     Returns:
-        float: nonnegative float between 3.8 and 12.5
+        float:
+            nonnegative float between 3.8 and 12.5
             corresponding to absolute humidity
             that day of the year
     """

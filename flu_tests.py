@@ -134,4 +134,4 @@ def test_reproducible_RNG(model):
                               np.array(reset_model_history_dict[compartment_name]))
 
 
-def test_contact_matrix_vectorization(model)
+def test_contact_matrix_vectorization(model):
