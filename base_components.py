@@ -70,16 +70,16 @@ class Config:
 
     Attributes
     ----------
-    :ivar timesteps_per_day: int,
+    :param timesteps_per_day: int,
         number of discretized timesteps within a simulation
         day -- more timesteps_per_day mean smaller discretization
         time intervals, which may cause the model to run slower
-    :ivar transition_type: str,
+    :param transition_type: str,
         valid value must be from TransitionTypes, specifying the
         probability distribution of transitions between compartments
-    :ivar start_real_date: datetime.date,
+    :param start_real_date: datetime.date,
         actual date that aligns with the beginning of the simulation
-    :ivar save_daily_history: bool,
+    :param save_daily_history: bool,
         True if each StateVariable saves state to history after
         each simulation day -- set to False if want speedier performance
     """
@@ -123,24 +123,24 @@ class TransitionVariableGroup:
 
     Attributes
     ----------
-    :ivar origin: EpiCompartment,
+    :param origin: EpiCompartment,
         specifies origin of TransitionVariableGroup --
         corresponding populations leave this compartment
-    :ivar _transition_type: str,
+    :param _transition_type: str,
         only values defined in JointTransitionTypes Enum are valid,
         specifies joint probability distribution of all outflows
         from origin
-    :ivar transition_variables: list-like of TransitionVariable instances,
+    :param transition_variables: list-like of TransitionVariable instances,
         specifying TransitionVariable instances that outflow from origin --
         order does not matter
-    :ivar get_joint_realization: function,
+    :param get_joint_realization: function,
         assigned at initialization, generates realizations according
         to probability distribution given by _transition_type attribute,
         returns either (M x A x L) or ((M+1) x A x L) np.ndarray,
         where M is the length of transition_variables (i.e., number of
         outflows from origin), A is number of age groups, L is number of
         risk groups
-    :ivar current_vals_list: list,
+    :param current_vals_list: list,
         used to store results from get_joint_realization --
         has either M or M+1 arrays of size A x L
 
@@ -461,18 +461,18 @@ class TransitionVariable(ABC):
 
     Attributes
     ----------
-    :ivar _transition_type: str,
+    :param _transition_type: str,
         only values defined in TransitionTypes Enum are valid, specifying
         probability distribution of transitions between compartments
-    :ivar get_current_rate: function,
+    :param get_current_rate: function,
         provides specific implementation for computing current rate
         as a function of current simulation state and epidemiological parameters
-    :ivar current_rate: np.ndarray,
+    :param current_rate: np.ndarray,
         holds output from get_current_rate method -- used to generate
         random variable realizations for transitions between compartments
-    :ivar current_val: np.ndarray,
+    :param current_val: np.ndarray,
         holds realization of random variable parameterized by current_rate
-    :ivar history_vals_list: list[np.ndarray],
+    :param history_vals_list: list[np.ndarray],
         each element is the same size of current_val, holds
         history of transition variable realizations for age-risk
         groups -- element t corresponds to previous current_val value
@@ -629,15 +629,15 @@ class StateVariableManager:
 
     Attributes
     ----------
-    :ivar compartments: list,
+    :param compartments: list,
         list of all the model's EpiCompartment instances
-    :ivar epi_metrics: list,
+    :param epi_metrics: list,
         list of all the model's EpiMetric instances
-    :ivar dynamic_vals: list,
+    :param dynamic_vals: list,
         list of all the model's DynamicVal instances
-    :ivar schedules: list,
+    :param schedules: list,
         list of all the model's Schedule instances
-    :ivar sim_state: SimState,
+    :param sim_state: SimState,
         data container for the model's current values of its
         StateVariable instances -- the name of each field
         nust match the "name" attribute of a corresponding
@@ -675,18 +675,18 @@ class EpiCompartment(StateVariable):
 
     Additional Attributes
     ---------------------
-    :ivar current_val: np.ndarray,
+    :param current_val: np.ndarray,
         same size as init_val, holds current value of EpiCompartment
         for age-risk groups
-    :ivar current_inflow: np.ndarray,
+    :param current_inflow: np.ndarray,
         same size as current_val, used to sum up all
         transition variable realizations incoming to this compartment
         for age-risk groups
-    :ivar current_outflow: np.ndarray,
+    :param current_outflow: np.ndarray,
         same size of current_val, used to sum up all
         transition variable realizations outgoing from this compartment
         for age-risk groups
-    :ivar history_vals_list: list[np.ndarray],
+    :param history_vals_list: list[np.ndarray],
         each element is the same size of current_val, holds
         history of compartment states for age-risk groups --
         element t corresponds to previous current_val value at
@@ -743,15 +743,15 @@ class EpiMetric(StateVariable, ABC):
 
     Additional Attributes
     ---------------------
-    :ivar current_val: np.ndarray,
+    :param current_val: np.ndarray,
         same size as init_val, holds current value of State Variable
         for age-risk groups
-    :ivar change_in_current_val: np.ndarray,
+    :param change_in_current_val: np.ndarray,
         initialized to None, but during simulation holds change in
         current value of EpiMetric for age-risk groups
         (size A x L, where A is number of risk groups and L is number
         of age groups)
-    :ivar history_vals_list: list[np.ndarray],
+    :param history_vals_list: list[np.ndarray],
         each element is the same size of current_val, holds
         history of transition variable realizations for age-risk
         groups -- element t corresponds to previous current_val value
@@ -838,7 +838,7 @@ class DynamicVal(StateVariable, ABC):
 
     Additional Attributes
     ---------------------
-    :ivar history_vals_list: list[np.ndarrays],
+    :param history_vals_list: list[np.ndarrays],
         each element is the same size of current_val, holds
         history of transition variable realizations for age-risk
         groups -- element t corresponds to previous current_val value
@@ -938,25 +938,25 @@ class TransmissionModel:
 
     Attributes
     ----------
-    :ivar state_variable_manager: StateVariableManager,
+    :param state_variable_manager: StateVariableManager,
         holds all the model's StateVariable instances
-    :ivar transition_variables: list-like,
+    :param transition_variables: list-like,
         list of all the model's TransitionVariable instances
-    :ivar transition_variable_groups: list-like,
+    :param transition_variable_groups: list-like,
         list of all the model's TransitionVariableGroup instances
-    :ivar fixed_params: FixedParams,
+    :param fixed_params: FixedParams,
         data container for the model's epidemiological parameters,
         such as the "Greek letters" characterizing sojourn times
         in compartments
-    :ivar config: Config,
+    :param config: Config,
         data container for the model's simulation configuration values
-    :ivar RNG: np.random.Generator object,
+    :param RNG: np.random.Generator object,
         used to generate random variables and control reproducibility
-    :ivar current_simulation_day: int,
+    :param current_simulation_day: int,
         tracks current simulation day -- incremented by +1
         when config.timesteps_per_day discretized timesteps
         have completed
-    :ivar lookup_by_name: dict,
+    :param lookup_by_name: dict,
         keys are names of StateVariable, TransitionVariable,
         and TransitionVariableGroup instances associated
         with the model -- values are the actual object
@@ -1235,25 +1235,25 @@ class ModelConstructor(ABC):
 
     Attributes
     ----------
-    :ivar config: Config,
+    :param config: Config,
         holds configuration values
-    :ivar fixed_params: FixedParams,
+    :param fixed_params: FixedParams,
         holds epidemiological parameter values, read
         from user-specified JSON
-    :ivar sim_state: SimState,
+    :param sim_state: SimState,
         holds current values of StateVariable instances,
         read from user-specified JSON
-    :ivar compartment_lookup: dict,
+    :param compartment_lookup: dict,
         maps "name" attribute to EpiCompartment
-    :ivar epi_metric_lookup: dict,
+    :param epi_metric_lookup: dict,
         maps "name" attribute to EpiMetric
-    :ivar dynamic_val_lookup: dict,
+    :param dynamic_val_lookup: dict,
         maps "name" attribute to DynamicVal
-    :ivar schedule_lookup: dict,
+    :param schedule_lookup: dict,
         maps "name" attribute to Schedule
-    :ivar transition_variable_lookup: dict,
+    :param transition_variable_lookup: dict,
         maps "name" attribute to TransitionVariable
-    :ivar transition_variable_group_lookup: dict,
+    :param transition_variable_group_lookup: dict,
         maps "name" attribute to TransitionVariableGroup
     """
 
