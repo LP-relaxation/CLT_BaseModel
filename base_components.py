@@ -1010,6 +1010,8 @@ class TransmissionModel:
         """
         TODO: maybe group arguments together into dataclass to simplify?
 
+        Parameters
+        ----------
         RNG_seed: positive int,
             used to initialize the model's RNG for generating
             random variables and random transitions.
@@ -1052,6 +1054,8 @@ class TransmissionModel:
         Modifies model's RNG attribute in-place to new generator
         seeded at new_seed_number.
 
+        Parameters
+        ----------
         new_seed_number: int,
             used to re-seed model's random number generator
         """
@@ -1087,7 +1091,9 @@ class TransmissionModel:
         Save daily simulation data as history on each EpiCompartment
         instance.
 
-        last_simulation_day: positive int,
+        Parameters
+        ----------
+        last_simulation_day : positive int,
             stop simulation at last_simulation_day (i.e. exclusive,
             simulate up to but not including last_simulation_day).
         """
