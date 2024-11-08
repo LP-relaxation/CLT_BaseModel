@@ -48,14 +48,14 @@ def approx_binomial_probability_from_rate(rate: np.ndarray,
     and L is the number of risk groups. Rate is transformed to
     A x L np.ndarray corresponding to probabilities.
 
-    Parameters
-    ----------
-        rate (np.ndarray): dimension A x L (number of age groups
-            x number of risk groups), rate parameters in a Poisson distribution.
-        interval_length (positive int): length of time interval in simulation days.
+    Parameters:
+        rate (np.ndarray):
+            dimension A x L (number of age groups x number of risk groups),
+            rate parameters in a Poisson distribution.
+        interval_length (positive int):
+            length of time interval in simulation days.
 
-    Returns
-    -------
+    Returns:
         (np.ndarray): array of positive scalars, dimension A x L
     """
 
@@ -67,19 +67,20 @@ class Config:
     """
     Stores simulation configuration values.
 
-    Parameters
-    ----------
-        timesteps_per_day (int): number of discretized timesteps within a simulation
+    Attributes:
+        timesteps_per_day (int):
+            number of discretized timesteps within a simulation
             day -- more timesteps_per_day mean smaller discretization
             time intervals, which may cause the model to run slower.
-        transition_type (str): valid value must be from TransitionTypes,
+        transition_type (str):
+            valid value must be from TransitionTypes,
             specifying the probability distribution of transitions between
             compartments.
-        start_real_date (datetime.date): actual date that aligns with the
-            beginning of the simulation.
-        save_daily_history (bool):, True if each StateVariable saves state to
-            history after each simulation day -- set to False if want speedier
-            performance.
+        start_real_date (datetime.date):
+            actual date that aligns with the beginning of the simulation.
+        save_daily_history (bool):
+            True if each StateVariable saves state to history after each simulation
+            day -- set to False if want speedier performance.
     """
 
     timesteps_per_day: int = 7
@@ -119,28 +120,27 @@ class TransitionVariableGroup:
     attribute. This enables all instances to use the same method during
     simulation.
 
-    Attributes
-    ----------
-    origin : EpiCompartment,
-        specifies origin of TransitionVariableGroup --
-        corresponding populations leave this compartment.
-    _transition_type : str,
-        only values defined in JointTransitionTypes Enum are valid,
-        specifies joint probability distribution of all outflows
-        from origin.
-    transition_variables : list-like of TransitionVariable instances,
-        specifying TransitionVariable instances that outflow from origin --
-        order does not matter.
-    get_joint_realization : function,
-        assigned at initialization, generates realizations according
-        to probability distribution given by _transition_type attribute,
-        returns either (M x A x L) or ((M+1) x A x L) np.ndarray,
-        where M is the length of transition_variables (i.e., number of
-        outflows from origin), A is number of age groups, L is number of
-        risk groups.
-    current_vals_list : list,
-        used to store results from get_joint_realization --
-        has either M or M+1 arrays of size A x L.
+    Attributes:
+        origin (EpiCompartment):
+            specifies origin of TransitionVariableGroup --
+            corresponding populations leave this compartment.
+        _transition_type (str):
+            only values defined in JointTransitionTypes Enum are valid,
+            specifies joint probability distribution of all outflows
+            from origin.
+        transition_variables (list[TransitionVariable]):
+            specifying TransitionVariable instances that outflow from origin --
+            order does not matter.
+        get_joint_realization (function):
+            assigned at initialization, generates realizations according
+            to probability distribution given by _transition_type attribute,
+            returns either (M x A x L) or ((M+1) x A x L) np.ndarray,
+            where M is the length of transition_variables (i.e., number of
+            outflows from origin), A is number of age groups, L is number of
+            risk groups.
+        current_vals_list (list):
+            used to store results from get_joint_realization --
+            has either M or M+1 arrays of size A x L.
 
     See __init__ docstring for other attributes.
     """
@@ -151,13 +151,12 @@ class TransitionVariableGroup:
                  transition_type,
                  transition_variables):
         """
-        Parameters
-        ----------
-        name : str,
-            user-specified name for compartment.
-        transition_type: str,
-            only values defined in TransitionTypes Enum are valid, specifying
-            probability distribution of transitions between compartments.
+        Args:
+            name (str):
+                user-specified name for compartment.
+            transition_type (str):
+                only values defined in TransitionTypes Enum are valid, specifying
+                probability distribution of transitions between compartments.
 
         See class docstring for other parameters.
         """
@@ -194,12 +193,12 @@ class TransitionVariableGroup:
         Used to properly scale multinomial probabilities vector so
         that elements sum to 1.
 
-        Returns
-        -------
-        np.ndarray of positive numbers,
-            size equal to number of age groups x number of risk groups,
-            sum of current rates of transition variables in
-            transition variable group.
+        Returns:
+            (np.ndarray):
+                contains positive floats, has size equal to number
+                of age groups x number of risk groups,
+                sum of current rates of transition variables in
+                transition variable group.
         """
 
         # axis 0: corresponds to outgoing transition variable
@@ -214,14 +213,14 @@ class TransitionVariableGroup:
         Returns an array of probabilities used for joint binomial
         (multinomial) transitions (get_multinomial_realization method).
 
-        Returns
-        -------
-        np.ndarray of positive numbers,
-            size equal to (length of outgoing transition variables list + 1)
-            x number of age groups x number of risk groups --
-            note the "+1" corresponds to the multinomial outcome of staying
-            in the same epi compartment (not transitioning to any outgoing
-            epi compartment).
+        Returns:
+            (np.ndarray):
+                contains positive floats <= 1, size equal to
+                ((length of outgoing transition variables list + 1)
+                x number of age groups x number of risk groups) --
+                note the "+1" corresponds to the multinomial outcome of staying
+                in the same epi compartment (not transitioning to any outgoing
+                epi compartment).
         """
 
         total_rate = self.get_total_rate()
@@ -251,11 +250,10 @@ class TransitionVariableGroup:
         self.transition_variables -- ith element in array
         corresponds to current rate of ith transition variable.
 
-        Returns
-        -------
-        np.ndarray of positive numbers,
-            size equal to length of outgoing transition variables list
-            x number of age groups x number of risk groups.
+        Returns:
+            (np.ndarray):
+                array of positive floats, size equal to (length of outgoing
+                transition variables list x number of age groups x number of risk groups).
         """
 
         current_rates_list = []
@@ -274,6 +272,7 @@ class TransitionVariableGroup:
         get_multinomial_taylor_approx_deterministic_realization,
         get_poisson_deterministic_realization.
         """
+
         pass
 
     def get_multinomial_realization(self,
@@ -283,14 +282,14 @@ class TransitionVariableGroup:
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from multinomial distribution.
 
-        Returns
-        -------
-        np.ndarray of positive numbers,
-            size equal to (length of outgoing transition variables list + 1)
-            x number of age groups x number of risk groups --
-            note the "+1" corresponds to the multinomial outcome of staying
-            in the same epi compartment (not transitioning to any outgoing
-            epi compartment).
+        Returns:
+            (np.ndarray):
+                contains positive floats, size equal to
+                ((length of outgoing transition variables list + 1)
+                x number of age groups x number of risk groups) --
+                note the "+1" corresponds to the multinomial outcome of staying
+                in the same epi compartment (not transitioning to any outgoing
+                epi compartment).
         """
 
         probabilities_array = self.get_probabilities_array(num_timesteps)
@@ -319,14 +318,13 @@ class TransitionVariableGroup:
         to outgoing compartments) sampled from multinomial distribution
         using Taylor Series approximation for probability parameter.
 
-        Returns
-        -------
-        np.ndarray of positive numbers,
-            size equal to (length of outgoing transition variables list + 1)
-            x number of age groups x number of risk groups --
-            note the "+1" corresponds to the multinomial outcome of staying
-            in the same epi compartment (not transitioning to any outgoing
-            epi compartment).
+        Returns:
+            (np.ndarray):
+                size equal to (length of outgoing transition variables list + 1)
+                x number of age groups x number of risk groups --
+                note the "+1" corresponds to the multinomial outcome of staying
+                in the same epi compartment (not transitioning to any outgoing
+                epi compartment).
         """
 
         num_outflows = len(self.transition_variables)
@@ -364,11 +362,10 @@ class TransitionVariableGroup:
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from Poisson distribution.
 
-        Returns
-        -------
-        np.ndarray of positive numbers,
-            size equal to length of outgoing transition variables list
-            x number of age groups x number of risk groups.
+        Returns:
+            (np.ndarray)
+                contains positive floats, size equal to length of
+                (outgoing transition variables list x number of age groups x number of risk groups).
         """
 
         num_outflows = len(self.transition_variables)
@@ -396,14 +393,14 @@ class TransitionVariableGroup:
         uses mean (n x p, i.e. total counts x probability array) as realization
         rather than randomly sampling.
 
-        Returns
-        -------
-        np.ndarray of positive numbers,
-            size equal to (length of outgoing transition variables list + 1)
-            x number of age groups x number of risk groups --
-            note the "+1" corresponds to the multinomial outcome of staying
-            in the same epi compartment (not transitioning to any outgoing
-            epi compartment).
+        Returns:
+            (np.ndarray):
+                contains positive floats, size equal to
+                (length of outgoing transition variables list + 1)
+                x number of age groups x number of risk groups --
+                note the "+1" corresponds to the multinomial outcome of staying
+                in the same epi compartment (not transitioning to any outgoing
+                epi compartment).
         """
 
         probabilities_array = self.get_probabilities_array(num_timesteps)
@@ -416,14 +413,14 @@ class TransitionVariableGroup:
         uses mean (n x p, i.e. total counts x probability array) as realization
         rather than randomly sampling.
 
-        Returns
-        -------
-        np.ndarray of positive numbers,
-            size equal to (length of outgoing transition variables list + 1)
-            x number of age groups x number of risk groups --
-            note the "+1" corresponds to the multinomial outcome of staying
-            in the same epi compartment (not transitioning to any outgoing
-            epi compartment).
+        Returns:
+            (np.ndarray):
+                contains positive floats, size equal to
+                (length of outgoing transition variables list + 1)
+                x number of age groups x number of risk groups --
+                note the "+1" corresponds to the multinomial outcome of staying
+                in the same epi compartment (not transitioning to any outgoing
+                epi compartment).
         """
 
         current_rates_array = self.get_current_rates_array()
@@ -435,11 +432,11 @@ class TransitionVariableGroup:
         Deterministic counterpart to get_poisson_realization --
         uses mean (rate array) as realization rather than randomly sampling.
 
-        Returns
-        -------
-        np.ndarray of positive numbers,
-            size equal to length of outgoing transition variables list
-            x number of age groups x number of risk groups.
+        Returns:
+            (np.ndarray):
+                contains positive floats, size equal to
+                (length of outgoing transition variables list
+                x number of age groups x number of risk groups).
         """
 
         return self.get_current_rates_array() / num_timesteps
@@ -477,24 +474,23 @@ class TransitionVariable(ABC):
     is dynamically assigned, just like in the case of
     TransitionVariableGroup instantiation.
 
-    Attributes
-    ----------
-    _transition_type : str,
-        only values defined in TransitionTypes Enum are valid, specifying
-        probability distribution of transitions between compartments.
-    get_current_rate : function,
-        provides specific implementation for computing current rate
-        as a function of current simulation state and epidemiological parameters.
-    current_rate : np.ndarray,
-        holds output from get_current_rate method -- used to generate
-        random variable realizations for transitions between compartments.
-    current_val : np.ndarray,
-        holds realization of random variable parameterized by current_rate.
-    history_vals_list : list[np.ndarray],
-        each element is the same size of current_val, holds
-        history of transition variable realizations for age-risk
-        groups -- element t corresponds to previous current_val value
-        at end of simulation day t.
+    Attributes:
+        _transition_type (str):
+            only values defined in TransitionTypes Enum are valid, specifying
+            probability distribution of transitions between compartments.
+        get_current_rate (function):
+            provides specific implementation for computing current rate
+            as a function of current simulation state and epidemiological parameters.
+        current_rate (np.ndarray):
+            holds output from get_current_rate method -- used to generate
+            random variable realizations for transitions between compartments.
+        current_val (np.ndarray):
+            holds realization of random variable parameterized by current_rate.
+        history_vals_list (list[np.ndarray]):
+            each element is the same size of current_val, holds
+            history of transition variable realizations for age-risk
+            groups -- element t corresponds to previous current_val value
+            at end of simulation day t.
 
     See __init__ docstring for other attributes.
     """
@@ -506,20 +502,19 @@ class TransitionVariable(ABC):
                  transition_type,
                  is_jointly_distributed=False):
         """
-        Parameters
-        ----------
-        name : str,
-            user-specified name for compartment.
-        origin : EpiCompartment,
-            the compartment from which Transition Variable exits.
-        destination : EpiCompartment,
-            compartment that the TransitionVariable enters.
-        transition_type : str,
-            only values defined in TransitionTypes Enum are valid, specifying
-            probability distribution of transitions between compartments.
-        is_jointly_distributed : Boolean,
-            indicates if transition quantity must be jointly computed
-            (i.e. if there are multiple outflows from the origin compartment).
+        Parameters:
+            name (str):
+                user-specified name for compartment.
+            origin (EpiCompartment):
+                the compartment from which Transition Variable exits.
+            destination (EpiCompartment):
+                compartment that the TransitionVariable enters.
+            transition_type (str):
+                only values defined in TransitionTypes Enum are valid, specifying
+                probability distribution of transitions between compartments.
+            is_jointly_distributed (bool):
+                indicates if transition quantity must be jointly computed
+                (i.e. if there are multiple outflows from the origin compartment).
         """
 
         self.name = name
@@ -550,20 +545,18 @@ class TransitionVariable(ABC):
         Output should be a numpy array of size A x L, where A is
         sim_state.num_age_groups and L is sim_state.num_risk_groups.
 
-        Parameters
-        ----------
-        sim_state : SimState,
-            holds simulation state (current values of StateVariable instances).
-        fixed_params : FixedParams,
-            holds values of epidemiological parameters.
+        Args:
+            sim_state (SimState):
+                holds simulation state (current values of StateVariable instances).
+            fixed_params (FixedParams):
+                holds values of epidemiological parameters.
 
-        Returns
-        -------
-        np.ndarray,
-            holds age-risk transition rate,
-            must be same shape as origin.init_val,
-            i.e. be size A x L, where A is sim_state.num_age_groups
-            and L is sim_state.num_risk_groups.
+        Returns:
+            (np.ndarray):
+                holds age-risk transition rate,
+                must be same shape as origin.init_val,
+                i.e. be size A x L, where A is sim_state.num_age_groups
+                and L is sim_state.num_risk_groups.
         """
         pass
 
@@ -652,21 +645,20 @@ class StateVariableManager:
     Schedule instances. Note that TransitionVariable
     and TransitionVariableGroup instances are NOT included here.
 
-    Attributes
-    ----------
-    compartments : list,
-        list of all the model's EpiCompartment instances.
-    epi_metrics : list,
-        list of all the model's EpiMetric instances.
-    dynamic_vals : list,
-        list of all the model's DynamicVal instances.
-    schedules : list,
-        list of all the model's Schedule instances.
-    sim_state : SimState,
-        data container for the model's current values of its
-        StateVariable instances -- the name of each field
-        nust match the "name" attribute of a corresponding
-        StateVariable.
+    Attributes:
+        compartments (list):
+            list of all the model's EpiCompartment instances.
+        epi_metrics (list):
+            list of all the model's EpiMetric instances.
+        dynamic_vals (list):
+            list of all the model's DynamicVal instances.
+        schedules (list):
+            list of all the model's Schedule instances.
+        sim_state (SimState):
+            data container for the model's current values of its
+            StateVariable instances -- the name of each field
+            nust match the "name" attribute of a corresponding
+            StateVariable.
     """
 
     compartments: Optional[list] = None
@@ -698,24 +690,23 @@ class EpiCompartment(StateVariable):
 
     Inherits attributes from StateVariable.
 
-    Attributes
-    ----------
-    current_val : np.ndarray,
-        same size as init_val, holds current value of EpiCompartment
-        for age-risk groups.
-    current_inflow : np.ndarray,
-        same size as current_val, used to sum up all
-        transition variable realizations incoming to this compartment
-        for age-risk groups.
-    current_outflow : np.ndarray,
-        same size of current_val, used to sum up all
-        transition variable realizations outgoing from this compartment
-        for age-risk groups.
-    history_vals_list : list[np.ndarray],
-        each element is the same size of current_val, holds
-        history of compartment states for age-risk groups --
-        element t corresponds to previous current_val value at
-        end of simulation day t.
+    Attributes:
+        current_val (np.ndarray):
+            same size as init_val, holds current value of EpiCompartment
+            for age-risk groups.
+        current_inflow (np.ndarray):
+            same size as current_val, used to sum up all
+            transition variable realizations incoming to this compartment
+            for age-risk groups.
+        current_outflow (np.ndarray):
+            same size of current_val, used to sum up all
+            transition variable realizations outgoing from this compartment
+            for age-risk groups.
+        history_vals_list (list[np.ndarray]):
+            each element is the same size of current_val, holds
+            history of compartment states for age-risk groups --
+            element t corresponds to previous current_val value at
+            end of simulation day t.
     """
 
     def __init__(self,
@@ -766,21 +757,20 @@ class EpiMetric(StateVariable, ABC):
 
     Inherits attributes from StateVariable.
 
-    Additional Attributes
-    ---------------------
-    current_val : np.ndarray,
-        same size as init_val, holds current value of State Variable
-        for age-risk groups.
-    change_in_current_val : np.ndarray,
-        initialized to None, but during simulation holds change in
-        current value of EpiMetric for age-risk groups
-        (size A x L, where A is number of risk groups and L is number
-        of age groups).
-    history_vals_list : list[np.ndarray],
-        each element is the same size of current_val, holds
-        history of transition variable realizations for age-risk
-        groups -- element t corresponds to previous current_val value
-        at end of simulation day t.
+    Additional Attributes:
+        current_val (np.ndarray):
+            same size as init_val, holds current value of State Variable
+            for age-risk groups.
+        change_in_current_val : (np.ndarray):
+            initialized to None, but during simulation holds change in
+            current value of EpiMetric for age-risk groups
+            (size A x L, where A is number of risk groups and L is number
+            of age groups).
+        history_vals_list (list[np.ndarray]):
+            each element is the same size of current_val, holds
+            history of transition variable realizations for age-risk
+            groups -- element t corresponds to previous current_val value
+            at end of simulation day t.
 
     See __init__ docstring for other attributes.
     """
@@ -789,14 +779,14 @@ class EpiMetric(StateVariable, ABC):
                  name,
                  init_val):
         """
-        Parameters
-        ----------
-        name : str,
-            name of EpiMetric.
-        init_val : 2D np.ndarray of nonnegative floats,
-            corresponding to initial value of dynamic val,
-            where i,jth entry corresponds to age group i and
-            risk group j.
+        Args:
+            name (str):
+                name of EpiMetric.
+            init_val (np.ndarray):
+                2D array that contains nonnegative floats,
+                corresponding to initial value of dynamic val,
+                where i,jth entry corresponds to age group i and
+                risk group j.
         """
 
         super().__init__(name, init_val)
@@ -816,21 +806,18 @@ class EpiMetric(StateVariable, ABC):
         Output should be a numpy array of size A x L, where A is
         sim_state.num_age_groups and L is sim_state.num_risk_groups.
 
-        Parameters
-        ----------
-        sim_state : SimState,
-            holds simulation state (current values of StateVariable
-            instances).
-        fixed_params : FixedParams,
-            holds values of epidemiological parameters.
-        num_timesteps : int,
-            number of timesteps -- used to determine time interval
-            length for discretization.
+        Args:
+            sim_state (SimState):
+                holds simulation state (current values of StateVariable
+                instances).
+            fixed_params (FixedParams):
+                holds values of epidemiological parameters.
+            num_timesteps (int):
+                number of timesteps -- used to determine time interval
+                length for discretization.
 
-        Returns
-        -------
-
-        np.ndarray,
+        Returns:
+        (np.ndarray):
             size A x L, where A is sim_state.num_age_groups and L is
             sim_state.num_risk_groups.
         """
@@ -869,13 +856,12 @@ class DynamicVal(StateVariable, ABC):
 
     Inherits attributes from StateVariable.
 
-    Attributes
-    ----------
-    history_vals_list : list[np.ndarrays],
-        each element is the same size of current_val, holds
-        history of transition variable realizations for age-risk
-        groups -- element t corresponds to previous current_val value
-        at end of simulation day t.
+    Attributes:
+        history_vals_list (list[np.ndarrays]):
+            each element is the same size of current_val, holds
+            history of transition variable realizations for age-risk
+            groups -- element t corresponds to previous current_val value
+            at end of simulation day t.
 
     See __init__ docstring for other attributes.
     """
@@ -885,12 +871,11 @@ class DynamicVal(StateVariable, ABC):
                  init_val: Optional[Union[np.ndarray, float]] = None):
         """
 
-        Parameters
-        ----------
-        name : str,
-            unique identifier for dynamic val
-        init_val : Optional[Union[np.ndarray, float]]
-            starting value(s) at the beginning of the simulation
+        Args:
+            name (str):
+                unique identifier for dynamic val
+            init_val (Optional[Union[np.ndarray, float]]):
+                starting value(s) at the beginning of the simulation
         """
 
         super().__init__(name, init_val)
@@ -929,16 +914,15 @@ class Schedule(StateVariable, ABC):
                  init_val: Optional[Union[np.ndarray, float]] = None,
                  timeseries_df: Optional[dict] = None):
         """
-        Parameters
-        ----------
-        name : str,
-            unique identifier for schedule
-        init_val : Optional[Union[np.ndarray, float]]
-            starting value(s) at the beginning of the simulation
-        timeseries_df : Optional[pd.DataFrame] = None,
-            has a "date" column with strings in format "YYYY-MM-DD"
-            of consecutive calendar days, and other columns
-            corresponding to values on those days
+        Args:
+            name (str):
+                unique identifier for schedule
+            init_val (Optional[Union[np.ndarray, float]]):
+                starting value(s) at the beginning of the simulation
+            timeseries_df (Optional[pd.DataFrame] = None):
+                has a "date" column with strings in format "YYYY-MM-DD"
+                of consecutive calendar days, and other columns
+                corresponding to values on those days
         """
 
         super().__init__(name, init_val)
@@ -950,11 +934,10 @@ class Schedule(StateVariable, ABC):
         Subclasses must provide a concrete implementation of
         updating self.current_val in-place.
 
-        Parameters
-        ----------
-        current_date : date,
-            real-world date corresponding to
-            model's current simulation day.
+        Args:
+            current_date (date):
+                real-world date corresponding to
+                model's current simulation day.
         """
         pass
 
@@ -976,30 +959,29 @@ class TransmissionModel:
     transition_variables, and transition_variable_groups.
     The "flow" and "physics" information are stored on the objects.
 
-    Parameters
-    ----------
-    state_variable_manager : StateVariableManager,
-        holds all the model's StateVariable instances.
-    transition_variables : list-like,
-        list of all the model's TransitionVariable instances.
-    transition_variable_groups : list-like,
-        list of all the model's TransitionVariableGroup instances.
-    fixed_params : FixedParams,
-        data container for the model's epidemiological parameters,
-        such as the "Greek letters" characterizing sojourn times
-        in compartments.
-    config : Config,
-        data container for the model's simulation configuration values.
-    RNG : np.random.Generator object,
-        used to generate random variables and control reproducibility.
-    current_simulation_day : int,
-        tracks current simulation day -- incremented by +1
-        when config.timesteps_per_day discretized timesteps
-        have completed.
-    lookup_by_name : dict,
-        keys are names of StateVariable, TransitionVariable,
-        and TransitionVariableGroup instances associated
-        with the model -- values are the actual object.
+    Attributes:
+        state_variable_manager (StateVariableManager):
+            holds all the model's StateVariable instances.
+        transition_variables (list):
+            list of all the model's TransitionVariable instances.
+        transition_variable_groups (list):
+            list of all the model's TransitionVariableGroup instances.
+        fixed_params (FixedParams):
+            data container for the model's epidemiological parameters,
+            such as the "Greek letters" characterizing sojourn times
+            in compartments.
+        config (Config):
+            data container for the model's simulation configuration values.
+        RNG (np.random.Generator object):
+            used to generate random variables and control reproducibility.
+        current_simulation_day (int):
+            tracks current simulation day -- incremented by +1
+            when config.timesteps_per_day discretized timesteps
+            have completed.
+        lookup_by_name (dict):
+            keys are names of StateVariable, TransitionVariable,
+            and TransitionVariableGroup instances associated
+            with the model -- values are the actual object.
 
     See __init__ docstring for other attributes.
     """
@@ -1014,11 +996,10 @@ class TransmissionModel:
         """
         TODO: maybe group arguments together into dataclass to simplify?
 
-        Parameters
-        ----------
-        RNG_seed: positive int,
-            used to initialize the model's RNG for generating
-            random variables and random transitions.
+        Args:
+            RNG_seed (positive int):
+                used to initialize the model's RNG for generating
+                random variables and random transitions.
 
         See class docstring for other parameters.
         """
@@ -1058,10 +1039,9 @@ class TransmissionModel:
         Modifies model's RNG attribute in-place to new generator
         seeded at new_seed_number.
 
-        Parameters
-        ----------
-        new_seed_number: int,
-            used to re-seed model's random number generator.
+        Args:
+            new_seed_number (int):
+                used to re-seed model's random number generator.
         """
 
         self._bit_generator = np.random.MT19937(seed=new_seed_number)
@@ -1095,11 +1075,10 @@ class TransmissionModel:
         Save daily simulation data as history on each EpiCompartment
         instance.
 
-        Parameters
-        ----------
-        last_simulation_day : positive int,
-            stop simulation at last_simulation_day (i.e. exclusive,
-            simulate up to but not including last_simulation_day).
+        Args:
+            last_simulation_day (positive int):
+                stop simulation at last_simulation_day (i.e. exclusive,
+                simulate up to but not including last_simulation_day).
         """
 
         if self.current_simulation_day > last_simulation_day:
@@ -1279,28 +1258,27 @@ class ModelConstructor(ABC):
     initial values and epidemiological structure are
     populated by user-specified JSON files.
 
-    Attributes
-    ----------
-    config : Config,
-        holds configuration values.
-    fixed_params : FixedParams,
-        holds epidemiological parameter values, read
-        from user-specified JSON.
-    sim_state : SimState,
-        holds current values of StateVariable instances,
-        read from user-specified JSON.
-    compartment_lookup : dict,
-        maps "name" attribute to EpiCompartment.
-    epi_metric_lookup : dict,
-        maps "name" attribute to EpiMetric.
-    dynamic_val_lookup : dict,
-        maps "name" attribute to DynamicVal.
-    schedule_lookup : dict,
-        maps "name" attribute to Schedule.
-    transition_variable_lookup : dict,
-        maps "name" attribute to TransitionVariable.
-    transition_variable_group_lookup : dict,
-        maps "name" attribute to TransitionVariableGroup.
+    Attributes:
+        config (Config):
+            holds configuration values.
+        fixed_params (FixedParams):
+            holds epidemiological parameter values), read
+            from user-specified JSON.
+        sim_state (SimState):
+            holds current values of StateVariable instances):
+            read from user-specified JSON.
+        compartment_lookup (dict):
+            maps "name" attribute to EpiCompartment.
+        epi_metric_lookup (dict):
+            maps "name" attribute to EpiMetric.
+        dynamic_val_lookup (dict):
+            maps "name" attribute to DynamicVal.
+        schedule_lookup (dict):
+            maps "name" attribute to Schedule.
+        transition_variable_lookup (dict):
+            maps "name" attribute to TransitionVariable.
+        transition_variable_group_lookup (dict):
+            maps "name" attribute to TransitionVariableGroup.
     """
 
     def __init__(self):
@@ -1329,15 +1307,14 @@ class ModelConstructor(ABC):
         Create instance of class dataclass_ref,
         based on information in json_filepath.
 
-        Parameters
-        ----------
-        dataclass_ref : dataclass class (class, not instance)
-            from which to create instance.
-        json_filepath : str,
-            path to json file (path includes actual filename
-            with suffix ".json") -- all json fields must
-            match name and datatype of dataclass_ref instance
-            attributes.
+        Args:
+            dataclass_ref (Type[Union[Config, SimState, FixedParams]]):
+                (class, not instance) from which to create instance.
+            json_filepath (str):
+                path to json file (path includes actual filename
+                with suffix ".json") -- all json fields must
+                match name and datatype of dataclass_ref instance
+                attributes.
 
         Returns
         -------
@@ -1415,16 +1392,15 @@ class ModelConstructor(ABC):
         the model's StateVariable instances -- populates its sim_state
         attribute with initial values of the StateVariable instances.
 
-        Parameters
-        ----------
-        compartments_list : list,
-            list of all the model's EpiCompartment instances.
-        epi_metrics_list : list,
-            list of all the model's EpiMetric instances.
-        dynamic_vals_list : list,
-            list of all the model's DynamicVal instances.
-        schedules_list : list,
-            list of all the model's Schedule instances.
+        Args:
+            compartments_list (list):
+                list of all the model's EpiCompartment instances.
+            epi_metrics_list (list):
+                list of all the model's EpiMetric instances.
+            dynamic_vals_list (list):
+                list of all the model's DynamicVal instances.
+            schedules_list (list):
+                list of all the model's Schedule instances.
 
         Returns
         -------
@@ -1445,18 +1421,16 @@ class ModelConstructor(ABC):
 
     def create_transmission_model(self, RNG_seed) -> TransmissionModel:
         """
-        Parameters
-        ----------
-        RNG_seed : int,
-            used to initialize the model's RNG for generating
-            random variables and random transitions.
+        Args:
+            RNG_seed (int):
+                used to initialize the model's RNG for generating
+                random variables and random transitions.
 
-        Returns
-        -------
-        TransmissionModel instance,
-            initial values and epidemiological parameters
-            are loaded from user-specified JSON files during
-            ModelConstructor initialization.
+        Returns:
+            (TransmissionModel instance):
+                initial values and epidemiological parameters
+                are loaded from user-specified JSON files during
+                ModelConstructor initialization.
         """
 
         # Setup objects for model
