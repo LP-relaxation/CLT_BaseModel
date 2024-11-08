@@ -43,68 +43,70 @@ class FluFixedParams(base.FixedParams):
     TODO: when adding multiple strains, need to add subscripts
         to math of attributes and add strain-specific description
 
-    Note: for attribute description, "pseudo-LaTeX" is used --
-    backslashes are omitted due to their incompatibility
-    with Python docstrings.
+    Note:
+        For attribute description, "pseudo-LaTeX" is used --
+        backslashes are omitted due to their incompatibility
+        with Python docstrings.
 
-    Attributes
-    ----------
-    :param num_age_groups: number of age groups
-            math variable: $|A|$, where $A$ is the set of age groups
-    :param num_risk_groups: number of risk groups
-            math variable: $|L|$, where $L$ is the set of risk groups
-    :param beta_baseline: transmission rate
-            math variable: $beta_0$
-    :param total_population_val: total number in population,
-        summed across all age-risk groups
-            math variable: $N$
-    :param humidity_impact: coefficient that determines
-        how much absolute humidity affects beta_baseline
-            math variable: $xi$
-    :param immunity_hosp_increase_factor: factor by which
-        population-level immunity against hospitalization
-        grows after each case that recovers
-            math variable: $g^H$
-    :param immunity_inf_increase_factor: factor by which
-        population-level immunity against infection
-        grows after each case that recovers
-            math variable: $g^I$
-    :param immunity_saturation_constant: positive constant
-        modeling saturation of antibody production of individuals
-            math variable: $o$
-    :param waning_factor_hosp: rate at which infection-induced
-        immunity against hospitalization wanes
-            math variable: $w^H$
-    :param waning_factor_inf: rate at which infection-induced
-        immunity against infection wanes
-            math variable: $w^I$
-    :param hosp_risk_reduction: reduction in hospitalization
-        risk from infection-induced immunity
-            math variable: $K^H$
-    :param inf_risk_reduction: reduction in infection risk
-        from infection-induced immunity
-            math variable: $K^I$
-    :param death_risk_reduction: reduction in death risk
-        from infection-induced immunity
-            math variable: $K^D$
-    :param R_to_S_rate: rate at which people in R move to S
-            math variable: $eta$
-    :param E_to_I_rate: rate at which people in E move to I
-            math variable: $omega$
-    :param I_to_R_rate: rate at which people in I move to R
-            math variable: $gamma$
-    :param I_to_H_rate: rate at which people in I move to H
-            math variable: $zeta$
-    :param H_to_R_rate: rate at which people in H move to R
-            math variable: $gamma_H$
-    :param H_to_D_rate: rate at which people in H move to D
-            math variable: $pi$
-    :param I_to_H_adjusted_proportion: rate-adjusted proportion
-        infected who are hospitalized based on age-risk groups
-            math variable: $[tilde{mu}_{a, ell}]$
-    :param H_to_D_adjusted_proportion: rate-adjusted proportion
-        hospitalized who die based on age-risk groups
-            math variable: $[tilde{nu}_{a, ell}]$
+    Attributes:
+        num_age_groups (positive int):
+            number of age groups -- math variable:
+            $|A|$, where $A$ is the set of age groups.
+        num_risk_groups (positive int):
+            number of risk groups -- math variable:
+            $|L|$, where $L$ is the set of risk groups.
+        beta_baseline (positive float): transmission rate
+            -- math variable: $beta_0$.
+        total_population_val (np.ndarray of positive ints):
+            total number in population, summed across all
+            age-risk groups -- math variable: $N$.
+        humidity_impact (positive float):
+            coefficient that determines how much absolute
+            humidity affects beta_baseline -- math variable: $xi$.
+        immunity_hosp_increase_factor (positive float):
+            factor by which population-level immunity
+            against hospitalization grows after each
+            case that recovers -- math variable: $g^H$.
+        immunity_inf_increase_factor (positive float):
+            factor by which population-level immunity
+            against infection grows after each case
+                that recovers -- math variable: $g^I$.
+        immunity_saturation_constant (positive float):
+            constant modeling saturation of antibody
+            production of individuals -- math variable: $o$.
+        waning_factor_hosp (positive float):
+            rate at which infection-induced immunity
+            against hospitalization wanes -- math variable: $w^H$.
+        waning_factor_inf (positive float):
+            rate at which infection-induced immunity
+            against infection wanes -- math variable: $w^I$.
+        hosp_risk_reduction (positive float in [0,1]):
+            reduction in hospitalization risk from
+            infection-induced immunity -- math variable: $K^H$.
+        inf_risk_reduction (positive float in [0,1]):
+            reduction in infection risk
+            from infection-induced immunity -- math variable: $K^I$.
+        death_risk_reduction (positive float in [0,1]):
+            reduction in death risk from infection-induced immunity
+            -- math variable: $K^D$.
+        R_to_S_rate (positive float):
+            rate at which people in R move to S -- math variable: $eta$.
+        E_to_I_rate (positive float):
+            rate at which people in E move to I -- math variable: $omega$.
+        I_to_R_rate (positive float):
+            rate at which people in I move to R -- math variable: $gamma$.
+        I_to_H_rate (positive float):
+            rate at which people in I move to H -- math variable: $zeta$.
+        H_to_R_rate (positive float):
+            rate at which people in H move to R -- math variable: $gamma_H$.
+        H_to_D_rate (positive float):
+            rate at which people in H move to D -- math variable: $pi$.
+        I_to_H_adjusted_proportion (np.ndarray of positive floats in [0,1]):
+            rate-adjusted proportion -- infected who are hospitalized
+            based on age-risk groups -- math variable: $[tilde{mu}_{a, ell}]$.
+        H_to_D_adjusted_proportion (np.ndarray of positive floats in [0,1]):
+            rate-adjusted proportion hospitalized who die based on
+            age-risk groups -- math variable: $[tilde{nu}_{a, ell}]$.
     """
 
     num_age_groups: Optional[int] = None
@@ -145,45 +147,50 @@ class FluSimState(base.SimState):
     For example, np.array([[100]]) is correct --
     np.array([100]) is wrong.
 
-    Attributes
-    ----------
-    :param S: susceptible compartment for age-risk groups
-        (EpiCompartment current_val)
-            math variable: $S$
-    :param E: exposed compartment for age-risk groups
-        (EpiCompartment current_val)
-            math variable: $E$
-    :param I: infected compartment for age-risk groups
-        (EpiCompartment current_val)
-            math variable: $I$
-    :param H: hospital compartment for age-risk groups
-        (EpiCompartment current_val)
-            math variable: $H$
-    :param R: recovered compartment for age-risk groups
-        (EpiCompartment current_val)
-            math variable: $R$
-    :param D: dead compartment for age-risk groups
-        (EpiCompartment current_val)
-            math variable: $D$
-    :param population_immunity_hosp: infection-induced
-        population-level immunity against hospitalization, for
-        age-risk groups (EpiMetric current_val)
-            math variable: $M^H$
-    :param population_immunity_inf: infection-induced
-        population-level immunity against infection, for
-        age-risk groups (EpiMetric current_val)
-            math variable: $M^I$
-    :param absolute_humidity: float,
-        grams of water vapor per cubic meter g/m^3,
-        used as seasonality parameter that influences
-        transmission rate beta_baseline
-            math variable: $q$
-    :param flu_contact_matrix: np.ndarray,
-        A x L x A x L array, where A is the number of age
-        groups and L is the number of risk groups --
-        element (a, l, a', l') corresponds to the number of
-        contacts that a person in age-risk group a,l
-        has with people in age-risk group a', l'
+    Attributes:
+        S (np.ndarray of positive floats):
+            susceptible compartment for age-risk groups --
+            (holds current_val of EpiCompartment "S")
+            -- math variable: $S$.
+        E (np.ndarray of positive floats):
+            exposed compartment for age-risk groups --
+            (holds current_val of EpiCompartment "E")
+            -- math variable: $E$.
+        I (np.ndarray of positive floats):
+            infected compartment for age-risk groups
+            (holds current_val of EpiCompartment "I")
+            -- math variable: $I$.
+        H (np.ndarray of positive floats):
+            hospital compartment for age-risk groups
+            (holds current_val of EpiCompartment "H")
+            -- math variable: $H$.
+        R (np.ndarray of positive floats):
+            recovered compartment for age-risk groups
+            (holds current_val of EpiCompartment "R")
+            -- math variable: $R$.
+        D (np.ndarray of positive floats):
+            dead compartment for age-risk groups
+            (holds current_val of EpiCompartment "D")
+            -- math variable: $D$.
+        population_immunity_hosp (np.ndarray of positive floats):
+            infection-induced population-level immunity against
+            hospitalization, for age-risk groups (holds current_val
+            of EpiMetric "population_immunity_hosp") -- math variable: $M^H$.
+        population_immunity_inf (np.ndarray of positive floats):
+            infection-induced population-level immunity against
+            infection, for age-risk groups (holds current_val
+            of EpiMetric "population_immunity_inf") -- math variable: $M^I$.
+        absolute_humidity (positive float):
+            grams of water vapor per cubic meter g/m^3,
+            used as seasonality parameter that influences
+            transmission rate beta_baseline -- math variable: $q$.
+        flu_contact_matrix (np.ndarray of positive floats):
+            A x L x A x L array, where A is the number of age
+            groups and L is the number of risk groups --
+            element (a, l, a', l') corresponds to the number of
+            contacts that a person in age-risk group a,l
+            has with people in age-risk group a', l' --
+            math variable: "phi$.
     """
 
     S: Optional[np.ndarray] = None
@@ -332,13 +339,16 @@ def absolute_humidity_func(current_date: datetime.date):
     # max_value = 12.5
     # 0.00027 = (max_value - k) / ((0 - h) ** 2)
 
-    :param current_date: datetime.date,
-        datetime.date object corresponding to
-        real-world date
-    :return: float,
-        nonnegative float between 3.8 and 12.5
-        corresponding to absolute humidity
-        that day of the year
+    Args:
+        current_date (datetime.date):
+            datetime.date object corresponding to
+            real-world date
+
+    Returns:
+        (float):
+            nonnegative float between 3.8 and 12.5
+            corresponding to absolute humidity
+            that day of the year
     """
 
     # Convert datetime.date to integer between 1 and 365
@@ -362,19 +372,17 @@ class AbsoluteHumidity(base.Schedule):
 class FluContactMatrix(base.Schedule):
     """
 
-    Attributes
-    ----------
-    :param timeseries_df: pd.DataFrame,
-        has a "date" column with strings in format "YYYY-MM-DD"
-        of consecutive calendar days, and other columns
-        named "is_school_day" (bool) and "is_work_day" (bool)
-        corresponding to type of day
-    :param total_contact_matrix: np.ndarray,
-        (A x L) x (A x L) np.ndarray, where A is the number
-        of age groups and L is the number of risk groups
+    Attributes:
+        timeseries_df (pd.DataFrame):
+            has a "date" column with strings in format "YYYY-MM-DD"
+            of consecutive calendar days, and other columns
+            named "is_school_day" (bool) and "is_work_day" (bool)
+            corresponding to type of day.
+        total_contact_matrix (np.ndarray):
+            (A x L) x (A x L) np.ndarray, where A is the number
+            of age groups and L is the number of risk groups.
 
     See parent class docstring for other attributes.
-
     """
 
     def __init__(self,
@@ -396,9 +404,10 @@ class FluContactMatrix(base.Schedule):
         Subclasses must provide a concrete implementation of
         updating self.current_val in-place
 
-        :param current_date: date,
-            real-world date corresponding to
-            model's current simulation day
+        Args:
+            current_date (datetime.date):
+                real-world date corresponding to
+                model's current simulation day
         """
 
         df = self.time_series_df
@@ -450,27 +459,26 @@ class FluModelConstructor(base.ModelConstructor):
     Transition rates and update formulas are specified in
         corresponding classes.
 
-    Attributes
-    ----------
-    :param config: Config dataclass instance,
-        holds configuration values
-    :param fixed_params: FluFixedParams dataclass instance,
-        holds epidemiological parameter values, read-in
-        from user-specified JSON
-    :param sim_state: FluSimState dataclass instance,
-        holds current simulation state information,
-        such as current values of epidemiological compartments
-        and epi metrics, read in from user-specified JSON
-    :param transition_variable_lookup: dict,
-        maps string to corresponding TransitionVariable
-    :param transition_variable_group_lookup: dict,
-        maps string to corresponding TransitionVariableGroup
-    :param compartment_lookup: dict,
-        maps string to corresponding EpiCompartment,
-        using the value of the EpiCompartment's "name" attribute
-    :param epi_metric_lookup: dict,
-        maps string to corresponding EpiMetric,
-        using the value of the EpiMetric's "name" attribute
+    Attributes:
+        config (Config):
+            holds configuration values.
+        fixed_params (FluFixedParams):
+            holds epidemiological parameter values, read-in
+            from user-specified JSON.
+        sim_state (FluSimState):
+            holds current simulation state information,
+            such as current values of epidemiological compartments
+            and epi metrics, read in from user-specified JSON.
+        transition_variable_lookup (dict):
+            maps string to corresponding TransitionVariable.
+        transition_variable_group_lookup (dict):
+            maps string to corresponding TransitionVariableGroup.
+        compartment_lookup (dict):
+            maps string to corresponding EpiCompartment,
+            using the value of the EpiCompartment's "name" attribute.
+        epi_metric_lookup (dict):
+            maps string to corresponding EpiMetric,
+            using the value of the EpiMetric's "name" attribute.
     """
 
     def __init__(self,
@@ -486,21 +494,22 @@ class FluModelConstructor(base.ModelConstructor):
         the respective attribute (config, fixed_params, or sim_state)
         before using constructor to create a model.
 
-        :param config_filepath: Optional[str],
-            path to config JSON file (path includes actual filename
-            with suffix ".json") -- all JSON fields must match
-            name and datatype of Config instance attributes
-        :param fixed_params_filepath: Optional[str],
-            path to epidemiological parameters JSON file
-            (path includes actual filename with suffix ".json")
-            -- all JSON fields must match name and datatype of
-            FixedParams instance attributes
-        :param state_vars_init_vals_filepath: Optional[str],
-            path to epidemiological compartments JSON file
-            (path includes actual filename with suffix ".json")
-            -- all JSON fields must match name and datatype of
-            StateVariable instance attributes -- these initial
-            values are used to populate sim_state attribute
+        Attributes:
+            config_filepath (Optional[str]):
+                path to config JSON file (path includes actual filename
+                with suffix ".json") -- all JSON fields must match
+                name and datatype of Config instance attributes.
+            fixed_params_filepath (Optional[str]):
+                path to epidemiological parameters JSON file
+                (path includes actual filename with suffix ".json")
+                -- all JSON fields must match name and datatype of
+                FixedParams instance attributes.
+            state_vars_init_vals_filepath (Optional[str]):
+                path to epidemiological compartments JSON file
+                (path includes actual filename with suffix ".json")
+                -- all JSON fields must match name and datatype of
+                StateVariable instance attributes -- these initial
+                values are used to populate sim_state attribute.
         """
 
         # Use same init method as abstract class --

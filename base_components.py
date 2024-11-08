@@ -571,7 +571,8 @@ class TransitionVariable(ABC):
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
 
-        WARNING: deep copying is CRUCIAL because current_val is a mutable
+        WARNING:
+            deep copying is CRUCIAL because current_val is a mutable
             np.ndarray -- without deep copying, history_vals_list would
             have the same value for all elements
         """
@@ -733,7 +734,8 @@ class EpiCompartment(StateVariable):
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
 
-        WARNING: deep copying is CRUCIAL because current_val is a mutable
+        WARNING:
+            deep copying is CRUCIAL because current_val is a mutable
             np.ndarray -- without deep copying, history_vals_list would
             have the same value for all elements
         """
@@ -757,7 +759,7 @@ class EpiMetric(StateVariable, ABC):
 
     Inherits attributes from StateVariable.
 
-    Additional Attributes:
+    Attributes:
         current_val (np.ndarray):
             same size as init_val, holds current value of State Variable
             for age-risk groups.
@@ -831,7 +833,8 @@ class EpiMetric(StateVariable, ABC):
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
 
-        WARNING: deep copying is CRUCIAL because current_val is a mutable
+        WARNING:
+            deep copying is CRUCIAL because current_val is a mutable
             np.ndarray -- without deep copying, history_vals_list would
             have the same value for all elements
         """
@@ -886,7 +889,8 @@ class DynamicVal(StateVariable, ABC):
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
 
-        WARNING: deep copying is CRUCIAL because current_val is a mutable
+        WARNING:
+            deep copying is CRUCIAL because current_val is a mutable
             np.ndarray -- without deep copying, history_vals_list would
             have the same value for all elements
         """
@@ -1234,9 +1238,10 @@ class TransmissionModel:
         Clears history on model's compartments, transition variables,
         and dynamic vals.
 
-        WARNING: DOES NOT RESET THE MODEL'S RANDOM NUMBER GENERATOR TO
-        ITS INITIAL STARTING SEED. RANDOM NUMBER GENERATOR WILL CONTINUE
-        WHERE IT LEFT OFF.
+        WARNING:
+            DOES NOT RESET THE MODEL'S RANDOM NUMBER GENERATOR TO
+            ITS INITIAL STARTING SEED. RANDOM NUMBER GENERATOR WILL CONTINUE
+            WHERE IT LEFT OFF.
 
         Use method modify_random_seed to reset model's RNG to its
         initial starting seed.
