@@ -50,17 +50,13 @@ def approx_binomial_probability_from_rate(rate: np.ndarray,
 
     Parameters
     ----------
-    rate : np.ndarray of positive scalars
-        dimension A x L (number of age groups
-        x number of risk groups), rate parameters
-        in a Poisson distribution.
-    interval_length : positive scalar
-        length of time interval in simulation days.
+        rate (np.ndarray): dimension A x L (number of age groups
+            x number of risk groups), rate parameters in a Poisson distribution.
+        interval_length (positive int): length of time interval in simulation days.
 
     Returns
     -------
-    np.ndarray of positive scalars
-        dimension A x L
+        (np.ndarray): array of positive scalars, dimension A x L
     """
 
     return 1 - np.exp(-rate * interval_length)
@@ -73,18 +69,17 @@ class Config:
 
     Parameters
     ----------
-    timesteps_per_day : int,
-        number of discretized timesteps within a simulation
-        day -- more timesteps_per_day mean smaller discretization
-        time intervals, which may cause the model to run slower.
-    transition_type : str,
-        valid value must be from TransitionTypes, specifying the
-        probability distribution of transitions between compartments.
-    start_real_date : datetime.date,
-        actual date that aligns with the beginning of the simulation.
-    save_daily_history : bool,
-        True if each StateVariable saves state to history after
-        each simulation day -- set to False if want speedier performance.
+        timesteps_per_day (int): number of discretized timesteps within a simulation
+            day -- more timesteps_per_day mean smaller discretization
+            time intervals, which may cause the model to run slower.
+        transition_type (str): valid value must be from TransitionTypes,
+            specifying the probability distribution of transitions between
+            compartments.
+        start_real_date (datetime.date): actual date that aligns with the
+            beginning of the simulation.
+        save_daily_history (bool):, True if each StateVariable saves state to
+            history after each simulation day -- set to False if want speedier
+            performance.
     """
 
     timesteps_per_day: int = 7
@@ -156,6 +151,8 @@ class TransitionVariableGroup:
                  transition_type,
                  transition_variables):
         """
+        Parameters
+        ----------
         name : str,
             user-specified name for compartment.
         transition_type: str,
@@ -509,6 +506,8 @@ class TransitionVariable(ABC):
                  transition_type,
                  is_jointly_distributed=False):
         """
+        Parameters
+        ----------
         name : str,
             user-specified name for compartment.
         origin : EpiCompartment,
@@ -790,9 +789,11 @@ class EpiMetric(StateVariable, ABC):
                  name,
                  init_val):
         """
-        name: str,
+        Parameters
+        ----------
+        name : str,
             name of EpiMetric.
-        init_val: 2D np.ndarray of nonnegative floats,
+        init_val : 2D np.ndarray of nonnegative floats,
             corresponding to initial value of dynamic val,
             where i,jth entry corresponds to age group i and
             risk group j.
@@ -883,9 +884,12 @@ class DynamicVal(StateVariable, ABC):
                  name: str,
                  init_val: Optional[Union[np.ndarray, float]] = None):
         """
-        name: str,
+
+        Parameters
+        ----------
+        name : str,
             unique identifier for dynamic val
-        init_val: Optional[Union[np.ndarray, float]]
+        init_val : Optional[Union[np.ndarray, float]]
             starting value(s) at the beginning of the simulation
         """
 
