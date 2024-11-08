@@ -50,16 +50,16 @@ def approx_binomial_probability_from_rate(rate: np.ndarray,
 
     Parameters
     ----------
-    rate : np.ndarray of positive scalars,
+    rate : np.ndarray of positive scalars
         dimension A x L (number of age groups
         x number of risk groups), rate parameters
         in a Poisson distribution.
-    interval_length : positive scalar,
+    interval_length : positive scalar
         length of time interval in simulation days.
 
     Returns
     -------
-    np.ndarray of positive scalars,
+    np.ndarray of positive scalars
         dimension A x L
     """
 
@@ -1057,7 +1057,7 @@ class TransmissionModel:
         Parameters
         ----------
         new_seed_number: int,
-            used to re-seed model's random number generator
+            used to re-seed model's random number generator.
         """
 
         self._bit_generator = np.random.MT19937(seed=new_seed_number)
