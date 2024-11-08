@@ -49,60 +49,60 @@ class FluFixedParams(base.FixedParams):
 
     Attributes
     ----------
-    :ivar num_age_groups: number of age groups
+    :param num_age_groups: number of age groups
             math variable: $|A|$, where $A$ is the set of age groups
-    :ivar num_risk_groups: number of risk groups
+    :param num_risk_groups: number of risk groups
             math variable: $|L|$, where $L$ is the set of risk groups
-    :ivar beta_baseline: transmission rate
+    :param beta_baseline: transmission rate
             math variable: $beta_0$
-    :ivar total_population_val: total number in population,
+    :param total_population_val: total number in population,
         summed across all age-risk groups
             math variable: $N$
-    :ivar humidity_impact: coefficient that determines
+    :param humidity_impact: coefficient that determines
         how much absolute humidity affects beta_baseline
             math variable: $xi$
-    :ivar immunity_hosp_increase_factor: factor by which
+    :param immunity_hosp_increase_factor: factor by which
         population-level immunity against hospitalization
         grows after each case that recovers
             math variable: $g^H$
-    :ivar immunity_inf_increase_factor: factor by which
+    :param immunity_inf_increase_factor: factor by which
         population-level immunity against infection
         grows after each case that recovers
             math variable: $g^I$
-    :ivar immunity_saturation_constant: positive constant
+    :param immunity_saturation_constant: positive constant
         modeling saturation of antibody production of individuals
             math variable: $o$
-    :ivar waning_factor_hosp: rate at which infection-induced
+    :param waning_factor_hosp: rate at which infection-induced
         immunity against hospitalization wanes
             math variable: $w^H$
-    :ivar waning_factor_inf: rate at which infection-induced
+    :param waning_factor_inf: rate at which infection-induced
         immunity against infection wanes
             math variable: $w^I$
-    :ivar hosp_risk_reduction: reduction in hospitalization
+    :param hosp_risk_reduction: reduction in hospitalization
         risk from infection-induced immunity
             math variable: $K^H$
-    :ivar inf_risk_reduction: reduction in infection risk
+    :param inf_risk_reduction: reduction in infection risk
         from infection-induced immunity
             math variable: $K^I$
-    :ivar death_risk_reduction: reduction in death risk
+    :param death_risk_reduction: reduction in death risk
         from infection-induced immunity
             math variable: $K^D$
-    :ivar R_to_S_rate: rate at which people in R move to S
+    :param R_to_S_rate: rate at which people in R move to S
             math variable: $eta$
-    :ivar E_to_I_rate: rate at which people in E move to I
+    :param E_to_I_rate: rate at which people in E move to I
             math variable: $omega$
-    :ivar I_to_R_rate: rate at which people in I move to R
+    :param I_to_R_rate: rate at which people in I move to R
             math variable: $gamma$
-    :ivar I_to_H_rate: rate at which people in I move to H
+    :param I_to_H_rate: rate at which people in I move to H
             math variable: $zeta$
-    :ivar H_to_R_rate: rate at which people in H move to R
+    :param H_to_R_rate: rate at which people in H move to R
             math variable: $gamma_H$
-    :ivar H_to_D_rate: rate at which people in H move to D
+    :param H_to_D_rate: rate at which people in H move to D
             math variable: $pi$
-    :ivar I_to_H_adjusted_proportion: rate-adjusted proportion
+    :param I_to_H_adjusted_proportion: rate-adjusted proportion
         infected who are hospitalized based on age-risk groups
             math variable: $[tilde{mu}_{a, ell}]$
-    :ivar H_to_D_adjusted_proportion: rate-adjusted proportion
+    :param H_to_D_adjusted_proportion: rate-adjusted proportion
         hospitalized who die based on age-risk groups
             math variable: $[tilde{nu}_{a, ell}]$
     """
@@ -364,12 +364,12 @@ class FluContactMatrix(base.Schedule):
 
     Attributes
     ----------
-    :ivar timeseries_df: pd.DataFrame,
+    :param timeseries_df: pd.DataFrame,
         has a "date" column with strings in format "YYYY-MM-DD"
         of consecutive calendar days, and other columns
         named "is_school_day" (bool) and "is_work_day" (bool)
         corresponding to type of day
-    :ivar total_contact_matrix: np.ndarray,
+    :param total_contact_matrix: np.ndarray,
         (A x L) x (A x L) np.ndarray, where A is the number
         of age groups and L is the number of risk groups
 
@@ -452,23 +452,23 @@ class FluModelConstructor(base.ModelConstructor):
 
     Attributes
     ----------
-    :ivar config: Config dataclass instance,
+    :param config: Config dataclass instance,
         holds configuration values
-    :ivar fixed_params: FluFixedParams dataclass instance,
+    :param fixed_params: FluFixedParams dataclass instance,
         holds epidemiological parameter values, read-in
         from user-specified JSON
-    :ivar sim_state: FluSimState dataclass instance,
+    :param sim_state: FluSimState dataclass instance,
         holds current simulation state information,
         such as current values of epidemiological compartments
         and epi metrics, read in from user-specified JSON
-    :ivar transition_variable_lookup: dict,
+    :param transition_variable_lookup: dict,
         maps string to corresponding TransitionVariable
-    :ivar transition_variable_group_lookup: dict,
+    :param transition_variable_group_lookup: dict,
         maps string to corresponding TransitionVariableGroup
-    :ivar compartment_lookup: dict,
+    :param compartment_lookup: dict,
         maps string to corresponding EpiCompartment,
         using the value of the EpiCompartment's "name" attribute
-    :ivar epi_metric_lookup: dict,
+    :param epi_metric_lookup: dict,
         maps string to corresponding EpiMetric,
         using the value of the EpiMetric's "name" attribute
     """
