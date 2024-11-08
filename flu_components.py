@@ -333,11 +333,11 @@ def absolute_humidity_func(current_date: datetime.date):
 
     TODO: replace this function with real humidity function
 
-    # The following calculation is used to achieve the correct
-    #   upside-down parabola with the right min and max
-    #   values and location
-    # max_value = 12.5
-    # 0.00027 = (max_value - k) / ((0 - h) ** 2)
+    The following calculation is used to achieve the correct
+        upside-down parabola with the right min and max
+        values and location
+        max_value = 12.5
+        0.00027 = (max_value - k) / ((0 - h) ** 2)
 
     Args:
         current_date (datetime.date):
@@ -345,8 +345,7 @@ def absolute_humidity_func(current_date: datetime.date):
             real-world date
 
     Returns:
-        (float):
-            nonnegative float between 3.8 and 12.5
+        float: nonnegative float between 3.8 and 12.5
             corresponding to absolute humidity
             that day of the year
     """
