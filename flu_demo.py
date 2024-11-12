@@ -19,5 +19,3 @@ immunoseirs_model = immunoseirs_constructor.create_transmission_model(np.random.
 immunoseirs_model.simulate_until_time_period(200)
 
 create_basic_compartment_history_plot(immunoseirs_model)
-
-breakpoint()

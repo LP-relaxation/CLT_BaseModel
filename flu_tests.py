@@ -132,6 +132,3 @@ def test_reproducible_RNG(model):
     for compartment_name in original_model_history_dict.keys():
         assert np.array_equal(np.array(original_model_history_dict[compartment_name]),
                               np.array(reset_model_history_dict[compartment_name]))
-
-
-def test_contact_matrix_vectorization(model):

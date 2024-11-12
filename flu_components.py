@@ -40,7 +40,8 @@ class FluFixedParams(base.FixedParams):
     See FluSimState docstring for important formatting note
     on 2D arrays.
 
-    TODO: when adding multiple strains, need to add subscripts
+    TODO:
+        when adding multiple strains, need to add subscripts
         to math of attributes and add strain-specific description
 
     Attributes:
@@ -309,7 +310,7 @@ class BetaReduct(base.DynamicVal):
                 self.current_val = 0
 
 
-def absolute_humidity_func(current_date: datetime.date):
+def absolute_humidity_func(current_date: datetime.date) -> float:
     """
     Note: this is a dummy function loosely based off of
     the absolute humidity data from Kaiming and Shraddha's
@@ -416,29 +417,29 @@ class FluModelConstructor(base.ModelConstructor):
     instance with S-E-I-H-R-D compartments and population_immunity_inf
     and population_immunity_hosp epi metrics. The structure
     is as follows:
-        S = new_susceptible - new_exposed
-        E = new_exposed - new_infected
-        I = new_infected - new_recovered_home - new_hospitalized
-        H = new_hospitalized - new_recovered_hosp - new_dead
-        R = new_recovered_home + new_recovered_hosp - new_susceptible
-        D = new_dead
+        - S = new_susceptible - new_exposed
+        - E = new_exposed - new_infected
+        - I = new_infected - new_recovered_home - new_hospitalized
+        - H = new_hospitalized - new_recovered_hosp - new_dead
+        - R = new_recovered_home + new_recovered_hosp - new_susceptible
+        - D = new_dead
 
     The following are TransitionVariable instances:
-        new_susceptible is a NewSusceptible instance
-        new_exposed is a NewExposed instance
-        new_infected is a NewInfected instance
-        new_hospitalized is a NewHospitalized instance
-        new_recovered_home is a NewRecoveredHome instance
-        new_recovered_hosp is a NewRecoveredHosp instance
-        new_dead is a NewDead instance
+        - new_susceptible is a NewSusceptible instance
+        - new_exposed is a NewExposed instance
+        - new_infected is a NewInfected instance
+        - new_hospitalized is a NewHospitalized instance
+        - new_recovered_home is a NewRecoveredHome instance
+        - new_recovered_hosp is a NewRecoveredHosp instance
+        - new_dead is a NewDead instance
 
     There are two TransitionVariableGroups:
-        I_out (since new_recovered_home and new_hospitalized are joint random variables)
-        H_out (since new_recovered_hosp and new_dead are joint random variables)
+        - I_out (since new_recovered_home and new_hospitalized are joint random variables)
+        - H_out (since new_recovered_hosp and new_dead are joint random variables)
 
     The following are EpiMetric instances:
-        population_immunity_inf is a PopulationImmunityInf instance
-        population_immunity_hosp is a PopulationImmunityHosp instance
+        - population_immunity_inf is a PopulationImmunityInf instance
+        - population_immunity_hosp is a PopulationImmunityHosp instance
 
     Transition rates and update formulas are specified in
         corresponding classes.
