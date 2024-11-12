@@ -24,7 +24,7 @@ import pandas as pd
 
 @dataclass
 class FluFixedParams(base.FixedParams):
-    """
+    r"""
     Data container for pre-specified and fixed epidemiological
     parameters in FluModel flu model. Along with FluSimState,
     is passed to get_current_rate and get_change_in_current_val.
@@ -43,70 +43,61 @@ class FluFixedParams(base.FixedParams):
     TODO: when adding multiple strains, need to add subscripts
         to math of attributes and add strain-specific description
 
-    Note:
-        For attribute description, "pseudo-LaTeX" is used --
-        backslashes are omitted due to their incompatibility
-        with Python docstrings.
-
     Attributes:
         num_age_groups (positive int):
-            number of age groups -- math variable:
-            $|A|$, where $A$ is the set of age groups.
+            number of age groups.
         num_risk_groups (positive int):
-            number of risk groups -- math variable:
-            $|L|$, where $L$ is the set of risk groups.
-        beta_baseline (positive float): transmission rate
-            -- math variable: $beta_0$.
+            number of risk groups.
+        beta_baseline (positive float): transmission rate.
         total_population_val (np.ndarray of positive ints):
             total number in population, summed across all
-            age-risk groups -- math variable: $N$.
+            age-risk groups.
         humidity_impact (positive float):
             coefficient that determines how much absolute
-            humidity affects beta_baseline -- math variable: $xi$.
+            humidity affects beta_baseline.
         immunity_hosp_increase_factor (positive float):
             factor by which population-level immunity
             against hospitalization grows after each
-            case that recovers -- math variable: $g^H$.
+            case that recovers.
         immunity_inf_increase_factor (positive float):
             factor by which population-level immunity
             against infection grows after each case
-                that recovers -- math variable: $g^I$.
+                that recovers.
         immunity_saturation_constant (positive float):
             constant modeling saturation of antibody
-            production of individuals -- math variable: $o$.
+            production of individuals.
         waning_factor_hosp (positive float):
             rate at which infection-induced immunity
-            against hospitalization wanes -- math variable: $w^H$.
+            against hospitalization wanes.
         waning_factor_inf (positive float):
             rate at which infection-induced immunity
-            against infection wanes -- math variable: $w^I$.
+            against infection wanes.
         hosp_risk_reduction (positive float in [0,1]):
             reduction in hospitalization risk from
-            infection-induced immunity -- math variable: $K^H$.
+            infection-induced immunity.
         inf_risk_reduction (positive float in [0,1]):
             reduction in infection risk
-            from infection-induced immunity -- math variable: $K^I$.
+            from infection-induced immunity.
         death_risk_reduction (positive float in [0,1]):
-            reduction in death risk from infection-induced immunity
-            -- math variable: $K^D$.
+            reduction in death risk from infection-induced immunity.
         R_to_S_rate (positive float):
-            rate at which people in R move to S -- math variable: $eta$.
+            rate at which people in R move to S.
         E_to_I_rate (positive float):
-            rate at which people in E move to I -- math variable: $omega$.
+            rate at which people in E move to I.
         I_to_R_rate (positive float):
-            rate at which people in I move to R -- math variable: $gamma$.
+            rate at which people in I move to R.
         I_to_H_rate (positive float):
-            rate at which people in I move to H -- math variable: $zeta$.
+            rate at which people in I move to H.
         H_to_R_rate (positive float):
-            rate at which people in H move to R -- math variable: $gamma_H$.
+            rate at which people in H move to R.
         H_to_D_rate (positive float):
-            rate at which people in H move to D -- math variable: $pi$.
+            rate at which people in H move to D.
         I_to_H_adjusted_proportion (np.ndarray of positive floats in [0,1]):
             rate-adjusted proportion -- infected who are hospitalized
-            based on age-risk groups -- math variable: $[tilde{mu}_{a, ell}]$.
+            based on age-risk groups.
         H_to_D_adjusted_proportion (np.ndarray of positive floats in [0,1]):
             rate-adjusted proportion hospitalized who die based on
-            age-risk groups -- math variable: $[tilde{nu}_{a, ell}]$.
+            age-risk groups.
     """
 
     num_age_groups: Optional[int] = None
@@ -150,47 +141,40 @@ class FluSimState(base.SimState):
     Attributes:
         S (np.ndarray of positive floats):
             susceptible compartment for age-risk groups --
-            (holds current_val of EpiCompartment "S")
-            -- math variable: $S$.
+            (holds current_val of EpiCompartment "S").
         E (np.ndarray of positive floats):
             exposed compartment for age-risk groups --
-            (holds current_val of EpiCompartment "E")
-            -- math variable: $E$.
+            (holds current_val of EpiCompartment "E").
         I (np.ndarray of positive floats):
             infected compartment for age-risk groups
-            (holds current_val of EpiCompartment "I")
-            -- math variable: $I$.
+            (holds current_val of EpiCompartment "I").
         H (np.ndarray of positive floats):
             hospital compartment for age-risk groups
-            (holds current_val of EpiCompartment "H")
-            -- math variable: $H$.
+            (holds current_val of EpiCompartment "H").
         R (np.ndarray of positive floats):
             recovered compartment for age-risk groups
-            (holds current_val of EpiCompartment "R")
-            -- math variable: $R$.
+            (holds current_val of EpiCompartment "R").
         D (np.ndarray of positive floats):
             dead compartment for age-risk groups
-            (holds current_val of EpiCompartment "D")
-            -- math variable: $D$.
+            (holds current_val of EpiCompartment "D").
         population_immunity_hosp (np.ndarray of positive floats):
             infection-induced population-level immunity against
             hospitalization, for age-risk groups (holds current_val
-            of EpiMetric "population_immunity_hosp") -- math variable: $M^H$.
+            of EpiMetric "population_immunity_hosp").
         population_immunity_inf (np.ndarray of positive floats):
             infection-induced population-level immunity against
             infection, for age-risk groups (holds current_val
-            of EpiMetric "population_immunity_inf") -- math variable: $M^I$.
+            of EpiMetric "population_immunity_inf").
         absolute_humidity (positive float):
             grams of water vapor per cubic meter g/m^3,
             used as seasonality parameter that influences
-            transmission rate beta_baseline -- math variable: $q$.
+            transmission rate beta_baseline.
         flu_contact_matrix (np.ndarray of positive floats):
             A x L x A x L array, where A is the number of age
             groups and L is the number of risk groups --
             element (a, l, a', l') corresponds to the number of
             contacts that a person in age-risk group a,l
-            has with people in age-risk group a', l' --
-            math variable: "phi$.
+            has with people in age-risk group a', l'.
     """
 
     S: Optional[np.ndarray] = None

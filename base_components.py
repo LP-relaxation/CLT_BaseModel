@@ -230,7 +230,7 @@ class TransitionVariableGroup:
 
         # Create probabilities_list, where element i corresponds to the
         #   transition variable i's current rate divided by the total rate,
-        #   multiplied by the total outgoing probability
+        #   multiplized by the total outgoing probability
         # This generates the probabilities array that parameterizes the
         #   multinomial distribution
         probabilities_list = []
