@@ -871,7 +871,8 @@ class DynamicVal(StateVariable, ABC):
 
     def __init__(self,
                  name: str,
-                 init_val: Optional[Union[np.ndarray, float]] = None):
+                 init_val: Optional[Union[np.ndarray, float]] = None,
+                 enable_dynamic_val: Optional[bool] = False):
         """
 
         Args:
@@ -879,9 +880,16 @@ class DynamicVal(StateVariable, ABC):
                 unique identifier for dynamic val
             init_val (Optional[Union[np.ndarray, float]]):
                 starting value(s) at the beginning of the simulation
+            enable_dynamic_val (Optional[bool]):
+                if False, this dynamic value does not get updated
+                during the simulation and defaults to its init_val.
+                This is designed to allow easy toggling of
+                simulations with or without staged alert policies
+                and other interventions.
         """
 
         super().__init__(name, init_val)
+        self.enable_dynamic_val = enable_dynamic_val
         self.history_vals_list = []
 
     def save_history(self) -> None:
@@ -1148,7 +1156,8 @@ class TransmissionModel:
 
         # Update dynamic values for current day
         for dval in dynamic_vals:
-            dval.update_current_val(sim_state, fixed_params)
+            if dval.enable_dynamic_val:
+                dval.update_current_val(sim_state, fixed_params)
 
         # Sync simulation state
         self.state_variable_manager.update_sim_state(schedules + dynamic_vals)

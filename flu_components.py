@@ -64,8 +64,8 @@ class FluFixedParams(base.FixedParams):
             factor by which population-level immunity
             against infection grows after each case
                 that recovers.
-        immunity_saturation_constant (positive float):
-            constant modeling saturation of antibody
+        immunity_saturation (np.ndarray of positive floats):
+            constant(s) modeling saturation of antibody
             production of individuals.
         waning_factor_hosp (positive float):
             rate at which infection-induced immunity
@@ -108,7 +108,7 @@ class FluFixedParams(base.FixedParams):
     humidity_impact: Optional[float] = None
     immunity_hosp_increase_factor: Optional[float] = None
     immunity_inf_increase_factor: Optional[float] = None
-    immunity_saturation_constant: Optional[float] = None
+    immunity_saturation: Optional[np.ndarray] = None
     waning_factor_hosp: Optional[float] = None
     waning_factor_inf: Optional[float] = None
     hosp_risk_reduction: Optional[float] = None
@@ -272,7 +272,7 @@ class PopulationImmunityHosp(base.EpiMetric):
                                   num_timesteps: int):
         immunity_gain = (fixed_params.immunity_hosp_increase_factor * self.new_susceptible.current_val) / \
                         (fixed_params.total_population_val *
-                         (1 + fixed_params.immunity_saturation_constant * sim_state.population_immunity_hosp))
+                         (1 + fixed_params.immunity_saturation * sim_state.population_immunity_hosp))
         immunity_loss = fixed_params.waning_factor_hosp * sim_state.population_immunity_hosp
 
         return np.asarray(immunity_gain - immunity_loss) / num_timesteps
@@ -288,7 +288,7 @@ class PopulationImmunityInf(base.EpiMetric):
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
         immunity_gain = (fixed_params.immunity_inf_increase_factor * self.new_susceptible.current_val) / \
-                        (fixed_params.total_population_val * (1 + fixed_params.immunity_saturation_constant *
+                        (fixed_params.total_population_val * (1 + fixed_params.immunity_saturation *
                                                               sim_state.population_immunity_inf))
         immunity_loss = fixed_params.waning_factor_inf * sim_state.population_immunity_inf
 
@@ -297,8 +297,8 @@ class PopulationImmunityInf(base.EpiMetric):
 
 class BetaReduct(base.DynamicVal):
 
-    def __init__(self, name):
-        super().__init__(name)
+    def __init__(self, name, init_val, enable_dynamic_val):
+        super().__init__(name, init_val, enable_dynamic_val)
         self.permanent_lockdown = False
 
     def update_current_val(self, sim_state, fixed_params):
@@ -340,13 +340,9 @@ def absolute_humidity_func(current_date: datetime.date) -> float:
     #   corresponding to day of the year
     day_of_year = current_date.timetuple().tm_yday
 
-    # Vertex of the parabola
-    h = 180
-    k = 3.8
-
     # Shift by 180 (6 months roughly), because minimum humidity occurs in
     #   January, but Kaiming and Shraddha's graph starts in July
-    return k + 0.00027 * (day_of_year - 180 - h) ** 2
+    return 3.8 + 0.00027 * (day_of_year % 365 - 180) ** 2
 
 
 class AbsoluteHumidity(base.Schedule):
@@ -380,9 +376,9 @@ class FluContactMatrix(base.Schedule):
 
         self.time_series_df = df
 
-        self.total_contact_matrix = np.array([[3.5, 1.5], [3, 3.5]]).reshape((2,1,2,1))
-        self.school_contact_matrix = np.array([[2, 1], [1, 1]]).reshape((2,1,2,1))
-        self.work_contact_matrix = np.array([[0, 0], [1, 2]]).reshape((2,1,2,1))
+        self.total_contact_matrix = np.array([[2.5, 0.5], [2, 1.5]]).reshape((2,1,2,1))
+        self.school_contact_matrix = np.array([[0.5, 0], [0.05, 0.1]]).reshape((2,1,2,1))
+        self.work_contact_matrix = np.array([[0, 0], [0, 0.0]]).reshape((2,1,2,1))
 
     def update_current_val(self, current_date: datetime.date) -> None:
         """
@@ -528,7 +524,9 @@ class FluModelConstructor(base.ModelConstructor):
             self.compartment_lookup[name] = base.EpiCompartment(name, getattr(self.sim_state, name))
 
     def setup_dynamic_vals(self) -> None:
-        self.dynamic_val_lookup["beta_reduct"] = BetaReduct("beta_reduct")
+        self.dynamic_val_lookup["beta_reduct"] = BetaReduct(name="beta_reduct",
+                                                            init_val=0.0,
+                                                            enable_dynamic_val=False)
 
     def setup_schedules(self) -> None:
         self.schedule_lookup["absolute_humidity"] = AbsoluteHumidity("absolute_humidity")

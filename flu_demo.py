@@ -1,7 +1,6 @@
 import numpy as np
 from flu_components import FluModelConstructor
 from plotting import create_basic_compartment_history_plot
-
 from pathlib import Path
 
 base_path = Path(__file__).parent / "flu_demo_input_files"
