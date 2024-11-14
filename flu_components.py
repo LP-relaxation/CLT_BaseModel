@@ -517,7 +517,7 @@ class FluModelConstructor(base.ModelConstructor):
 
     def setup_epi_compartments(self) -> None:
         """
-        Create compartments S-E-I-H-R-D (6 compartments total)
+        Create EpiCompartment instances S-E-I-H-R-D (6 compartments total)
         and add them to compartment_lookup for dictionary access
         """
 
@@ -525,19 +525,29 @@ class FluModelConstructor(base.ModelConstructor):
             self.compartment_lookup[name] = base.EpiCompartment(name, getattr(self.sim_state, name))
 
     def setup_dynamic_vals(self) -> None:
+        """
+        Create all DynamicVal instances and add them to dynamic_val_lookup attribute
+            for dictionary access
+        """
+
         self.dynamic_val_lookup["beta_reduct"] = BetaReduct(name="beta_reduct",
                                                             init_val=0.0,
                                                             enable_dynamic_val=False)
 
     def setup_schedules(self) -> None:
+        """
+        Create all Schedule instances and add them to schedule_lookup attribute
+            for dictionary access
+        """
+
         self.schedule_lookup["absolute_humidity"] = AbsoluteHumidity("absolute_humidity")
         self.schedule_lookup["flu_contact_matrix"] = FluContactMatrix("flu_contact_matrix")
 
     def setup_transition_variables(self) -> None:
         """
-        Create all transition variables described in docstring (7 transition
-        variables total) and add them to transition_variable_lookup attribute
-        for dictionary access
+        Create all TransitionVariable instances (7 transition variables total)
+            and add them to transition_variable_lookup attribute
+            for dictionary access
         """
 
         compartments = self.compartment_lookup
