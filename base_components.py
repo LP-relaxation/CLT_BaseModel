@@ -262,8 +262,17 @@ class TransitionVariableGroup:
 
         return np.asarray(current_rates_list)
 
-    def get_joint_realization(self) -> np.ndarray:
+    def get_joint_realization(self,
+                              RNG: np.random.Generator,
+                              num_timesteps: int) -> np.ndarray:
         """
+        Parameters:
+            RNG (np.random.Generator object):
+                used to generate random variables and control reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
         This function is dynamically assigned based on the Transition
         Variable Group's transition type -- this function is set to
         one of the following methods: get_multinomial_realization,
@@ -281,6 +290,13 @@ class TransitionVariableGroup:
         """
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from multinomial distribution.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                used to generate random variables and control reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
 
         Returns:
             np.ndarray:
@@ -317,6 +333,13 @@ class TransitionVariableGroup:
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from multinomial distribution
         using Taylor Series approximation for probability parameter.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                used to generate random variables and control reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
 
         Returns:
             np.ndarray:
@@ -362,6 +385,13 @@ class TransitionVariableGroup:
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from Poisson distribution.
 
+        Parameters:
+            RNG (np.random.Generator object):
+                used to generate random variables and control reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
         Returns:
             np.ndarray:
                 contains positive floats, size equal to length of
@@ -387,11 +417,20 @@ class TransitionVariableGroup:
         return realizations_array
 
     def get_multinomial_deterministic_realization(self,
+                                                  RNG: np.random.Generator,
                                                   num_timesteps: int) -> np.ndarray:
         """
         Deterministic counterpart to get_multinomial_realization --
         uses mean (n x p, i.e. total counts x probability array) as realization
         rather than randomly sampling.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                NOT USED -- only included so that get_realization has
+                the same function arguments regardless of transition type.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
 
         Returns:
             np.ndarray:
@@ -407,11 +446,20 @@ class TransitionVariableGroup:
         return self.origin.current_val * probabilities_array
 
     def get_multinomial_taylor_approx_deterministic_realization(self,
+                                                                RNG: np.random.Generator,
                                                                 num_timesteps: int) -> np.ndarray:
         """
         Deterministic counterpart to get_multinomial_taylor_approx_realization --
         uses mean (n x p, i.e. total counts x probability array) as realization
         rather than randomly sampling.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                NOT USED -- only included so that get_realization has
+                the same function arguments regardless of transition type.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
 
         Returns:
             np.ndarray:
@@ -427,10 +475,19 @@ class TransitionVariableGroup:
         return self.origin.current_val * current_rates_array / num_timesteps
 
     def get_poisson_deterministic_realization(self,
+                                              RNG: np.random.Generator,
                                               num_timesteps: int) -> np.ndarray:
         """
         Deterministic counterpart to get_poisson_realization --
         uses mean (rate array) as realization rather than randomly sampling.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                NOT USED -- only included so that get_realization has
+                the same function arguments regardless of transition type.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
 
         Returns:
             np.ndarray:
@@ -439,7 +496,7 @@ class TransitionVariableGroup:
                 x number of age groups x number of risk groups).
         """
 
-        return self.get_current_rates_array() / num_timesteps
+        return self.origin.current_val * self.get_current_rates_array() / num_timesteps
 
     def reset(self) -> None:
         self.current_vals_list = []
@@ -561,9 +618,23 @@ class TransitionVariable(ABC):
         pass
 
     def update_origin_outflow(self) -> None:
+        """
+        Adds current realization of TransitionVariable to
+            its origin EpiCompartment's current_outflow.
+            Used to compute total number leaving that
+            origin EpiCompartment.
+        """
+
         self.origin.current_outflow += self.current_val
 
     def update_destination_inflow(self) -> None:
+        """
+        Adds current realization of TransitionVariable to
+            its destination EpiCompartment's current_inflow.
+            Used to compute total number leaving that
+            destination EpiCompartment.
+        """
+
         self.destination.current_inflow += self.current_val
 
     def save_history(self) -> None:
@@ -579,6 +650,10 @@ class TransitionVariable(ABC):
         self.history_vals_list.append(copy.deepcopy(self.current_val))
 
     def clear_history(self) -> None:
+        """
+        Resets history_vals_list attribute to empty list.
+        """
+
         self.history_vals_list = []
 
     @property
@@ -589,36 +664,181 @@ class TransitionVariable(ABC):
     def is_jointly_distributed(self) -> bool:
         return self._is_jointly_distributed
 
+    def get_realization(self,
+                        RNG: np.random.Generator,
+                        num_timesteps: int) -> np.ndarray:
+        """
+        This method gets assigned to one of the following methods
+            based on the TransitionVariable transition type:
+            get_binomial_realization, get_binomial_taylor_approx_realization,
+            get_poisson_realization, get_binomial_deterministic_realization,
+            get_binomial_taylor_approx_deterministic_realization,
+            get_poisson_deterministic_realization. This is done so that
+            the same method get_realization can be called regardless of
+            transition type.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                used to generate random variables and control reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+        """
+
+        pass
+
     def get_binomial_realization(self,
                                  RNG: np.random.Generator,
                                  num_timesteps: int) -> np.ndarray:
+        """
+        Uses RNG to generate binomial random variable with
+            number of trials equal to population count in the
+            origin EpiCompartment and probability computed from
+            a function of the TransitionVariable's current rate
+            -- see the approx_binomial_probability_from_rate
+            function for details
+
+        Parameters:
+            RNG (np.random.Generator object):
+                used to generate random variables and control reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+        
+        Returns:
+            np.ndarray:
+                size A x L, where A is sim_state.num_age_groups and L is
+                sim_state.num_risk_groups.
+        """
+
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
                             p=approx_binomial_probability_from_rate(self.current_rate, 1 / num_timesteps))
 
     def get_binomial_taylor_approx_realization(self,
                                                RNG: np.random.Generator,
                                                num_timesteps: int) -> np.ndarray:
+        """
+        Uses RNG to generate binomial random variable with
+            number of trials equal to population count in the
+            origin EpiCompartment and probability equal to
+            the TransitionVariable's current_rate / num_timesteps
+
+        Parameters:
+            RNG (np.random.Generator object):
+                used to generate random variables and control reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
+        Returns:
+            np.ndarray:
+                size A x L, where A is sim_state.num_age_groups and L is
+                sim_state.num_risk_groups.
+        """
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
                             p=self.current_rate * (1 / num_timesteps))
 
     def get_poisson_realization(self,
                                 RNG: np.random.Generator,
                                 num_timesteps: int) -> np.ndarray:
-        return RNG.poisson(self.base_count * self.current_rate * (1 / num_timesteps))
+        """
+        Uses RNG to generate Poisson random variable with
+            rate equal to (population count in the
+            origin EpiCompartment x the TransitionVariable's
+            current_rate / num_timesteps)
+
+        Parameters:
+            RNG (np.random.Generator object):
+                used to generate random variables and control reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
+        Returns:
+            np.ndarray:
+                size A x L, where A is sim_state.num_age_groups and L is
+                sim_state.num_risk_groups.
+        """
+        return RNG.poisson(self.base_count * self.current_rate / num_timesteps)
 
     def get_binomial_deterministic_realization(self,
+                                               RNG: np.random.Generator,
                                                num_timesteps: int) -> np.ndarray:
+        """
+        Deterministically returns mean of binomial distribution
+            (number of trials x probability), where number of trials
+            equals population count in the origin EpiCompartment and
+            probability is computed from a function of the TransitionVariable's
+            current rate -- see the approx_binomial_probability_from_rate
+            function for details
+
+        Parameters:
+            RNG (np.random.Generator object):
+                NOT USED -- only included so that get_realization has
+                the same function arguments regardless of transition type.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
+        Returns:
+            np.ndarray:
+                size A x L, where A is sim_state.num_age_groups and L is
+                sim_state.num_risk_groups.
+        """
+
         return np.asarray(self.base_count *
                           approx_binomial_probability_from_rate(self.current_rate, 1 / num_timesteps),
                           dtype=int)
 
     def get_binomial_taylor_approx_deterministic_realization(self,
+                                                             RNG: np.random.Generator,
                                                              num_timesteps: int) -> np.ndarray:
+        """
+        Deterministically returns mean of binomial distribution
+            (number of trials x probability), where number of trials
+            equals population count in the origin EpiCompartment and
+            probability equals the TransitionVariable's current rate /
+            num_timesteps
+
+        Parameters:
+            RNG (np.random.Generator object):
+                NOT USED -- only included so that get_realization has
+                the same function arguments regardless of transition type.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
+        Returns:
+            np.ndarray:
+                size A x L, where A is sim_state.num_age_groups and L is
+                sim_state.num_risk_groups.
+        """
+
         return np.asarray(self.base_count * self.current_rate * (1 / num_timesteps), dtype=int)
 
     def get_poisson_deterministic_realization(self,
+                                              RNG: np.random.Generator,
                                               num_timesteps: int) -> np.ndarray:
-        return np.asarray(self.base_count * self.current_rate * (1 / num_timesteps), dtype=int)
+        """
+        Deterministically returns mean of Poisson distribution,
+            givey by (population count in the origin EpiCompartment x
+            TransitionVariable's current rate / num_timesteps)
+
+        Parameters:
+            RNG (np.random.Generator object):
+                NOT USED -- only included so that get_realization has
+                the same function arguments regardless of transition type.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
+        Returns:
+            np.ndarray:
+                size A x L, where A is sim_state.num_age_groups and L is
+                sim_state.num_risk_groups.
+        """
+
+        return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
 
     @property
     def base_count(self) -> np.ndarray:
@@ -672,13 +892,24 @@ class StateVariableManager:
         for unit in unit_list:
             setattr(self.sim_state, unit.name, unit.current_val)
 
-    def reset_sim_state(self):
-        # AGAIN, MUST BE CAREFUL ABOUT MUTABLE NUMPY ARRAYS --
-        # MUST USE DEEP COPY
+    def reset_sim_state(self) -> None:
+        """
+        Resets current_val attribute of each StateVariable on the model
+            (each EpiCompartment, EpiMetric, DynamicVal, and Schedule)
+            to its init_val attribute. Deep copying is used to prevent
+            mutability issues with numpy arrays.
+        """
+
+        # AGAIN, MUST BE CAREFUL ABOUT MUTABLE NUMPY ARRAYS -- MUST USE DEEP COPY
         for svar in self.compartments + self.epi_metrics + self.dynamic_vals + self.schedules:
-            setattr(svar, svar.name, copy.deepcopy(svar.init_val))
+            setattr(svar, "current_val", copy.deepcopy(svar.init_val))
 
     def clear_history(self):
+        """
+        Resets history_vals_list attribute of each EpiCompartment,
+            EpiMetric, and DynamicVal to an empty list.
+        """
+
         # Schedules do not have history since they are deterministic
         for svar in self.compartments + self.epi_metrics + self.dynamic_vals:
             svar.clear_history()
@@ -721,12 +952,24 @@ class EpiCompartment(StateVariable):
         self.history_vals_list = []
 
     def update_current_val(self) -> None:
+        """
+        Updates current_val attribute in-place by adding
+            current_inflow (sum of all incoming transition variables'
+            realizations) and subtracting current outflow (sum of all
+            outgoing transition variables' realizations)
+        """
         self.current_val += self.current_inflow - self.current_outflow
 
     def reset_inflow(self) -> None:
+        """
+        Resets current_inflow attribute to np.ndarray of zeros.
+        """
         self.current_inflow = np.zeros(np.shape(self.current_inflow))
 
     def reset_outflow(self) -> None:
+        """
+        Resets current_outflow attribute to np.ndarray of zeros.
+        """
         self.current_outflow = np.zeros(np.shape(self.current_outflow))
 
     def save_history(self) -> None:
@@ -742,6 +985,10 @@ class EpiCompartment(StateVariable):
         self.history_vals_list.append(copy.deepcopy(self.current_val))
 
     def clear_history(self) -> None:
+        """
+        Resets history_vals_list attribute to empty list.
+        """
+
         self.history_vals_list = []
 
 
@@ -815,7 +1062,7 @@ class EpiMetric(StateVariable, ABC):
             fixed_params (FixedParams):
                 holds values of epidemiological parameters.
             num_timesteps (int):
-                number of timesteps -- used to determine time interval
+                number of timesteps per day -- used to determine time interval
                 length for discretization.
 
         Returns:
@@ -826,6 +1073,11 @@ class EpiMetric(StateVariable, ABC):
         pass
 
     def update_current_val(self) -> None:
+        """
+        Adds change_in_current_val attribute to current_val attribute
+            in-place.
+        """
+
         self.current_val += self.change_in_current_val
 
     def save_history(self) -> None:
@@ -841,6 +1093,10 @@ class EpiMetric(StateVariable, ABC):
         self.history_vals_list.append(copy.deepcopy(self.current_val))
 
     def clear_history(self) -> None:
+        """
+        Resets history_vals_list attribute to empty list.
+        """
+
         self.history_vals_list = []
 
 

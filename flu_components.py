@@ -197,6 +197,7 @@ class NewExposed(base.TransitionVariable):
 
         force_of_immunity = (1 + fixed_params.inf_risk_reduction * sim_state.population_immunity_inf)
 
+        # We subtract absolute_humidity because higher humidity means less transmission
         beta_humidity_adjusted = (1 - sim_state.absolute_humidity * fixed_params.humidity_impact) * \
                                  fixed_params.beta_baseline
 
@@ -331,7 +332,7 @@ def absolute_humidity_func(current_date: datetime.date) -> float:
 
     Returns:
         float:
-            nonnegative float between 3.8 and 12.5
+            nonnegative float between 3.4 and 12.5
             corresponding to absolute humidity
             that day of the year
     """
@@ -340,9 +341,9 @@ def absolute_humidity_func(current_date: datetime.date) -> float:
     #   corresponding to day of the year
     day_of_year = current_date.timetuple().tm_yday
 
-    # Shift by 180 (6 months roughly), because minimum humidity occurs in
-    #   January, but Kaiming and Shraddha's graph starts in July
-    return 3.8 + 0.00027 * (day_of_year % 365 - 180) ** 2
+    # Minimum humidity occurs in January and December
+    # Maximum humidity occurs in July
+    return 12.5 - 0.00027 * (day_of_year % 365 - 180) ** 2
 
 
 class AbsoluteHumidity(base.Schedule):
