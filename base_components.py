@@ -266,13 +266,6 @@ class TransitionVariableGroup:
                               RNG: np.random.Generator,
                               num_timesteps: int) -> np.ndarray:
         """
-        Parameters:
-            RNG (np.random.Generator object):
-                used to generate random variables and control reproducibility.
-            num_timesteps (int):
-                number of timesteps per day -- used to determine time interval
-                length for discretization.
-
         This function is dynamically assigned based on the Transition
         Variable Group's transition type -- this function is set to
         one of the following methods: get_multinomial_realization,
@@ -280,6 +273,13 @@ class TransitionVariableGroup:
         get_multinomial_deterministic_realization,
         get_multinomial_taylor_approx_deterministic_realization,
         get_poisson_deterministic_realization.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                used to generate random variables and control reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
         """
 
         pass
@@ -594,6 +594,14 @@ class TransitionVariable(ABC):
 
         self.history_vals_list = []
 
+    @property
+    def transition_type(self) -> TransitionTypes:
+        return self._transition_type
+
+    @property
+    def is_jointly_distributed(self) -> bool:
+        return self._is_jointly_distributed
+
     @abstractmethod
     def get_current_rate(self, sim_state, fixed_params) -> np.ndarray:
         """
@@ -642,8 +650,7 @@ class TransitionVariable(ABC):
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
 
-        NOTE:
-            deep copying is CRUCIAL because current_val is a mutable
+        Deep copying is CRUCIAL because current_val is a mutable
             np.ndarray -- without deep copying, history_vals_list would
             have the same value for all elements
         """
@@ -655,14 +662,6 @@ class TransitionVariable(ABC):
         """
 
         self.history_vals_list = []
-
-    @property
-    def transition_type(self) -> TransitionTypes:
-        return self._transition_type
-
-    @property
-    def is_jointly_distributed(self) -> bool:
-        return self._is_jointly_distributed
 
     def get_realization(self,
                         RNG: np.random.Generator,
@@ -1085,8 +1084,7 @@ class EpiMetric(StateVariable, ABC):
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
 
-        NOTE:
-            deep copying is CRUCIAL because current_val is a mutable
+        Deep copying is CRUCIAL because current_val is a mutable
             np.ndarray -- without deep copying, history_vals_list would
             have the same value for all elements
         """
@@ -1153,8 +1151,7 @@ class DynamicVal(StateVariable, ABC):
         Saves current value to history by appending current_val attribute
             to history_vals_list in place
 
-        NOTE:
-            deep copying is CRUCIAL because current_val is a mutable
+        Deep copying is CRUCIAL because current_val is a mutable
             np.ndarray -- without deep copying, history_vals_list would
             have the same value for all elements
         """
