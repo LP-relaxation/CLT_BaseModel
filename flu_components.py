@@ -1,21 +1,13 @@
-import numpy as np
-import json
-import copy
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Optional, Union, Type
-from pathlib import Path
-base_path = Path(__file__).parent / "flu_demo_input_files"
-
-import base_components as base
-
-import matplotlib.pyplot as plt
-from plotting import create_basic_compartment_history_plot
-
 import datetime
-
 import pandas as pd
 
+import numpy as np
+from dataclasses import dataclass
+from typing import Optional, Union
+from pathlib import Path
+import base_components as base
+
+base_path = Path(__file__).parent / "flu_demo_input_files"
 
 # Note: for dataclasses, Optional is used to help with static type checking
 # -- it means that an attribute can either hold a value with the specified
@@ -271,12 +263,26 @@ class PopulationImmunityHosp(base.EpiMetric):
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
-        immunity_gain = (fixed_params.immunity_hosp_increase_factor * self.new_susceptible.current_val) / \
-                        (fixed_params.total_population_val *
-                         (1 + fixed_params.immunity_saturation * sim_state.population_immunity_hosp))
-        immunity_loss = fixed_params.waning_factor_hosp * sim_state.population_immunity_hosp
+        # Ensure consistent float64 precision
+        factor = np.float64(fixed_params.immunity_hosp_increase_factor)
+        susceptible = np.float64(self.new_susceptible.current_val)
+        population = np.float64(fixed_params.total_population_val)
+        saturation = np.float64(fixed_params.immunity_saturation)
+        pop_immunity = np.float64(sim_state.population_immunity_hosp)
+        waning_factor = np.float64(fixed_params.waning_factor_hosp)
+        num_timesteps = np.float64(num_timesteps)
 
-        return np.asarray(immunity_gain - immunity_loss) / num_timesteps
+        # Break down calculations
+        gain_numerator = factor * susceptible
+        gain_denominator = population * (1 + saturation * pop_immunity)
+        immunity_gain = gain_numerator / gain_denominator
+
+        immunity_loss = waning_factor * pop_immunity
+
+        # Final result
+        result = (immunity_gain - immunity_loss) / num_timesteps
+
+        return np.asarray(result, dtype=np.float64)
 
 
 class PopulationImmunityInf(base.EpiMetric):
@@ -288,18 +294,33 @@ class PopulationImmunityInf(base.EpiMetric):
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
-        immunity_gain = (fixed_params.immunity_inf_increase_factor * self.new_susceptible.current_val) / \
-                        (fixed_params.total_population_val * (1 + fixed_params.immunity_saturation *
-                                                              sim_state.population_immunity_inf))
-        immunity_loss = fixed_params.waning_factor_inf * sim_state.population_immunity_inf
+        # Convert all parameters to consistent float64 for high precision
+        increase_factor = np.float64(fixed_params.immunity_inf_increase_factor)
+        new_susceptible = np.float64(self.new_susceptible.current_val)
+        total_population = np.float64(fixed_params.total_population_val)
+        saturation = np.float64(fixed_params.immunity_saturation)
+        population_immunity = np.float64(sim_state.population_immunity_inf)
+        waning_factor = np.float64(fixed_params.waning_factor_inf)
+        num_timesteps = np.float64(num_timesteps)
 
-        return np.asarray(immunity_gain - immunity_loss) / num_timesteps
+        # Break down calculations for better readability and to avoid compounded rounding errors
+        gain_numerator = increase_factor * new_susceptible
+        gain_denominator = total_population * (1 + saturation * population_immunity)
+        immunity_gain = gain_numerator / gain_denominator
+
+        immunity_loss = waning_factor * population_immunity
+
+        # Compute result with full precision
+        result = (immunity_gain - immunity_loss) / num_timesteps
+
+        # Ensure the result is a NumPy array
+        return np.asarray(result, dtype=np.float64)
 
 
 class BetaReduct(base.DynamicVal):
 
-    def __init__(self, name, init_val, enable_dynamic_val):
-        super().__init__(name, init_val, enable_dynamic_val)
+    def __init__(self, name, init_val, is_enabled):
+        super().__init__(name, init_val, is_enabled)
         self.permanent_lockdown = False
 
     def update_current_val(self, sim_state, fixed_params):
@@ -532,7 +553,7 @@ class FluModelConstructor(base.ModelConstructor):
 
         self.dynamic_val_lookup["beta_reduct"] = BetaReduct(name="beta_reduct",
                                                             init_val=0.0,
-                                                            enable_dynamic_val=False)
+                                                            is_enabled=False)
 
     def setup_schedules(self) -> None:
         """

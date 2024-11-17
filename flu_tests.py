@@ -1,6 +1,4 @@
-import numpy as np
 from flu_components import FluModelConstructor
-from plotting import create_basic_compartment_history_plot
 
 import base_components as base
 import numpy as np
@@ -24,17 +22,22 @@ def create_models_all_transition_types_list(model_constructor, RNG_seed):
     models_list = []
 
     for transition_type in base.TransitionTypes:
+
+        #  Need deep copy -- otherwise changing "transition_type" on
+        #   model_constructor.config changes config attribute for all
+        #   models in models_list
+        model_constructor.config = copy.deepcopy(model_constructor.config)
+
         model_constructor.config.transition_type = transition_type
 
         models_list.append(model_constructor.create_transmission_model(RNG_seed))
 
-        return models_list
+    return models_list
 
 
 starting_random_seed = np.random.SeedSequence()
 
 flu_model_variations_list = create_models_all_transition_types_list(flu_model_constructor, starting_random_seed)
-
 
 @pytest.mark.parametrize("model", flu_model_variations_list)
 def test_no_transmission_when_beta_zero(model):
@@ -111,8 +114,8 @@ def test_reproducible_RNG(model):
         give the same results as the initial run.
     """
 
-    model.modify_random_seed(starting_random_seed)
     model.reset_simulation()
+    model.modify_random_seed(starting_random_seed)
     model.simulate_until_time_period(300)
 
     original_model_history_dict = {}
@@ -132,3 +135,6 @@ def test_reproducible_RNG(model):
     for compartment_name in original_model_history_dict.keys():
         assert np.array_equal(np.array(original_model_history_dict[compartment_name]),
                               np.array(reset_model_history_dict[compartment_name]))
+
+
+

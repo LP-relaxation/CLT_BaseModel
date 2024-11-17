@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Optional, Union, Type
 from enum import Enum
 import datetime
-import pandas as pd
 
 
 class TransmissionModelError(Exception):
@@ -589,7 +588,7 @@ class TransitionVariable(ABC):
         else:
             self.get_realization = getattr(self, "get_" + transition_type + "_realization")
 
-        self.current_rate = 0
+        self.current_rate = None
         self.current_val = 0
 
         self.history_vals_list = []
@@ -813,7 +812,7 @@ class TransitionVariable(ABC):
                 sim_state.num_risk_groups.
         """
 
-        return np.asarray(self.base_count * self.current_rate * (1 / num_timesteps), dtype=int)
+        return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
 
     def get_poisson_deterministic_realization(self,
                                               RNG: np.random.Generator,
@@ -896,12 +895,15 @@ class StateVariableManager:
         Resets current_val attribute of each StateVariable on the model
             (each EpiCompartment, EpiMetric, DynamicVal, and Schedule)
             to its init_val attribute. Deep copying is used to prevent
-            mutability issues with numpy arrays.
+            mutability issues with numpy arrays. Resets sim_state
+            attribute.
         """
 
         # AGAIN, MUST BE CAREFUL ABOUT MUTABLE NUMPY ARRAYS -- MUST USE DEEP COPY
         for svar in self.compartments + self.epi_metrics + self.dynamic_vals + self.schedules:
             setattr(svar, "current_val", copy.deepcopy(svar.init_val))
+
+        self.update_sim_state(self.compartments + self.epi_metrics + self.dynamic_vals + self.schedules)
 
     def clear_history(self):
         """
@@ -1126,7 +1128,7 @@ class DynamicVal(StateVariable, ABC):
     def __init__(self,
                  name: str,
                  init_val: Optional[Union[np.ndarray, float]] = None,
-                 enable_dynamic_val: Optional[bool] = False):
+                 is_enabled: Optional[bool] = False):
         """
 
         Args:
@@ -1134,7 +1136,7 @@ class DynamicVal(StateVariable, ABC):
                 unique identifier for dynamic val
             init_val (Optional[Union[np.ndarray, float]]):
                 starting value(s) at the beginning of the simulation
-            enable_dynamic_val (Optional[bool]):
+            is_enabled (Optional[bool]):
                 if False, this dynamic value does not get updated
                 during the simulation and defaults to its init_val.
                 This is designed to allow easy toggling of
@@ -1143,7 +1145,7 @@ class DynamicVal(StateVariable, ABC):
         """
 
         super().__init__(name, init_val)
-        self.enable_dynamic_val = enable_dynamic_val
+        self.is_enabled = is_enabled
         self.history_vals_list = []
 
     def save_history(self) -> None:
@@ -1409,7 +1411,7 @@ class TransmissionModel:
 
         # Update dynamic values for current day
         for dval in dynamic_vals:
-            if dval.enable_dynamic_val:
+            if dval.is_enabled:
                 dval.update_current_val(sim_state, fixed_params)
 
         # Sync simulation state
@@ -1497,8 +1499,8 @@ class TransmissionModel:
 
         Returns current_simulation_day to 0.
         Restores sim_state values to initial values.
-        Clears history on model's compartments, transition variables,
-        and dynamic vals.
+        Clears history on model's state variables.
+        Resets transition variables' current_val attribute to 0.
 
         WARNING:
             DOES NOT RESET THE MODEL'S RANDOM NUMBER GENERATOR TO
@@ -1516,6 +1518,13 @@ class TransmissionModel:
         self.state_variable_manager.reset_sim_state()
 
         self.state_variable_manager.clear_history()
+
+        for tvar in self.transition_variables:
+            tvar.current_rate = None
+            tvar.current_val = 0.90
+
+        for tvargroup in self.transition_variable_groups:
+            tvargroup.current_vals_list = []
 
 
 class ModelConstructor(ABC):
