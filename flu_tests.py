@@ -17,6 +17,14 @@ flu_model_constructor = FluModelConstructor(config_filepath,
                                             fixed_params_filepath,
                                             init_vals_filepath)
 
+# WARNING:
+#   Poisson transition types are not always well-behaved
+#   -- this is because the Poisson distribution is unbounded.
+#   For example, values of beta_baseline that are too high
+#   can result in negative compartment populations.
+#   Sometimes tests fail because these choices of parameter values
+#   and parameter initial values are "bad" for the problem.
+
 
 def create_models_all_transition_types_list(model_constructor, RNG_seed):
     models_list = []
@@ -78,7 +86,7 @@ def test_population_is_constant(model):
     """
 
     model.reset_simulation()
-    model.fixed_params.beta = 2
+    model.fixed_params.beta = 0.25
 
     for day in range(300):
         model.simulate_until_time_period(day)

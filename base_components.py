@@ -411,7 +411,7 @@ class TransitionVariableGroup:
                     realizations_array[outflow_ix, age_group, risk_group] = RNG.poisson(
                         self.origin.current_val[age_group, risk_group] *
                         transition_variables[outflow_ix].current_rate[
-                            age_group, risk_group] * 1 / num_timesteps)
+                            age_group, risk_group] / num_timesteps)
 
         return realizations_array
 
@@ -710,7 +710,7 @@ class TransitionVariable(ABC):
         """
 
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
-                            p=approx_binomial_probability_from_rate(self.current_rate, 1 / num_timesteps))
+                            p=approx_binomial_probability_from_rate(self.current_rate, 1.0 / num_timesteps))
 
     def get_binomial_taylor_approx_realization(self,
                                                RNG: np.random.Generator,
@@ -734,7 +734,7 @@ class TransitionVariable(ABC):
                 sim_state.num_risk_groups.
         """
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
-                            p=self.current_rate * (1 / num_timesteps))
+                            p=self.current_rate * (1.0 / num_timesteps))
 
     def get_poisson_realization(self,
                                 RNG: np.random.Generator,
@@ -757,7 +757,7 @@ class TransitionVariable(ABC):
                 size A x L, where A is sim_state.num_age_groups and L is
                 sim_state.num_risk_groups.
         """
-        return RNG.poisson(self.base_count * self.current_rate / num_timesteps)
+        return RNG.poisson(self.base_count * self.current_rate / float(num_timesteps))
 
     def get_binomial_deterministic_realization(self,
                                                RNG: np.random.Generator,
@@ -785,7 +785,7 @@ class TransitionVariable(ABC):
         """
 
         return np.asarray(self.base_count *
-                          approx_binomial_probability_from_rate(self.current_rate, 1 / num_timesteps),
+                          approx_binomial_probability_from_rate(self.current_rate, 1.0 / num_timesteps),
                           dtype=int)
 
     def get_binomial_taylor_approx_deterministic_realization(self,
@@ -1379,11 +1379,12 @@ class TransmissionModel:
         """
 
         for timestep in range(self.config.timesteps_per_day):
-            self._update_epi_metrics()
 
             self._update_transition_rates()
 
             self._sample_transitions()
+
+            self._update_epi_metrics()
 
             self._update_compartments()
 
@@ -1521,7 +1522,7 @@ class TransmissionModel:
 
         for tvar in self.transition_variables:
             tvar.current_rate = None
-            tvar.current_val = 0.90
+            tvar.current_val = 0.0
 
         for tvargroup in self.transition_variable_groups:
             tvargroup.current_vals_list = []

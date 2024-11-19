@@ -15,7 +15,7 @@ immunoseirs_constructor = FluModelConstructor(immunoseirs_config_filepath,
 
 immunoseirs_model = immunoseirs_constructor.create_transmission_model(np.random.SeedSequence())
 
-immunoseirs_model.simulate_until_time_period(200)
+immunoseirs_model.simulate_until_time_period(300)
 
 create_basic_compartment_history_plot(immunoseirs_model)
 

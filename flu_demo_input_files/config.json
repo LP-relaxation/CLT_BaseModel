@@ -1,6 +1,6 @@
 {
 	"timesteps_per_day":2,
-	"transition_type":"poisson_deterministic",
+	"transition_type":"poisson",
 	"start_real_date": "2022-08-08",
 	"save_daily_history": true
 }
