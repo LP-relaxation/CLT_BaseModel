@@ -145,4 +145,31 @@ def test_reproducible_RNG(model):
                               np.array(reset_model_history_dict[compartment_name]))
 
 
+@pytest.mark.parametrize("model", flu_model_variations_list)
+def test_compartments_integer_population(model):
+    """
+    Compartment populations should be integer-valued.
+    """
+
+    model.reset_simulation()
+    model.modify_random_seed(starting_random_seed)
+    model.simulate_until_time_period(300)
+
+    original_model_history_dict = {}
+
+    for compartment in model.compartments:
+        original_model_history_dict[compartment.name] = copy.deepcopy(compartment.history_vals_list)
+
+    reset_model_history_dict = {}
+
+    model.reset_simulation()
+    model.modify_random_seed(starting_random_seed)
+    model.simulate_until_time_period(300)
+
+    for compartment in model.compartments:
+        reset_model_history_dict[compartment.name] = copy.deepcopy(compartment.history_vals_list)
+
+    for compartment_name in original_model_history_dict.keys():
+        assert np.array_equal(np.array(original_model_history_dict[compartment_name]),
+                              np.array(reset_model_history_dict[compartment_name]))
 

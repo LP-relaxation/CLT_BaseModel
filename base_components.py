@@ -1245,6 +1245,10 @@ class TransmissionModel:
             tracks current simulation day -- incremented by +1
             when config.timesteps_per_day discretized timesteps
             have completed.
+        current_real_date (datetime.date):
+            tracks real-world date -- advanced by +1 day when
+            config.timesteps_per_day discretized timesteps
+            have completed.
         lookup_by_name (dict):
             keys are names of StateVariable, TransitionVariable,
             and TransitionVariableGroup instances associated
@@ -1736,6 +1740,6 @@ class ModelConstructor(ABC):
         return TransmissionModel(state_variable_manager,
                                  flu_transition_variables_list,
                                  flu_transition_variable_groups_list,
-                                 self.fixed_params,
-                                 self.config,
+                                 copy.deepcopy(self.fixed_params),
+                                 copy.deepcopy(self.config),
                                  RNG_seed)
