@@ -22,8 +22,10 @@ flu_model_constructor = FluModelConstructor(config_filepath,
 #   -- this is because the Poisson distribution is unbounded.
 #   For example, values of beta_baseline that are too high
 #   can result in negative compartment populations.
-#   Sometimes tests fail because these choices of parameter values
-#   and parameter initial values are "bad" for the problem.
+#   Similarly, if num_timesteps is small, this can result
+#   in negative compartment populations. Sometimes tests fail because
+#   these choices of parameter values and parameter initial values
+#   are unsuitable for well-behaved Poisson random variables.
 
 
 def create_models_all_transition_types_list(model_constructor, RNG_seed):

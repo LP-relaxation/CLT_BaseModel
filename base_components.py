@@ -1305,6 +1305,15 @@ class TransmissionModel:
 
         self.lookup_by_name = self.create_lookup_by_name()
 
+    @property
+    def sim_state(self):
+        """
+        Provides easy access to current simulation state,
+        which lives on a StateVariableManager.
+        """
+
+        return self.state_variable_manager.sim_state
+
     def modify_random_seed(self, new_seed_number) -> None:
         """
         Modifies model's RNG attribute in-place to new generator
@@ -1361,16 +1370,16 @@ class TransmissionModel:
         # last_simulation_day is exclusive endpoint
         while self.current_simulation_day < last_simulation_day:
 
-            self._prepare_daily_state()
+            self.prepare_daily_state()
 
-            self._simulate_timesteps()
+            self.simulate_timesteps()
 
             if save_daily_history:
                 self._save_daily_history()
 
-            self._increment_simulation_day()
+            self.increment_simulation_day()
 
-    def _simulate_timesteps(self) -> None:
+    def simulate_timesteps(self) -> None:
         """
         Subroutine for simulate_until_time_period.
 
@@ -1395,7 +1404,7 @@ class TransmissionModel:
             self.state_variable_manager.update_sim_state(self.epi_metrics +
                                                          self.compartments)
 
-    def _prepare_daily_state(self) -> None:
+    def prepare_daily_state(self) -> None:
         """
         At beginning of each day, update current value of
         schedules and dynamic values -- note that schedules
@@ -1476,7 +1485,7 @@ class TransmissionModel:
             compartment.reset_inflow()
             compartment.reset_outflow()
 
-    def _increment_simulation_day(self) -> None:
+    def increment_simulation_day(self) -> None:
         """
         Move to next day in simulation
         """
@@ -1691,7 +1700,7 @@ class ModelConstructor(ABC):
                                                       epi_metrics=epi_metrics_list,
                                                       dynamic_vals=dynamic_vals_list,
                                                       schedules=schedules_list,
-                                                      sim_state=self.sim_state)
+                                                      sim_state=copy.deepcopy(self.sim_state))
 
         state_variable_manager.update_sim_state(compartments_list + epi_metrics_list +
                                                 dynamic_vals_list + schedules_list)

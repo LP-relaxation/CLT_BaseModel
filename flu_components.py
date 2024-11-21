@@ -230,9 +230,11 @@ class NewRecoveredHome(base.TransitionVariable):
 
 
 class NewRecoveredHosp(base.TransitionVariable):
+
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
+
         return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups),
                        (1 - fixed_params.H_to_D_adjusted_proportion) * fixed_params.H_to_R_rate)
 
