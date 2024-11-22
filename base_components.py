@@ -1367,20 +1367,22 @@ class TransmissionModel:
                                          f"exceeds last simulation day ({last_simulation_day}).")
 
         save_daily_history = self.config.save_daily_history
+        timesteps_per_day = self.config.timesteps_per_day
 
         # last_simulation_day is exclusive endpoint
         while self.current_simulation_day < last_simulation_day:
 
             self.prepare_daily_state()
 
-            self.simulate_timesteps()
+            self.simulate_timesteps(timesteps_per_day)
 
             if save_daily_history:
                 self._save_daily_history()
 
             self.increment_simulation_day()
 
-    def simulate_timesteps(self) -> None:
+    def simulate_timesteps(self,
+                           num_timesteps: int) -> None:
         """
         Subroutine for simulate_until_time_period.
 
@@ -1390,9 +1392,14 @@ class TransmissionModel:
 
         Properly scales transition variable realizations and changes
         in dynamic vals by specified timesteps per day.
+
+        Parameters:
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
         """
 
-        for timestep in range(self.config.timesteps_per_day):
+        for timestep in range(num_timesteps):
 
             self._update_transition_rates()
 

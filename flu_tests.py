@@ -17,6 +17,8 @@ flu_model_constructor = FluModelConstructor(config_filepath,
                                             fixed_params_filepath,
                                             init_vals_filepath)
 
+flu_model = flu_model_constructor.create_transmission_model(RNG_seed=88888888)
+
 
 # WARNING:
 #   Currently excluding Poisson transition types from automatic
@@ -35,7 +37,7 @@ def create_models_all_transition_types_list(model_constructor, RNG_seed):
 
     for transition_type in base.TransitionTypes:
 
-        if "Poisson" not in transition_type:
+        if "poisson" not in transition_type:
             #  Need deep copy -- otherwise changing "transition_type" on
             #   model_constructor.config changes config attribute for all
             #   models in models_list
@@ -48,11 +50,123 @@ def create_models_all_transition_types_list(model_constructor, RNG_seed):
     return models_list
 
 
-starting_random_seed = np.random.SeedSequence()
+starting_random_seed = 123456789123456789
 
 flu_model_variations_list = \
     create_models_all_transition_types_list(flu_model_constructor,
                                             starting_random_seed)
+
+
+def test_correct_object_count():
+    """
+    Based on this model, there should be 6 epi compartments,
+        7 transition variables, 2 transition variable groups,
+        and 2 epi metrics
+    """
+
+    assert len(flu_model.compartments) == 6
+    assert len(flu_model.transition_variables) == 7
+    assert len(flu_model.transition_variable_groups) == 2
+    assert len(flu_model.epi_metrics) == 2
+    assert len(flu_model.dynamic_vals) == 1
+
+
+def test_model_constructor_no_unintended_sharing():
+    """
+    Regression test: there was a previous bug where the same
+        SimState object was being shared across multiple models created
+        by subsequent creation calls on the model constructor.
+        This is remedied using deep copies -- we make sure that
+        the model constructor always creates a transmission model
+        with its own distinct/independent SimState OBJECT,
+        even if the actual initial SimState VALUES are the same
+        across models.
+
+    This test makes sure that SimState objects across models
+        created by the same constructor are indeed distinct/independent.
+    """
+
+    first_model = flu_model_constructor.create_transmission_model(RNG_seed=1)
+
+    second_model = flu_model_constructor.create_transmission_model(RNG_seed=1)
+
+    first_model.simulate_until_time_period(100)
+
+    # The initial state of the second model should still be the same
+    #   initial state -- it should not have been affected by simulating
+    #   the first model
+    for key in vars(second_model.sim_state).keys():
+        try:
+            assert (getattr(second_model.sim_state, key) ==
+                    getattr(flu_model_constructor.sim_state, key))
+        # if it's an array, have to check equality of each element --
+        #   Python will complain that the truth value of an array is ambiguous
+        except ValueError:
+            assert (getattr(second_model.sim_state, key) ==
+                    getattr(flu_model_constructor.sim_state, key)).all()
+
+
+def test_model_constructor_reproducible_results():
+    """
+    If the flu model constructor creates two identical models
+        with the same starting random number seed, they should give
+        the same results. Specifically, if the first model is simulated
+        before the second model is created, the results should still
+        be the same.
+
+    Also a way of ensuring there is no unintended object sharing
+        or unintended mutability issues with model constructors.
+        Specifically, simulating a model created from a constructor
+        should not modify objects on that constructor.
+    """
+
+    first_model = flu_model_constructor.create_transmission_model(RNG_seed=1)
+    first_model.simulate_until_time_period(100)
+
+    first_model_history_dict = {}
+
+    for compartment in first_model.compartments:
+        first_model_history_dict[compartment.name] = compartment.history_vals_list
+
+    second_model = flu_model_constructor.create_transmission_model(RNG_seed=1)
+    second_model.simulate_until_time_period(100)
+
+    second_model_history_dict = {}
+
+    for compartment in second_model.compartments:
+        second_model_history_dict[compartment.name] = compartment.history_vals_list
+
+    for compartment_name in first_model_history_dict.keys():
+        assert np.array_equal(np.array(first_model_history_dict[compartment_name]),
+                              np.array(second_model_history_dict[compartment_name]))
+
+
+def test_num_timesteps():
+    """
+    If "timesteps_per_day" in Config increases (number of timesteps per day
+        increases), then step sizes are smaller.
+
+    Using binomial deterministic transitions, realizations will be smaller
+        for more timesteps per day.
+    """
+
+    flu_model_constructor.config.transition_type = "binomial_deterministic"
+
+    flu_model_constructor.config.timesteps_per_day = 2
+
+    few_timesteps_model = flu_model_constructor.create_transmission_model(RNG_seed=88888888)
+    few_timesteps_model.prepare_daily_state()
+    few_timesteps_model.simulate_timesteps(1)
+
+    flu_model_constructor.config.timesteps_per_day = 20
+
+    many_timesteps_model = flu_model_constructor.create_transmission_model(RNG_seed=88888888)
+    many_timesteps_model.prepare_daily_state()
+    many_timesteps_model.simulate_timesteps(1)
+
+    for tvar in few_timesteps_model.transition_variables:
+        assert (tvar.current_val >=
+                many_timesteps_model.lookup_by_name[tvar.name].current_val).all()
 
 
 @pytest.mark.parametrize("model", flu_model_variations_list)
@@ -73,7 +187,7 @@ def test_no_transmission_when_beta_zero(model):
 @pytest.mark.parametrize("model", flu_model_variations_list)
 def test_dead_compartment_monotonic(model):
     """
-    People do not rise from the dead; the deaths compartment
+    People do not rise from the dead; the dead compartment
         should not decrease over time
     """
 
@@ -108,24 +222,7 @@ def test_population_is_constant(model):
 
 
 @pytest.mark.parametrize("model", flu_model_variations_list)
-def test_constructor_methods(model):
-    """
-    Based on this model, there should be 6 epi compartments,
-        7 transition variables, 2 transition variable groups,
-        and 2 epi metrics
-    """
-
-    model.reset_simulation()
-
-    assert len(model.compartments) == 6
-    assert len(model.transition_variables) == 7
-    assert len(model.transition_variable_groups) == 2
-    assert len(model.epi_metrics) == 2
-    assert len(model.dynamic_vals) == 1
-
-
-@pytest.mark.parametrize("model", flu_model_variations_list)
-def test_reproducible_RNG(model):
+def test_reset_simulation_reproducible_results(model):
     """
     Resetting the random number generator and simulating should
         give the same results as the initial run.
@@ -138,7 +235,8 @@ def test_reproducible_RNG(model):
     original_model_history_dict = {}
 
     for compartment in model.compartments:
-        original_model_history_dict[compartment.name] = copy.deepcopy(compartment.history_vals_list)
+        original_model_history_dict[compartment.name] = \
+            copy.deepcopy(compartment.history_vals_list)
 
     reset_model_history_dict = {}
 
@@ -147,7 +245,8 @@ def test_reproducible_RNG(model):
     model.simulate_until_time_period(100)
 
     for compartment in model.compartments:
-        reset_model_history_dict[compartment.name] = copy.deepcopy(compartment.history_vals_list)
+        reset_model_history_dict[compartment.name] = \
+            copy.deepcopy(compartment.history_vals_list)
 
     for compartment_name in original_model_history_dict.keys():
         assert np.array_equal(np.array(original_model_history_dict[compartment_name]),
@@ -205,3 +304,4 @@ def test_transition_format(model):
 
             for element in tvar.current_rate.flatten():
                 assert isinstance(element, float)
+

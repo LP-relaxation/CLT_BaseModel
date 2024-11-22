@@ -168,6 +168,10 @@ class FluSimState(base.SimState):
             element (a, l, a', l') corresponds to the number of
             contacts that a person in age-risk group a,l
             has with people in age-risk group a', l'.
+        beta_reduct (float in [0,1]):
+            starting value of DynamicVal "beta_reduct" on
+            starting day of simulation -- this DynamicVal
+            emulates a simple staged-alert policy
     """
 
     S: Optional[np.ndarray] = None
@@ -180,6 +184,7 @@ class FluSimState(base.SimState):
     population_immunity_inf: Optional[np.ndarray] = None
     absolute_humidity: Optional[float] = None
     flu_contact_matrix: Optional[np.ndarray] = None
+    beta_reduct: Optional[float] = 0.0
 
 
 class NewExposed(base.TransitionVariable):
@@ -327,11 +332,11 @@ class BetaReduct(base.DynamicVal):
 
     def update_current_val(self, sim_state, fixed_params):
         if np.sum(sim_state.I) / np.sum(fixed_params.total_population_val) > 0.05:
-            self.current_val = 1
+            self.current_val = .5
             self.permanent_lockdown = True
         else:
             if not self.permanent_lockdown:
-                self.current_val = 0
+                self.current_val = 0.0
 
 
 def absolute_humidity_func(current_date: datetime.date) -> float:

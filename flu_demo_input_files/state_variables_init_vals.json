@@ -16,5 +16,6 @@
 	"population_immunity_hosp": [[0.5],
 								[0.5]],
 	"absolute_humidity": null,
-	"flu_contact_matrix": null
+	"flu_contact_matrix": null,
+	"beta_reduct": 0.0
 }
