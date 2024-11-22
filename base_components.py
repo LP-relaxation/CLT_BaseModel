@@ -394,7 +394,8 @@ class TransitionVariableGroup:
         Returns:
             np.ndarray:
                 contains positive floats, size equal to length of
-                (outgoing transition variables list x number of age groups x number of risk groups).
+                (outgoing transition variables list x
+                number of age groups x number of risk groups).
         """
 
         num_outflows = len(self.transition_variables)
@@ -442,7 +443,7 @@ class TransitionVariableGroup:
         """
 
         probabilities_array = self.get_probabilities_array(num_timesteps)
-        return self.origin.current_val * probabilities_array
+        return np.asarray(self.origin.current_val * probabilities_array, dtype=int)
 
     def get_multinomial_taylor_approx_deterministic_realization(self,
                                                                 RNG: np.random.Generator,
@@ -471,7 +472,7 @@ class TransitionVariableGroup:
         """
 
         current_rates_array = self.get_current_rates_array()
-        return self.origin.current_val * current_rates_array / num_timesteps
+        return np.asarray(self.origin.current_val * current_rates_array / num_timesteps, dtype=int)
 
     def get_poisson_deterministic_realization(self,
                                               RNG: np.random.Generator,
@@ -495,7 +496,7 @@ class TransitionVariableGroup:
                 x number of age groups x number of risk groups).
         """
 
-        return self.origin.current_val * self.get_current_rates_array() / num_timesteps
+        return np.asarray(self.origin.current_val * self.get_current_rates_array() / num_timesteps, dtype=int)
 
     def reset(self) -> None:
         self.current_vals_list = []
@@ -607,7 +608,7 @@ class TransitionVariable(ABC):
         Computes and returns current rate of transition variable,
         based on current state of the simulation and epidemiological parameters.
         Output should be a numpy array of size A x L, where A is
-        sim_state.num_age_groups and L is sim_state.num_risk_groups.
+        number of age groups and L is number of risk groups.
 
         Args:
             sim_state (SimState):
@@ -619,8 +620,8 @@ class TransitionVariable(ABC):
             np.ndarray:
                 holds age-risk transition rate,
                 must be same shape as origin.init_val,
-                i.e. be size A x L, where A is sim_state.num_age_groups
-                and L is sim_state.num_risk_groups.
+                i.e. be size A x L, where A is number of age groups
+                and L is number of risk groups.
         """
         pass
 
@@ -705,8 +706,8 @@ class TransitionVariable(ABC):
         
         Returns:
             np.ndarray:
-                size A x L, where A is sim_state.num_age_groups and L is
-                sim_state.num_risk_groups.
+                size A x L, where A is number of age groups and
+                L is number of risk groups.
         """
 
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
@@ -730,8 +731,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is sim_state.num_age_groups and L is
-                sim_state.num_risk_groups.
+                size A x L, where A is number of age groups and L
+                is number of risk groups.
         """
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
                             p=self.current_rate * (1.0 / num_timesteps))
@@ -754,8 +755,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is sim_state.num_age_groups and L is
-                sim_state.num_risk_groups.
+                size A x L, where A is number of age groups and
+                L is number of risk groups.
         """
         return RNG.poisson(self.base_count * self.current_rate / float(num_timesteps))
 
@@ -780,8 +781,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is sim_state.num_age_groups and L is
-                sim_state.num_risk_groups.
+                size A x L, where A is number of age groups and
+                L is number of risk groups.
         """
 
         return np.asarray(self.base_count *
@@ -808,8 +809,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is sim_state.num_age_groups and L is
-                sim_state.num_risk_groups.
+                size A x L, where A is number of age groups and
+                L is number of risk groups.
         """
 
         return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
@@ -832,8 +833,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is sim_state.num_age_groups and L is
-                sim_state.num_risk_groups.
+                size A x L, where A is number of age groups and
+                L is number of risk groups.
         """
 
         return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
@@ -1053,8 +1054,8 @@ class EpiMetric(StateVariable, ABC):
         Computes and returns change in current value of dynamic val,
         based on current state of the simulation and epidemiological parameters.
         ***NOTE: OUTPUT SHOULD ALREADY BE SCALED BY NUM_TIMESTEPS.
-        Output should be a numpy array of size A x L, where A is
-        sim_state.num_age_groups and L is sim_state.num_risk_groups.
+        Output should be a numpy array of size A x L, where A
+        is number of age groups and L is number of risk groups.
 
         Args:
             sim_state (SimState):
@@ -1068,8 +1069,8 @@ class EpiMetric(StateVariable, ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is sim_state.num_age_groups and L is
-                sim_state.num_risk_groups.
+                size A x L, where A is number of age groups and
+                L is number of risk groups.
         """
         pass
 
