@@ -64,9 +64,9 @@ def test_correct_object_count():
         and 2 epi metrics
     """
 
-    assert len(flu_model.compartments) == 6
-    assert len(flu_model.transition_variables) == 7
-    assert len(flu_model.transition_variable_groups) == 2
+    assert len(flu_model.compartments) == 8
+    assert len(flu_model.transition_variables) == 10
+    assert len(flu_model.transition_variable_groups) == 3
     assert len(flu_model.epi_metrics) == 2
     assert len(flu_model.dynamic_vals) == 1
 

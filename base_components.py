@@ -110,7 +110,7 @@ class TransitionVariableGroup:
     when there are multiple outflows from a single compartment.
 
     For example, if all outflows of compartment H are: R and D,
-    i.e. from the Hospital compartment, people either go to Recovered
+    i.e. from the Hosp compartment, people either go to Recovered
     or Dead, a TransitionVariableGroup that holds both R and D handles
     the correct correlation structure between R and D.
 

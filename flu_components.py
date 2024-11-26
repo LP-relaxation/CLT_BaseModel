@@ -9,6 +9,7 @@ import base_components as base
 
 base_path = Path(__file__).parent / "flu_demo_input_files"
 
+
 # Note: for dataclasses, Optional is used to help with static type checking
 # -- it means that an attribute can either hold a value with the specified
 # datatype or it can be None
@@ -76,21 +77,40 @@ class FluFixedParams(base.FixedParams):
         R_to_S_rate (positive float):
             rate at which people in R move to S.
         E_to_I_rate (positive float):
-            rate at which people in E move to I.
-        I_to_R_rate (positive float):
-            rate at which people in I move to R.
-        I_to_H_rate (positive float):
-            rate at which people in I move to H.
+            rate at which people in E move to I (both
+            IP and IA, infected pre-symptomatic and infected
+            asymptomatic)
+        IP_to_IS_rate (positive float):
+            rate a which people in IP (infected pre-symptomatic)
+            move to IS (infected symptomatic)
+        IS_to_R_rate (positive float):
+            rate at which people in IS (infected symptomatic)
+            move to R.
+        IA_to_R_rate (positive float):
+            rate at which people in IA (infected asymptomatic)
+            move to R
+        IS_to_H_rate (positive float):
+            rate at which people in IS (infected symptomatic)
+            move to H.
         H_to_R_rate (positive float):
             rate at which people in H move to R.
         H_to_D_rate (positive float):
             rate at which people in H move to D.
-        I_to_H_adjusted_proportion (np.ndarray of positive floats in [0,1]):
-            rate-adjusted proportion -- infected who are hospitalized
+        E_to_IA_prop (np.ndarray of positive floats in [0,1]):
+            proportion exposed who are asymptomatic based on
+            age-risk groups.
+        IS_to_H_adjusted_prop (np.ndarray of positive floats in [0,1]):
+            rate-adjusted proportion infected who are hospitalized
             based on age-risk groups.
-        H_to_D_adjusted_proportion (np.ndarray of positive floats in [0,1]):
+        H_to_D_adjusted_prop (np.ndarray of positive floats in [0,1]):
             rate-adjusted proportion hospitalized who die based on
             age-risk groups.
+        IP_relative_inf (positive float):
+            relative infectiousness of pre-symptomatic to symptomatic
+            people (IP to IS compartment).
+        IA_relative_inf (positive float):
+            relative infectiousness of asymptomatic to symptomatic
+            people (IA to IS compartment).
     """
 
     num_age_groups: Optional[int] = None
@@ -108,12 +128,17 @@ class FluFixedParams(base.FixedParams):
     death_risk_reduction: Optional[float] = None
     R_to_S_rate: Optional[float] = None
     E_to_I_rate: Optional[float] = None
-    I_to_R_rate: Optional[float] = None
-    I_to_H_rate: Optional[float] = None
+    IP_to_IS_rate: Optional[float] = None
+    IS_to_R_rate: Optional[float] = None
+    IA_to_R_rate: Optional[float] = None
+    IS_to_H_rate: Optional[float] = None
     H_to_R_rate: Optional[float] = None
     H_to_D_rate: Optional[float] = None
-    I_to_H_adjusted_proportion: Optional[np.ndarray] = None
-    H_to_D_adjusted_proportion: Optional[np.ndarray] = None
+    E_to_IA_prop: Optional[np.ndarray] = None
+    IS_to_H_adjusted_prop: Optional[np.ndarray] = None
+    H_to_D_adjusted_prop: Optional[np.ndarray] = None
+    IP_relative_inf: Optional[float] = None
+    IA_relative_inf: Optional[float] = None
 
 
 @dataclass
@@ -138,9 +163,15 @@ class FluSimState(base.SimState):
         E (np.ndarray of positive floats):
             exposed compartment for age-risk groups --
             (holds current_val of EpiCompartment "E").
-        I (np.ndarray of positive floats):
-            infected compartment for age-risk groups
-            (holds current_val of EpiCompartment "I").
+        IP (np.ndarray of positive floats):
+            infected pre-symptomatic compartment for age-risk groups
+            (holds current_val of EpiCompartment "IP").
+        IS (np.ndarray of positive floats):
+            infected symptomatic compartment for age-risk groups
+            (holds current_val of EpiCompartment "IS").
+        IA (np.ndarray of positive floats):
+            infected asymptomatic compartment for age-risk groups
+            (holds current_val of EpiCompartment "IA").
         H (np.ndarray of positive floats):
             hospital compartment for age-risk groups
             (holds current_val of EpiCompartment "H").
@@ -150,14 +181,14 @@ class FluSimState(base.SimState):
         D (np.ndarray of positive floats):
             dead compartment for age-risk groups
             (holds current_val of EpiCompartment "D").
-        population_immunity_hosp (np.ndarray of positive floats):
+        pop_immunity_hosp (np.ndarray of positive floats):
             infection-induced population-level immunity against
             hospitalization, for age-risk groups (holds current_val
-            of EpiMetric "population_immunity_hosp").
-        population_immunity_inf (np.ndarray of positive floats):
+            of EpiMetric "pop_immunity_hosp").
+        pop_immunity_inf (np.ndarray of positive floats):
             infection-induced population-level immunity against
             infection, for age-risk groups (holds current_val
-            of EpiMetric "population_immunity_inf").
+            of EpiMetric "pop_immunity_inf").
         absolute_humidity (positive float):
             grams of water vapor per cubic meter g/m^3,
             used as seasonality parameter that influences
@@ -176,23 +207,24 @@ class FluSimState(base.SimState):
 
     S: Optional[np.ndarray] = None
     E: Optional[np.ndarray] = None
-    I: Optional[np.ndarray] = None
+    IP: Optional[np.ndarray] = None
+    IS: Optional[np.ndarray] = None
+    IA: Optional[np.ndarray] = None
     H: Optional[np.ndarray] = None
     R: Optional[np.ndarray] = None
     D: Optional[np.ndarray] = None
-    population_immunity_hosp: Optional[np.ndarray] = None
-    population_immunity_inf: Optional[np.ndarray] = None
+    pop_immunity_hosp: Optional[np.ndarray] = None
+    pop_immunity_inf: Optional[np.ndarray] = None
     absolute_humidity: Optional[float] = None
     flu_contact_matrix: Optional[np.ndarray] = None
     beta_reduct: Optional[float] = 0.0
 
 
-class NewExposed(base.TransitionVariable):
+class SusceptibleToExposed(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
-
-        force_of_immunity = (1 + fixed_params.inf_risk_reduction * sim_state.population_immunity_inf)
+        force_of_immunity = (1 + fixed_params.inf_risk_reduction * sim_state.pop_immunity_inf)
 
         # We subtract absolute_humidity because higher humidity means less transmission
         beta_humidity_adjusted = (1 - sim_state.absolute_humidity * fixed_params.humidity_impact) * \
@@ -200,71 +232,96 @@ class NewExposed(base.TransitionVariable):
 
         # Compute I / N -> original shape is (A, L)
         # Expand ratio for broadcasting -> new shape is (1, 1, A, L)
-        I_N_ratio_expanded = (sim_state.I / fixed_params.total_population_val)[None, None, :, :]
+        I_N_ratio_expanded = ((
+                                      sim_state.IS + sim_state.IP * fixed_params.IP_relative_inf + sim_state.IA * fixed_params.IA_relative_inf)
+                              / fixed_params.total_population_val)[None, None, :, :]
 
         # Expand force_of_immunity for broadcasting -> new shape is (A, L, 1, 1)
         force_of_immunity_expanded = force_of_immunity[:, :, None, None]
 
         # Element-wise multiplication and division by M_expanded
         # Sum over a' and l' (last two dimensions) -> result has shape (A, L)
-        summand = np.sum(sim_state.flu_contact_matrix * I_N_ratio_expanded / force_of_immunity_expanded, axis=(2,3))
+        summand = np.sum(sim_state.flu_contact_matrix * I_N_ratio_expanded / force_of_immunity_expanded, axis=(2, 3))
 
         return (1 - sim_state.beta_reduct) * beta_humidity_adjusted * summand
 
 
-class NewSusceptible(base.TransitionVariable):
+class RecoveredToSusceptible(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
         return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups), fixed_params.R_to_S_rate)
 
 
-class NewInfected(base.TransitionVariable):
-    def get_current_rate(self,
-                         sim_state: FluSimState,
-                         fixed_params: FluFixedParams):
-        return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups), fixed_params.E_to_I_rate)
-
-
-class NewRecoveredHome(base.TransitionVariable):
+class ExposedToAsymp(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
         return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups),
-                       (1 - fixed_params.I_to_H_adjusted_proportion) * fixed_params.I_to_R_rate)
+                       fixed_params.E_to_I_rate * fixed_params.E_to_IA_prop)
 
 
-class NewRecoveredHosp(base.TransitionVariable):
-
+class ExposedToPresymp(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
-
         return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups),
-                       (1 - fixed_params.H_to_D_adjusted_proportion) * fixed_params.H_to_R_rate)
+                       fixed_params.E_to_I_rate * (1 - fixed_params.E_to_IA_prop))
 
 
-class NewHosp(base.TransitionVariable):
+class PresympToSymp(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
-        return np.asarray(fixed_params.I_to_H_rate * fixed_params.I_to_H_adjusted_proportion /
-                          (1 + fixed_params.hosp_risk_reduction * sim_state.population_immunity_hosp))
+        return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups),
+                       fixed_params.IP_to_IS_rate)
 
 
-class NewDead(base.TransitionVariable):
+class SympToRecovered(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
-        return np.asarray(fixed_params.H_to_D_adjusted_proportion * fixed_params.H_to_D_rate /
-                          (1 + fixed_params.death_risk_reduction * sim_state.population_immunity_hosp))
+        return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups),
+                       (1 - fixed_params.IS_to_H_adjusted_prop) * fixed_params.IS_to_R_rate)
+
+
+class AsympToRecovered(base.TransitionVariable):
+    def get_current_rate(self,
+                         sim_state: FluSimState,
+                         fixed_params: FluFixedParams):
+        return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups),
+                       fixed_params.IA_to_R_rate)
+
+
+class HospToRecovered(base.TransitionVariable):
+    def get_current_rate(self,
+                         sim_state: FluSimState,
+                         fixed_params: FluFixedParams):
+        return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups),
+                       (1 - fixed_params.H_to_D_adjusted_prop) * fixed_params.H_to_R_rate)
+
+
+class SympToHosp(base.TransitionVariable):
+    def get_current_rate(self,
+                         sim_state: FluSimState,
+                         fixed_params: FluFixedParams):
+        return np.asarray(fixed_params.IS_to_H_rate * fixed_params.IS_to_H_adjusted_prop /
+                          (1 + fixed_params.hosp_risk_reduction * sim_state.pop_immunity_hosp))
+
+
+class HospToDead(base.TransitionVariable):
+    def get_current_rate(self,
+                         sim_state: FluSimState,
+                         fixed_params: FluFixedParams):
+        return np.asarray(fixed_params.H_to_D_adjusted_prop * fixed_params.H_to_D_rate /
+                          (1 + fixed_params.death_risk_reduction * sim_state.pop_immunity_hosp))
 
 
 class PopulationImmunityHosp(base.EpiMetric):
 
-    def __init__(self, name, init_val, new_susceptible):
+    def __init__(self, name, init_val, R_to_S):
         super().__init__(name, init_val)
-        self.new_susceptible = new_susceptible
+        self.R_to_S = R_to_S
 
     def get_change_in_current_val(self,
                                   sim_state: FluSimState,
@@ -272,10 +329,10 @@ class PopulationImmunityHosp(base.EpiMetric):
                                   num_timesteps: int):
         # Ensure consistent float64 precision
         factor = np.float64(fixed_params.immunity_hosp_increase_factor)
-        susceptible = np.float64(self.new_susceptible.current_val)
+        susceptible = np.float64(self.R_to_S.current_val)
         population = np.float64(fixed_params.total_population_val)
         saturation = np.float64(fixed_params.immunity_saturation)
-        pop_immunity = np.float64(sim_state.population_immunity_hosp)
+        pop_immunity = np.float64(sim_state.pop_immunity_hosp)
         waning_factor = np.float64(fixed_params.waning_factor_hosp)
         num_timesteps = np.float64(num_timesteps)
 
@@ -293,25 +350,26 @@ class PopulationImmunityHosp(base.EpiMetric):
 
 
 class PopulationImmunityInf(base.EpiMetric):
-    def __init__(self, name, init_val, new_susceptible):
+    def __init__(self, name, init_val, R_to_S):
         super().__init__(name, init_val)
-        self.new_susceptible = new_susceptible
+        self.R_to_S = R_to_S
 
     def get_change_in_current_val(self,
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
+
         # Convert all parameters to consistent float64 for high precision
         increase_factor = np.float64(fixed_params.immunity_inf_increase_factor)
-        new_susceptible = np.float64(self.new_susceptible.current_val)
+        R_to_S = np.float64(self.R_to_S.current_val)
         total_population = np.float64(fixed_params.total_population_val)
         saturation = np.float64(fixed_params.immunity_saturation)
-        population_immunity = np.float64(sim_state.population_immunity_inf)
+        population_immunity = np.float64(sim_state.pop_immunity_inf)
         waning_factor = np.float64(fixed_params.waning_factor_inf)
         num_timesteps = np.float64(num_timesteps)
 
         # Break down calculations for better readability and to avoid compounded rounding errors
-        gain_numerator = increase_factor * new_susceptible
+        gain_numerator = increase_factor * R_to_S
         gain_denominator = total_population * (1 + saturation * population_immunity)
         immunity_gain = gain_numerator / gain_denominator
 
@@ -397,7 +455,7 @@ class FluContactMatrix(base.Schedule):
 
     def __init__(self,
                  name: str,
-                 init_val: Optional[Union[np.ndarray, float]]=None):
+                 init_val: Optional[Union[np.ndarray, float]] = None):
         super().__init__(name, init_val)
 
         df = pd.read_csv(base_path / "school_work_calendar.csv", index_col=0)
@@ -405,9 +463,9 @@ class FluContactMatrix(base.Schedule):
 
         self.time_series_df = df
 
-        self.total_contact_matrix = np.array([[2.5, 0.5], [2, 1.5]]).reshape((2,1,2,1))
-        self.school_contact_matrix = np.array([[0.5, 0], [0.05, 0.1]]).reshape((2,1,2,1))
-        self.work_contact_matrix = np.array([[0, 0], [0, 0.0]]).reshape((2,1,2,1))
+        self.total_contact_matrix = np.array([[2.5, 0.5], [2, 1.5]]).reshape((2, 1, 2, 1))
+        self.school_contact_matrix = np.array([[0.5, 0], [0.05, 0.1]]).reshape((2, 1, 2, 1))
+        self.work_contact_matrix = np.array([[0, 0], [0, 0.0]]).reshape((2, 1, 2, 1))
 
     def update_current_val(self, current_date: datetime.date) -> None:
         """
@@ -439,32 +497,38 @@ class FluModelConstructor(base.ModelConstructor):
     populated by user-specified JSON files.
 
     Key method create_transmission_model returns a TransmissionModel
-    instance with S-E-I-H-R-D compartments and population_immunity_inf
-    and population_immunity_hosp epi metrics. The structure
+    instance with S-E-I-H-R-D compartments and pop_immunity_inf
+    and pop_immunity_hosp epi metrics. 
+    
+    The structure
     is as follows:
-        - S = new_susceptible - new_exposed
-        - E = new_exposed - new_infected
-        - I = new_infected - new_recovered_home - new_hospitalized
-        - H = new_hospitalized - new_recovered_hosp - new_dead
-        - R = new_recovered_home + new_recovered_hosp - new_susceptible
-        - D = new_dead
+        - S = R_to_S - S_to_E
+        - E = S_to_E - E_to_IP - E_to_IA
+        - I = new_infected - IS_to_R - IS_to_H
+        - H = IS_to_H - H_to_R - H_to_D
+        - R = IS_to_R + H_to_R - R_to_S
+        - D = H_to_D
 
     The following are TransitionVariable instances:
-        - new_susceptible is a NewSusceptible instance
-        - new_exposed is a NewExposed instance
-        - new_infected is a NewInfected instance
-        - new_hospitalized is a NewHospitalized instance
-        - new_recovered_home is a NewRecoveredHome instance
-        - new_recovered_hosp is a NewRecoveredHosp instance
-        - new_dead is a NewDead instance
+        - R_to_S is a RecoveredToSusceptible instance
+        - S_to_E is a SusceptibleToExposed instance
+        
+        
+        
+        - IP_to_IS is a PresympToSymp instance
+        - IS_to_H is a SympToHosp instance
+        - IS_to_R is a SympToRecovered instance
+        - H_to_R is a HospToRecovered instance
+        - H_to_D is a HospToDead instance
 
-    There are two TransitionVariableGroups:
-        - I_out (since new_recovered_home and new_hospitalized are joint random variables)
-        - H_out (since new_recovered_hosp and new_dead are joint random variables)
+    There are three TransitionVariableGroups:
+        - E_out (handles E_to_IP and E_to_IA)
+        - IS_out (handles IS_to_H and IS_to_R)
+        - H_out (handles H_to_R and H_to_D)
 
     The following are EpiMetric instances:
-        - population_immunity_inf is a PopulationImmunityInf instance
-        - population_immunity_hosp is a PopulationImmunityHosp instance
+        - pop_immunity_inf is a PopulationImmunityInf instance
+        - pop_immunity_hosp is a PopulationImmunityHosp instance
 
     Transition rates and update formulas are specified in
         corresponding classes.
@@ -549,7 +613,7 @@ class FluModelConstructor(base.ModelConstructor):
         and add them to compartment_lookup for dictionary access
         """
 
-        for name in ("S", "E", "I", "H", "R", "D"):
+        for name in ("S", "E", "IP", "IS", "IA", "H", "R", "D"):
             self.compartment_lookup[name] = base.EpiCompartment(name, getattr(self.sim_state, name))
 
     def setup_dynamic_vals(self) -> None:
@@ -583,19 +647,36 @@ class FluModelConstructor(base.ModelConstructor):
 
         # Reordering the tuples to put the transition function first
         transition_mapping = {
-            "new_susceptible": (NewSusceptible, "new_susceptible", compartments["R"], compartments["S"]),
-            "new_exposed": (NewExposed, "new_exposed", compartments["S"], compartments["E"]),
-            "new_infected": (NewInfected, "new_infected", compartments["E"], compartments["I"]),
-            "new_recovered_home": (
-                NewRecoveredHome, "new_recovered_home", compartments["I"], compartments["R"], True),
-            "new_hosp": (NewHosp, "new_hosp", compartments["I"], compartments["H"], True),
-            "new_recovered_hosp": (
-                NewRecoveredHosp, "new_recovered_hosp", compartments["H"], compartments["R"], True),
-            "new_dead": (NewDead, "new_dead", compartments["H"], compartments["D"], True)
+
+            "R_to_S": (RecoveredToSusceptible, "R_to_S", compartments["R"], compartments["S"]),
+
+            "S_to_E": (SusceptibleToExposed, "S_to_E", compartments["S"], compartments["E"]),
+
+            "IP_to_IS": (PresympToSymp,
+                         "IP_to_IS", compartments["IP"], compartments["IS"]),
+
+            "IA_to_R": (AsympToRecovered,
+                        "IA_to_R", compartments["IA"], compartments["R"]),
+
+            "E_to_IP": (ExposedToPresymp,
+                        "E_to_IP", compartments["E"], compartments["IP"], True),
+
+            "E_to_IA": (ExposedToAsymp,
+                        "E_to_IA", compartments["E"], compartments["IA"], True),
+
+            "IS_to_R": (SympToRecovered,
+                        "IS_to_R", compartments["IS"], compartments["R"], True),
+
+            "IS_to_H": (SympToHosp, "IS_to_H", compartments["IS"], compartments["H"], True),
+
+            "H_to_R": (HospToRecovered,
+                       "H_to_R", compartments["H"], compartments["R"], True),
+
+            "H_to_D": (HospToDead, "H_to_D", compartments["H"], compartments["D"], True)
         }
 
         # Create transition variables dynamically
-        # params[0] is the TransitionVariable subclass (e.g. NewSusceptible)
+        # params[0] is the TransitionVariable subclass (e.g. RecoveredToSusceptible)
         # params[1:4] refers to the name, origin compartment, destination compartment list
         # params[4:] contains the Boolean indicating if the transition variable is jointly
         #   distributed (True if jointly distributed)
@@ -617,16 +698,23 @@ class FluModelConstructor(base.ModelConstructor):
         transition_type = self.config.transition_type
 
         self.transition_variable_group_lookup = {
-            "I_out": base.TransitionVariableGroup("I_out",
-                                                  compartment_lookup["I"],
+            "E_out": base.TransitionVariableGroup("E_out",
+                                                  compartment_lookup["E"],
                                                   transition_type,
-                                                  (tvar_lookup["new_recovered_home"],
-                                                   tvar_lookup["new_hosp"])),
+                                                  (tvar_lookup["E_to_IP"],
+                                                   tvar_lookup["E_to_IA"])),
+
+            "IS_out": base.TransitionVariableGroup("IS_out",
+                                                   compartment_lookup["IS"],
+                                                   transition_type,
+                                                   (tvar_lookup["IS_to_R"],
+                                                    tvar_lookup["IS_to_H"])),
+
             "H_out": base.TransitionVariableGroup("H_out",
                                                   compartment_lookup["H"],
                                                   transition_type,
-                                                  (tvar_lookup["new_recovered_hosp"],
-                                                   tvar_lookup["new_dead"]))
+                                                  (tvar_lookup["H_to_R"],
+                                                   tvar_lookup["H_to_D"]))
         }
 
     def setup_epi_metrics(self) -> None:
@@ -636,12 +724,12 @@ class FluModelConstructor(base.ModelConstructor):
         for dictionary access
         """
 
-        self.epi_metric_lookup["population_immunity_inf"] = \
-            PopulationImmunityInf("population_immunity_inf",
-                                  getattr(self.sim_state, "population_immunity_inf"),
-                                  self.transition_variable_lookup["new_susceptible"])
+        self.epi_metric_lookup["pop_immunity_inf"] = \
+            PopulationImmunityInf("pop_immunity_inf",
+                                  getattr(self.sim_state, "pop_immunity_inf"),
+                                  self.transition_variable_lookup["R_to_S"])
 
-        self.epi_metric_lookup["population_immunity_hosp"] = \
-            PopulationImmunityHosp("population_immunity_hosp",
-                                   getattr(self.sim_state, "population_immunity_hosp"),
-                                   self.transition_variable_lookup["new_susceptible"])
+        self.epi_metric_lookup["pop_immunity_hosp"] = \
+            PopulationImmunityHosp("pop_immunity_hosp",
+                                   getattr(self.sim_state, "pop_immunity_hosp"),
+                                   self.transition_variable_lookup["R_to_S"])
