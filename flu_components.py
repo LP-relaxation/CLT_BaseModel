@@ -148,10 +148,10 @@ class FluFixedParams(base.FixedParams):
     H_to_D_adjusted_prop: Optional[np.ndarray] = None
     IP_relative_inf: Optional[float] = None
     IA_relative_inf: Optional[float] = None
-    viral_shedding_peak: Optional[float] = None # viral shedding parameters, Dec. 11, 2024, Sonny
-    viral_shedding_magnitude: Optional[float] = None # viral shedding parameters, Dec. 11, 2024, Sonny
-    viral_shedding_duration: Optional[float] = None # viral shedding parameters, Dec. 11, 2024, Sonny
-    viral_shedding_feces_mass: Optional[float] = None # viral shedding parameters, Dec. 11, 2024, Sonny
+    viral_shedding_peak: Optional[float] = None # viral shedding parameters
+    viral_shedding_magnitude: Optional[float] = None # viral shedding parameters
+    viral_shedding_duration: Optional[float] = None # viral shedding parameters
+    viral_shedding_feces_mass: Optional[float] = None # viral shedding parameters
 
 @dataclass
 class FluSimState(base.SimState):
@@ -232,7 +232,7 @@ class FluSimState(base.SimState):
     absolute_humidity: Optional[float] = None
     flu_contact_matrix: Optional[np.ndarray] = None
     beta_reduct: Optional[float] = 0.0
-    wastewater: Optional[np.ndarray] = None # wastewater viral load, Dec. 11, 2024, Sonny
+    wastewater: Optional[np.ndarray] = None # wastewater viral load
 
 class SusceptibleToExposed(base.TransitionVariable):
     def get_current_rate(self,
@@ -396,7 +396,7 @@ class PopulationImmunityInf(base.EpiMetric):
         return np.asarray(result, dtype=np.float64)
 
 
-# test on the wastewater viral load simulation, Dec. 10, 2024, Sonny
+# test on the wastewater viral load simulation
 class Wastewater(base.EpiMetric):
     def __init__(self, name, init_val, S_to_E):
         super().__init__(name, init_val)
@@ -840,7 +840,7 @@ class FluModelConstructor(base.ModelConstructor):
                                    self.transition_variable_lookup["R_to_S"])
 
 
-        # test on the wastewater, Dec. 10, 2024, Sonny
+        # test on the wastewater
         self.epi_metric_lookup["wastewater"] = \
             Wastewater("wastewater",
                        0, # initial value is set to 0 for now
