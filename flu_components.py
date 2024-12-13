@@ -327,6 +327,13 @@ class PopulationImmunityHosp(base.EpiMetric):
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
+
+        # Note: I'm not actually sure all these precision
+        #   precautions are necessary... I initially added this
+        #   because I thought some floating point errors were
+        #   responsible for a bug (the problem actually came
+        #   from a different source).
+
         # Ensure consistent float64 precision
         factor = np.float64(fixed_params.immunity_hosp_increase_factor)
         susceptible = np.float64(self.R_to_S.current_val)
@@ -439,7 +446,6 @@ class AbsoluteHumidity(base.Schedule):
 
 class FluContactMatrix(base.Schedule):
     """
-
     Attributes:
         timeseries_df (pd.DataFrame):
             has a "date" column with strings in format "YYYY-MM-DD"
@@ -500,8 +506,7 @@ class FluModelConstructor(base.ModelConstructor):
     instance with S-E-I-H-R-D compartments and pop_immunity_inf
     and pop_immunity_hosp epi metrics. 
     
-    The structure
-    is as follows:
+    The structure is as follows:
         - S = R_to_S - S_to_E
         - E = S_to_E - E_to_IP - E_to_IA
         - I = new_infected - IS_to_R - IS_to_H
@@ -512,9 +517,6 @@ class FluModelConstructor(base.ModelConstructor):
     The following are TransitionVariable instances:
         - R_to_S is a RecoveredToSusceptible instance
         - S_to_E is a SusceptibleToExposed instance
-        
-        
-        
         - IP_to_IS is a PresympToSymp instance
         - IS_to_H is a SympToHosp instance
         - IS_to_R is a SympToRecovered instance
