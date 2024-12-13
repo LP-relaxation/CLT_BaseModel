@@ -29,6 +29,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install numpy
           pip install pytest
+          pip install pandas
           # pip install -r requirements.txt
 
       # Step 4: Run Pytest
