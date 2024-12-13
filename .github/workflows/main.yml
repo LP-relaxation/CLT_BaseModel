@@ -27,7 +27,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install numpy
+          pip install pytest
+          # pip install -r requirements.txt
 
       # Step 4: Run Pytest
       - name: Run flu_tests.py
