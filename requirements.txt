@@ -1,0 +1,8 @@
+numpy @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_bdk7p7tnsw/croot/numpy_and_numpy_base_1682520579379/work
+pandas==1.5.3
+pathspec==0.12.1
+pytest==8.3.3
+python-dateutil @ file:///home/conda/feedstock_root/build_artifacts/python-dateutil_1626286286081/work
+python-utils @ file:///home/conda/feedstock_root/build_artifacts/python-utils_1695889794928/work
+scikit-learn @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_c1cbgsrq20/croot/scikit-learn_1690978919468/work
+scipy==1.10.0
