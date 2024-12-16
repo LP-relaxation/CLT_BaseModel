@@ -426,7 +426,7 @@ class Wastewater(base.EpiMetric):
             in-place.
         """
         # record number of exposed people per day
-        self.S_to_E_history.append(self.S_to_E.current_val)
+        self.S_to_E_history.append(copy.deepcopy(self.S_to_E.current_val))
 
         current_val = 0
 
@@ -444,11 +444,11 @@ class Wastewater(base.EpiMetric):
                    fixed_params: FluFixedParams,
                    num_timesteps: int):
         # store the parameters locally
-        self.viral_shedding_duration = fixed_params.viral_shedding_duration
-        self.viral_shedding_magnitude = fixed_params.viral_shedding_magnitude
-        self.viral_shedding_peak = fixed_params.viral_shedding_peak
-        self.viral_shedding_feces_mass = fixed_params.viral_shedding_feces_mass
-        self.num_timesteps = num_timesteps
+        self.viral_shedding_duration = copy.deepcopy(fixed_params.viral_shedding_duration)
+        self.viral_shedding_magnitude = copy.deepcopy(fixed_params.viral_shedding_magnitude)
+        self.viral_shedding_peak = copy.deepcopy(fixed_params.viral_shedding_peak)
+        self.viral_shedding_feces_mass = copy.deepcopy(fixed_params.viral_shedding_feces_mass)
+        self.num_timesteps = copy.deepcopy(num_timesteps)
         num_timesteps = np.float64(num_timesteps)
         # trapezoidal integral
         for time_idx in range(int(fixed_params.viral_shedding_duration * self.num_timesteps)):
@@ -843,5 +843,5 @@ class FluModelConstructor(base.ModelConstructor):
         # test on the wastewater
         self.epi_metric_lookup["wastewater"] = \
             Wastewater("wastewater",
-                       0, # initial value is set to 0 for now
+                       getattr(self.sim_state, "wastewater"), # initial value is set to null for now
                        self.transition_variable_lookup["S_to_E"])
