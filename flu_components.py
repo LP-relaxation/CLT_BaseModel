@@ -426,16 +426,20 @@ class Wastewater(base.EpiMetric):
             in-place.
         """
         # record number of exposed people per day
-        self.S_to_E_history.append(copy.deepcopy(self.S_to_E.current_val))
+        if len(self.S_to_E_history) > 0:
+            self.S_to_E_history = np.append(self.S_to_E_history, np.sum(self.S_to_E.current_val))
+        else:
+            self.S_to_E_history = np.array([np.sum(self.S_to_E.current_val)])
 
         current_val = 0
 
         # discrete convolution
-        for time_idx in range(self.viral_shedding_duration * self.num_timesteps):
-            if time_idx < len(self.S_to_E_history):
-                current_val += self.S_to_E_history[-(time_idx + 1)] * self.viral_shedding[time_idx]
-            else:
-                break
+        len_S_to_E_history = len(self.S_to_E_history)
+        len_duration = self.viral_shedding_duration * self.num_timesteps
+        if len_S_to_E_history >= len_duration:
+            current_val = self.S_to_E_history[-len_duration:] @ self.viral_shedding
+        else:
+            current_val = self.S_to_E_history @ self.viral_shedding[-len_S_to_E_history:]
 
         self.current_val = current_val
         self.current_val_list.append(current_val)
@@ -450,6 +454,7 @@ class Wastewater(base.EpiMetric):
         self.viral_shedding_feces_mass = copy.deepcopy(fixed_params.viral_shedding_feces_mass)
         self.num_timesteps = copy.deepcopy(num_timesteps)
         num_timesteps = np.float64(num_timesteps)
+        self.viral_shedding = []
         # trapezoidal integral
         for time_idx in range(int(fixed_params.viral_shedding_duration * self.num_timesteps)):
             cur_time_point = time_idx / num_timesteps
@@ -464,6 +469,8 @@ class Wastewater(base.EpiMetric):
                 interval_viral_shedding = fixed_params.viral_shedding_feces_mass * 0.5 \
                                  * (10 ** cur_time_log_viral_shedding + 10 ** next_time_log_viral_shedding) / num_timesteps
             self.viral_shedding.append(interval_viral_shedding)
+        self.viral_shedding.reverse()
+        self.viral_shedding = np.array(self.viral_shedding)
 
     def save_history(self) -> None:
         """
