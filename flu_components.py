@@ -408,9 +408,13 @@ class Wastewater(base.EpiMetric):
         self.viral_shedding_magnitude = None
         self.viral_shedding_peak = None
         self.viral_shedding_feces_mass = None
-        self.S_to_E_history = []
+        self.S_to_E_len = 5000 # preset to match the simulation time horizon
+        self.S_to_E_history = np.zeros(self.S_to_E_len)
+        self.cur_time_stamp = -1
         self.num_timesteps = None
-        self.current_val_list = []
+        self.val_list_len = 10
+        self.current_val_list = np.zeros(self.val_list_len)
+        self.cur_idx_timestep = -1
 
     def get_change_in_current_val(self,
                                   sim_state: FluSimState,
@@ -426,23 +430,20 @@ class Wastewater(base.EpiMetric):
             in-place.
         """
         # record number of exposed people per day
-        if len(self.S_to_E_history) > 0:
-            self.S_to_E_history = np.append(self.S_to_E_history, np.sum(self.S_to_E.current_val))
-        else:
-            self.S_to_E_history = np.array([np.sum(self.S_to_E.current_val)])
-
+        self.cur_time_stamp += 1
+        self.S_to_E_history[self.cur_time_stamp] = np.sum(self.S_to_E.current_val)
         current_val = 0
 
         # discrete convolution
-        len_S_to_E_history = len(self.S_to_E_history)
         len_duration = self.viral_shedding_duration * self.num_timesteps
-        if len_S_to_E_history >= len_duration:
-            current_val = self.S_to_E_history[-len_duration:] @ self.viral_shedding
+        if self.cur_time_stamp >= len_duration - 1:
+            current_val = self.S_to_E_history[(self.cur_time_stamp - len_duration + 1):(self.cur_time_stamp + 1)] @ self.viral_shedding
         else:
-            current_val = self.S_to_E_history @ self.viral_shedding[-len_S_to_E_history:]
+            current_val = self.S_to_E_history[:(self.cur_time_stamp + 1)] @ self.viral_shedding[-(self.cur_time_stamp + 1):]
 
         self.current_val = current_val
-        self.current_val_list.append(current_val)
+        self.cur_idx_timestep += 1
+        self.current_val_list[self.cur_idx_timestep] = current_val
 
     def preprocess(self,
                    fixed_params: FluFixedParams,
@@ -480,8 +481,8 @@ class Wastewater(base.EpiMetric):
         """
         daily_viral_load = np.sum(self.current_val_list)
         self.history_vals_list.append(daily_viral_load)
-        # clear the cache of current_val_list
-        self.current_val_list = []
+        # reset the index of current_val_list
+        self.cur_idx_timestep = -1
 
     def clear_history(self) -> None:
         """
@@ -490,9 +491,10 @@ class Wastewater(base.EpiMetric):
 
         self.history_vals_list = []
         self.viral_shedding_daily = []
-        self.S_to_E_history = []
+        self.S_to_E_history = np.zeros(self.S_to_E_len)
+        self.cur_time_stamp = -1
         self.flag_preprocessed = False
-        self.current_val_list = []
+        self.current_val_list = np.zeros(self.val_list_len)
 
 class BetaReduct(base.DynamicVal):
 
