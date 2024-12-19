@@ -32,5 +32,9 @@
 	"IS_to_H_adjusted_prop": [[0.5],
 							[0.5]],
 	"IP_relative_inf": 2.22,
-	"IA_relative_inf": 1.03
+	"IA_relative_inf": 1.03,
+	"viral_shedding_peak": 2,
+	"viral_shedding_magnitude": 5,
+	"viral_shedding_duration": 10,
+	"viral_shedding_feces_mass": 255
 }
