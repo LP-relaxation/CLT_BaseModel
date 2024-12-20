@@ -868,10 +868,13 @@ class FluSubpopModel(base.SubpopModel):
             PopulationImmunityInf(getattr(self.sim_state, "pop_immunity_inf"),
                                   self.transition_variable_lookup.R_to_S)
 
+<<<<<<< HEAD
         self.epi_metric_lookup.wastewater = \
             Wastewater(getattr(self.sim_state, "wastewater"), # initial value is set to null for now
                        self.transition_variable_lookup.S_to_E)
 
+=======
+>>>>>>> origin/LPplayground
         self.epi_metric_lookup.pop_immunity_hosp = \
             PopulationImmunityHosp(getattr(self.sim_state, "pop_immunity_hosp"),
                                    self.transition_variable_lookup.R_to_S)
