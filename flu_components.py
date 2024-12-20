@@ -405,8 +405,8 @@ class PopulationImmunityInf(base.EpiMetric):
 
 # test on the wastewater viral load simulation
 class Wastewater(base.EpiMetric):
-    def __init__(self, name, init_val, S_to_E):
-        super().__init__(name, init_val)
+    def __init__(self, init_val, S_to_E):
+        super().__init__(init_val)
         self.S_to_E = S_to_E
         # preprocess
         self.flag_preprocessed = False
@@ -768,6 +768,11 @@ class FluSubpopModel(base.SubpopModel):
         self.setup_epi_metrics()
         self.setup_dynamic_vals()
         self.setup_schedules()
+
+        self.sim_state.compartment_lookup = self.compartment_lookup
+        self.sim_state.epi_metric_lookup = self.epi_metric_lookup
+        self.sim_state.dynamic_val_lookup = self.dynamic_val_lookup
+        self.sim_state.schedule_lookup = self.schedule_lookup
 
     def setup_epi_compartments(self) -> None:
         """

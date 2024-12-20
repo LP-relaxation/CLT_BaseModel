@@ -104,27 +104,33 @@ class SimState(ABC):
     Holds current values of simulation state.
     """
 
-    def update(self, d: dict) -> None:
-        for name, svar in d.items():
-            setattr(self, name, svar.current_val)
+    compartment_lookup: Optional[dict] = None
+    epi_metric_lookup: Optional[dict] = None
+    schedule_lookup: Optional[dict] = None
+    dynamic_val_lookup: Optional[dict] = None
 
-    def reset(self) -> None:
-        """
-        Resets current_val attribute of each StateVariable on the model
-            (each EpiCompartment, EpiMetric, DynamicVal, and Schedule)
-            to its init_val attribute. Deep copying is used to prevent
-            mutability issues with numpy arrays. Resets sim_state
-            attribute.
-        """
+    def update_values(self, lookup_dict):
+        for name, item in lookup_dict.items():
+            setattr(self, name, item.current_val)
 
-        # AGAIN, MUST BE CAREFUL ABOUT MUTABLE NUMPY ARRAYS -- MUST USE DEEP COPY
-        for svar in self.compartments + self.epi_metrics + self.dynamic_vals + self.schedules:
-            setattr(svar, "current_val", copy.deepcopy(svar.init_val))
+    def update_compartments(self):
+        self.update_values(self.compartment_lookup)
 
-        self.update(self.compartment_lookup)
-        self.update(self.epi_metric_lookup)
-        self.update(self.dynamic_val_lookup)
-        self.update(self.schedule_lookup)
+    def update_epi_metrics(self):
+        self.update_values(self.epi_metric_lookup)
+
+    def update_schedules(self):
+        self.update_values(self.schedule_lookup)
+
+    def update_dynamic_vals(self):
+        self.update_values(self.dynamic_val_lookup)
+
+    def update_all(self) -> None:
+
+        self.update_compartments()
+        self.update_epi_metrics()
+        self.update_schedules()
+        self.update_dynamic_vals()
 
 
 class TransitionVariableGroup:
@@ -1348,8 +1354,8 @@ class SubpopModel(ABC):
 
             self.update_compartments()
 
-            self.sim_state.update(self.epi_metric_lookup)
-            self.sim_state.update(self.compartment_lookup)
+            self.sim_state.update_epi_metrics()
+            self.sim_state.update_compartments()
 
     def prepare_daily_state(self) -> None:
         """
@@ -1376,8 +1382,8 @@ class SubpopModel(ABC):
                 dval.update_current_val(sim_state, fixed_params)
 
         # Sync simulation state
-        self.sim_state.update(self.schedule_lookup)
-        self.sim_state.update(self.dynamic_val_lookup)
+        self.sim_state.update_schedules()
+        self.sim_state.update_dynamic_vals()
 
     def update_epi_metrics(self):
 
@@ -1474,11 +1480,13 @@ class SubpopModel(ABC):
         """
 
         self.current_simulation_day = 0
-
         self.current_real_date = self.start_real_date
 
-        self.sim_state.reset()
+        # AGAIN, MUST BE CAREFUL ABOUT MUTABLE NUMPY ARRAYS -- MUST USE DEEP COPY
+        for svar in self.compartments + self.epi_metrics + self.dynamic_vals + self.schedules:
+            setattr(svar, "current_val", copy.deepcopy(svar.init_val))
 
+        self.sim_state.update_all()
         self.clear_history()
 
     def clear_history(self):
