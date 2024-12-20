@@ -412,8 +412,8 @@ class Wastewater(base.EpiMetric):
         self.S_to_E_history = np.zeros(self.S_to_E_len)
         self.cur_time_stamp = -1
         self.num_timesteps = None
-        self.val_list_len = 10
-        self.current_val_list = np.zeros(self.val_list_len)
+        self.val_list_len = None
+        self.current_val_list = None
         self.cur_idx_timestep = -1
 
     def get_change_in_current_val(self,
@@ -421,6 +421,8 @@ class Wastewater(base.EpiMetric):
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
         if not self.flag_preprocessed: # preprocess the viral shedding function if not done yet
+            self.val_list_len = num_timesteps
+            self.current_val_list = np.zeros(self.val_list_len)
             self.preprocess(fixed_params, num_timesteps)
         return 0
 
@@ -488,13 +490,19 @@ class Wastewater(base.EpiMetric):
         """
         Resets history_vals_list attribute to empty list.
         """
-
-        self.history_vals_list = []
-        self.viral_shedding_daily = []
+        self.flag_preprocessed = False
+        self.viral_shedding = []
+        self.viral_shedding_duration = None
+        self.viral_shedding_magnitude = None
+        self.viral_shedding_peak = None
+        self.viral_shedding_feces_mass = None
+        self.S_to_E_len = 5000  # preset to match the simulation time horizon
         self.S_to_E_history = np.zeros(self.S_to_E_len)
         self.cur_time_stamp = -1
-        self.flag_preprocessed = False
-        self.current_val_list = np.zeros(self.val_list_len)
+        self.num_timesteps = None
+        self.val_list_len = None
+        self.current_val_list = None
+        self.cur_idx_timestep = -1
 
 class BetaReduct(base.DynamicVal):
 

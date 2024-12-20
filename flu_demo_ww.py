@@ -1,5 +1,6 @@
 import numpy as np
 from pathlib import Path
+import time
 
 from flu_components import FluModelConstructor
 from plotting import create_basic_compartment_history_plot
@@ -25,20 +26,26 @@ flu_demo_constructor = \
 #   to generate random variables
 flu_demo_model = flu_demo_constructor.create_transmission_model(888888)
 
+
+start = time.time()
 # Simulate 300 days
 flu_demo_model.simulate_until_time_period(100)
-
+end = time.time()
+print(end - start)
 #print(flu_demo_model.epi_metrics)
 #for compartment in flu_demo_model.epi_metrics:
 #    print(compartment.name)
 
-print(flu_demo_model.epi_metrics[2].history_vals_list)
-ww = flu_demo_model.epi_metrics[2].history_vals_list
+#print(flu_demo_model.epi_metrics[2].history_vals_list)
+print(flu_demo_model.lookup_by_name["wastewater"].history_vals_list)
+#ww = flu_demo_model.epi_metrics[2].history_vals_list
+ww = flu_demo_model.lookup_by_name["wastewater"].history_vals_list
 print(ww)
 plt.plot(ww)
+plt.grid(True)
 plt.show()
 #print(flu_demo_model.epi_metric_lookup["wastewater"].history_vals_list)
 
 # Plot
 #create_basic_compartment_history_plot(flu_demo_model,
-#                                      "flu_demo_model.png")
+#                                      "flu_demo_model_ww.png")

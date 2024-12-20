@@ -168,6 +168,21 @@ def test_num_timesteps():
         assert (tvar.current_val >=
                 many_timesteps_model.lookup_by_name[tvar.name].current_val).all()
 
+# wastewater test
+@pytest.mark.parametrize("model", flu_model_variations_list)
+def test_wastewater_when_beta_zero(model):
+    """
+    If the transmission rate beta_baseline = 0, then viral load should be zero
+    """
+    model.reset_simulation()
+    model.fixed_params.beta_baseline = 0
+    model.simulate_until_time_period(300)
+
+    ww_history = model.lookup_by_name["wastewater"].history_vals_list
+    tol = 1e-6
+    assert np.sum(np.abs(ww_history) < tol) == len(ww_history)
+
+
 
 @pytest.mark.parametrize("model", flu_model_variations_list)
 def test_no_transmission_when_beta_zero(model):
