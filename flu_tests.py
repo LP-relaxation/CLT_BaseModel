@@ -1,4 +1,4 @@
-from flu_components import FluModelConstructor
+from flu_components import FluSubpopModel
 
 import base_components as base
 import numpy as np
@@ -13,7 +13,7 @@ config_filepath = base_path / "config.json"
 fixed_params_filepath = base_path / "fixed_params.json"
 init_vals_filepath = base_path / "state_variables_init_vals.json"
 
-flu_model_constructor = FluModelConstructor(config_filepath,
+flu_model_constructor = FluSubpopModel(config_filepath,
                                             fixed_params_filepath,
                                             init_vals_filepath)
 

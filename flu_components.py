@@ -7,6 +7,8 @@ from typing import Optional, Union
 from pathlib import Path
 import base_components as base
 
+import sciris as sc
+
 base_path = Path(__file__).parent / "flu_demo_input_files"
 
 
@@ -17,7 +19,7 @@ base_path = Path(__file__).parent / "flu_demo_input_files"
 
 @dataclass
 class FluFixedParams(base.FixedParams):
-    r"""
+    """
     Data container for pre-specified and fixed epidemiological
     parameters in FluModel flu model. Along with FluSimState,
     is passed to get_current_rate and get_change_in_current_val.
@@ -319,15 +321,14 @@ class HospToDead(base.TransitionVariable):
 
 class PopulationImmunityHosp(base.EpiMetric):
 
-    def __init__(self, name, init_val, R_to_S):
-        super().__init__(name, init_val)
+    def __init__(self, init_val, R_to_S):
+        super().__init__(init_val)
         self.R_to_S = R_to_S
 
     def get_change_in_current_val(self,
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
-
         # Note: I'm not actually sure all these precision
         #   precautions are necessary... I initially added this
         #   because I thought some floating point errors were
@@ -357,15 +358,14 @@ class PopulationImmunityHosp(base.EpiMetric):
 
 
 class PopulationImmunityInf(base.EpiMetric):
-    def __init__(self, name, init_val, R_to_S):
-        super().__init__(name, init_val)
+    def __init__(self, init_val, R_to_S):
+        super().__init__(init_val)
         self.R_to_S = R_to_S
 
     def get_change_in_current_val(self,
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
-
         # Convert all parameters to consistent float64 for high precision
         increase_factor = np.float64(fixed_params.immunity_inf_increase_factor)
         R_to_S = np.float64(self.R_to_S.current_val)
@@ -391,8 +391,8 @@ class PopulationImmunityInf(base.EpiMetric):
 
 class BetaReduct(base.DynamicVal):
 
-    def __init__(self, name, init_val, is_enabled):
-        super().__init__(name, init_val, is_enabled)
+    def __init__(self, init_val, is_enabled):
+        super().__init__(init_val, is_enabled)
         self.permanent_lockdown = False
 
     def update_current_val(self, sim_state, fixed_params):
@@ -460,9 +460,8 @@ class FluContactMatrix(base.Schedule):
     """
 
     def __init__(self,
-                 name: str,
                  init_val: Optional[Union[np.ndarray, float]] = None):
-        super().__init__(name, init_val)
+        super().__init__(init_val)
 
         df = pd.read_csv(base_path / "school_work_calendar.csv", index_col=0)
         df["date"] = pd.to_datetime(df["date"]).dt.date
@@ -496,13 +495,13 @@ class FluContactMatrix(base.Schedule):
                            (1 - current_row["is_work_day"]) * self.work_contact_matrix
 
 
-class FluModelConstructor(base.ModelConstructor):
+class FluSubpopModel(base.SubpopModel):
     """
     Class for creating ImmunoSEIRS flu model with predetermined fixed
     structure -- initial values and epidemiological structure are
     populated by user-specified JSON files.
 
-    Key method create_transmission_model returns a TransmissionModel
+    Key method create_transmission_model returns a SubpopModel
     instance with S-E-I-H-R-D compartments and pop_immunity_inf
     and pop_immunity_hosp epi metrics. 
     
@@ -564,7 +563,7 @@ class FluModelConstructor(base.ModelConstructor):
         """
         Create Config, FluFixedParams, and FluSimState instances
         using values from respective JSON files, and save these instances
-        on the FluModelConstructor to construct a model.
+        on the FluSubpopModel to construct a model.
 
         If any filepath is not specified, then user must manually assign
         the respective attribute (config, fixed_params, or sim_state)
@@ -588,26 +587,63 @@ class FluModelConstructor(base.ModelConstructor):
                 values are used to populate sim_state attribute.
         """
 
-        # Use same init method as abstract class --
-        # creates "lookup" attributes (dictionaries for easy access)
-        # and creates attributes config, fixed_params, and sim_state
-        super().__init__()
-
         # Assign config, fixed_params, and sim_state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
         if config_filepath:
-            self.config = self.dataclass_instance_from_json(base.Config,
-                                                            config_filepath)
+            self.config = self.make_dataclass_from_json(base.Config,
+                                                        config_filepath)
 
         if fixed_params_filepath:
-            self.fixed_params = self.dataclass_instance_from_json(FluFixedParams,
-                                                                  fixed_params_filepath)
+            self.fixed_params = self.make_dataclass_from_json(FluFixedParams,
+                                                              fixed_params_filepath)
 
         if state_vars_init_vals_filepath:
             self.sim_state = \
-                self.dataclass_instance_from_json(FluSimState,
-                                                  state_vars_init_vals_filepath)
+                self.make_dataclass_from_json(FluSimState,
+                                              state_vars_init_vals_filepath)
+
+        self.compartment_lookup = sc.objdict()
+        self.transition_variable_lookup = sc.objdict()
+        self.transition_variable_group_lookup = sc.objdict()
+        self.epi_metric_lookup = sc.objdict()
+        self.dynamic_val_lookup = sc.objdict()
+        self.schedule_lookup = sc.objdict()
+
+        self.setup_model()
+
+        self.compartments = self.compartment_lookup.values()
+        self.transition_variables = self.transition_variable_lookup.values()
+        self.transition_variable_groups = self.transition_variable_group_lookup.values()
+        self.epi_metrics = self.epi_metric_lookup.values()
+        self.dynamic_vals = self.dynamic_val_lookup.values()
+        self.schedules = self.schedule_lookup.values()
+
+        config = self.config
+
+        self.current_simulation_day = 0
+        if isinstance(config.start_real_date, datetime.date):
+            self.start_real_date = config.start_real_date
+        else:
+            try:
+                self.start_real_date = \
+                    datetime.datetime.strptime(config.start_real_date, "%Y-%m-%d").date()
+            except ValueError:
+                print("Error: The date format should be YYYY-MM-DD.")
+        self.current_real_date = self.start_real_date
+
+    def setup_model(self):
+
+        # Setup objects for model
+        self.setup_epi_compartments()
+        self.setup_transition_variables()
+        self.setup_transition_variable_groups()
+
+        # Some epi metrics depend on transition variables, so
+        #   set up epi metrics after transition variables
+        self.setup_epi_metrics()
+        self.setup_dynamic_vals()
+        self.setup_schedules()
 
     def setup_epi_compartments(self) -> None:
         """
@@ -616,7 +652,7 @@ class FluModelConstructor(base.ModelConstructor):
         """
 
         for name in ("S", "E", "IP", "IS", "IA", "H", "R", "D"):
-            self.compartment_lookup[name] = base.EpiCompartment(name, getattr(self.sim_state, name))
+            self.compartment_lookup[name] = base.EpiCompartment(getattr(self.sim_state, name))
 
     def setup_dynamic_vals(self) -> None:
         """
@@ -624,8 +660,7 @@ class FluModelConstructor(base.ModelConstructor):
             for dictionary access
         """
 
-        self.dynamic_val_lookup["beta_reduct"] = BetaReduct(name="beta_reduct",
-                                                            init_val=0.0,
+        self.dynamic_val_lookup["beta_reduct"] = BetaReduct(init_val=0.0,
                                                             is_enabled=False)
 
     def setup_schedules(self) -> None:
@@ -634,8 +669,8 @@ class FluModelConstructor(base.ModelConstructor):
             for dictionary access
         """
 
-        self.schedule_lookup["absolute_humidity"] = AbsoluteHumidity("absolute_humidity")
-        self.schedule_lookup["flu_contact_matrix"] = FluContactMatrix("flu_contact_matrix")
+        self.schedule_lookup["absolute_humidity"] = AbsoluteHumidity()
+        self.schedule_lookup["flu_contact_matrix"] = FluContactMatrix()
 
     def setup_transition_variables(self) -> None:
         """
@@ -644,48 +679,30 @@ class FluModelConstructor(base.ModelConstructor):
             for dictionary access
         """
 
-        compartments = self.compartment_lookup
         transition_type = self.config.transition_type
 
-        # Reordering the tuples to put the transition function first
-        transition_mapping = {
+        transition_variable_lookup = self.transition_variable_lookup
+        compartment_lookup = self.compartment_lookup
 
-            "R_to_S": (RecoveredToSusceptible, "R_to_S", compartments["R"], compartments["S"]),
+        S = compartment_lookup.S
+        E = compartment_lookup.E
+        IP = compartment_lookup.IP
+        IS = compartment_lookup.IS
+        IA = compartment_lookup.IA
+        H = compartment_lookup.H
+        R = compartment_lookup.R
+        D = compartment_lookup.D
 
-            "S_to_E": (SusceptibleToExposed, "S_to_E", compartments["S"], compartments["E"]),
-
-            "IP_to_IS": (PresympToSymp,
-                         "IP_to_IS", compartments["IP"], compartments["IS"]),
-
-            "IA_to_R": (AsympToRecovered,
-                        "IA_to_R", compartments["IA"], compartments["R"]),
-
-            "E_to_IP": (ExposedToPresymp,
-                        "E_to_IP", compartments["E"], compartments["IP"], True),
-
-            "E_to_IA": (ExposedToAsymp,
-                        "E_to_IA", compartments["E"], compartments["IA"], True),
-
-            "IS_to_R": (SympToRecovered,
-                        "IS_to_R", compartments["IS"], compartments["R"], True),
-
-            "IS_to_H": (SympToHosp, "IS_to_H", compartments["IS"], compartments["H"], True),
-
-            "H_to_R": (HospToRecovered,
-                       "H_to_R", compartments["H"], compartments["R"], True),
-
-            "H_to_D": (HospToDead, "H_to_D", compartments["H"], compartments["D"], True)
-        }
-
-        # Create transition variables dynamically
-        # params[0] is the TransitionVariable subclass (e.g. RecoveredToSusceptible)
-        # params[1:4] refers to the name, origin compartment, destination compartment list
-        # params[4:] contains the Boolean indicating if the transition variable is jointly
-        #   distributed (True if jointly distributed)
-        self.transition_variable_lookup = {
-            name: params[0](*params[1:4], transition_type, *params[4:])
-            for name, params in transition_mapping.items()
-        }
+        transition_variable_lookup.R_to_S = RecoveredToSusceptible(R, S, transition_type)
+        transition_variable_lookup.S_to_E = SusceptibleToExposed(S, E, transition_type)
+        transition_variable_lookup.IP_to_IS = PresympToSymp(IP, IS, transition_type)
+        transition_variable_lookup.IA_to_R = AsympToRecovered(IA, R, transition_type)
+        transition_variable_lookup.E_to_IP = ExposedToPresymp(E, IP, transition_type, True)
+        transition_variable_lookup.E_to_IA = ExposedToAsymp(E, IA, transition_type, True)
+        transition_variable_lookup.IS_to_R = SympToRecovered(IS, R, transition_type, True)
+        transition_variable_lookup.IS_to_H = SympToHosp(IS, H, transition_type, True)
+        transition_variable_lookup.H_to_R = HospToRecovered(H, R, transition_type, True)
+        transition_variable_lookup.H_to_D = HospToDead(H, D, transition_type, True)
 
     def setup_transition_variable_groups(self) -> None:
         """
@@ -695,29 +712,26 @@ class FluModelConstructor(base.ModelConstructor):
         """
 
         # Shortcuts for attribute access
+        transition_variable_lookup = self.transition_variable_lookup
+        transition_variable_group_lookup = self.transition_variable_group_lookup
         compartment_lookup = self.compartment_lookup
-        tvar_lookup = self.transition_variable_lookup
+
         transition_type = self.config.transition_type
 
-        self.transition_variable_group_lookup = {
-            "E_out": base.TransitionVariableGroup("E_out",
-                                                  compartment_lookup["E"],
-                                                  transition_type,
-                                                  (tvar_lookup["E_to_IP"],
-                                                   tvar_lookup["E_to_IA"])),
+        transition_variable_group_lookup.E_out = base.TransitionVariableGroup(compartment_lookup.E,
+                                                                              transition_type,
+                                                                              (transition_variable_lookup.E_to_IP,
+                                                                               transition_variable_lookup.E_to_IA))
 
-            "IS_out": base.TransitionVariableGroup("IS_out",
-                                                   compartment_lookup["IS"],
-                                                   transition_type,
-                                                   (tvar_lookup["IS_to_R"],
-                                                    tvar_lookup["IS_to_H"])),
+        transition_variable_group_lookup.IS_out = base.TransitionVariableGroup(compartment_lookup.IS,
+                                                                               transition_type,
+                                                                               (transition_variable_lookup.IS_to_R,
+                                                                                transition_variable_lookup.IS_to_H))
 
-            "H_out": base.TransitionVariableGroup("H_out",
-                                                  compartment_lookup["H"],
-                                                  transition_type,
-                                                  (tvar_lookup["H_to_R"],
-                                                   tvar_lookup["H_to_D"]))
-        }
+        transition_variable_group_lookup.H_out = base.TransitionVariableGroup(compartment_lookup.H,
+                                                                              transition_type,
+                                                                              (transition_variable_lookup.H_to_R,
+                                                                               transition_variable_lookup.H_to_D))
 
     def setup_epi_metrics(self) -> None:
         """
@@ -726,12 +740,10 @@ class FluModelConstructor(base.ModelConstructor):
         for dictionary access
         """
 
-        self.epi_metric_lookup["pop_immunity_inf"] = \
-            PopulationImmunityInf("pop_immunity_inf",
-                                  getattr(self.sim_state, "pop_immunity_inf"),
-                                  self.transition_variable_lookup["R_to_S"])
+        self.epi_metric_lookup.pop_immunity_inf = \
+            PopulationImmunityInf(getattr(self.sim_state, "pop_immunity_inf"),
+                                  self.transition_variable_lookup.R_to_S)
 
-        self.epi_metric_lookup["pop_immunity_hosp"] = \
-            PopulationImmunityHosp("pop_immunity_hosp",
-                                   getattr(self.sim_state, "pop_immunity_hosp"),
-                                   self.transition_variable_lookup["R_to_S"])
+        self.epi_metric_lookup.pop_immunity_hosp = \
+            PopulationImmunityHosp(getattr(self.sim_state, "pop_immunity_hosp"),
+                                   self.transition_variable_lookup.R_to_S)
