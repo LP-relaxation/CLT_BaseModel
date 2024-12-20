@@ -1,5 +1,6 @@
 import datetime
 import pandas as pd
+import copy
 
 import numpy as np
 from dataclasses import dataclass
@@ -111,6 +112,14 @@ class FluFixedParams(base.FixedParams):
         IA_relative_inf (positive float):
             relative infectiousness of asymptomatic to symptomatic
             people (IA to IS compartment).
+        viral_shedding_peak (positive float):
+            the peak time of an indiviudal's viral shedding.
+        viral_shedding_magnitude (positive float):
+            magnitude of the viral shedding.
+        viral_shedding_duration (positive float):
+            duration of the viral shedding, must be larger than viral_shedding_peak
+        viral_shedding_feces_mass (positive float)
+            average mass of feces (gram)
     """
 
     num_age_groups: Optional[int] = None
@@ -139,7 +148,10 @@ class FluFixedParams(base.FixedParams):
     H_to_D_adjusted_prop: Optional[np.ndarray] = None
     IP_relative_inf: Optional[float] = None
     IA_relative_inf: Optional[float] = None
-
+    viral_shedding_peak: Optional[float] = None # viral shedding parameters
+    viral_shedding_magnitude: Optional[float] = None # viral shedding parameters
+    viral_shedding_duration: Optional[float] = None # viral shedding parameters
+    viral_shedding_feces_mass: Optional[float] = None # viral shedding parameters
 
 @dataclass
 class FluSimState(base.SimState):
@@ -203,6 +215,8 @@ class FluSimState(base.SimState):
             starting value of DynamicVal "beta_reduct" on
             starting day of simulation -- this DynamicVal
             emulates a simple staged-alert policy
+        wastewater (np.ndarray of positive floats):
+            wastewater viral load
     """
 
     S: Optional[np.ndarray] = None
@@ -218,7 +232,7 @@ class FluSimState(base.SimState):
     absolute_humidity: Optional[float] = None
     flu_contact_matrix: Optional[np.ndarray] = None
     beta_reduct: Optional[float] = 0.0
-
+    wastewater: Optional[np.ndarray] = None # wastewater viral load
 
 class SusceptibleToExposed(base.TransitionVariable):
     def get_current_rate(self,
@@ -388,6 +402,114 @@ class PopulationImmunityInf(base.EpiMetric):
         # Ensure the result is a NumPy array
         return np.asarray(result, dtype=np.float64)
 
+
+# test on the wastewater viral load simulation
+class Wastewater(base.EpiMetric):
+    def __init__(self, name, init_val, S_to_E):
+        super().__init__(name, init_val)
+        self.S_to_E = S_to_E
+        # preprocess
+        self.flag_preprocessed = False
+        self.viral_shedding = []
+        self.viral_shedding_duration = None
+        self.viral_shedding_magnitude = None
+        self.viral_shedding_peak = None
+        self.viral_shedding_feces_mass = None
+        self.S_to_E_len = 5000 # preset to match the simulation time horizon
+        self.S_to_E_history = np.zeros(self.S_to_E_len)
+        self.cur_time_stamp = -1
+        self.num_timesteps = None
+        self.val_list_len = None
+        self.current_val_list = None
+        self.cur_idx_timestep = -1
+
+    def get_change_in_current_val(self,
+                                  sim_state: FluSimState,
+                                  fixed_params: FluFixedParams,
+                                  num_timesteps: int):
+        if not self.flag_preprocessed: # preprocess the viral shedding function if not done yet
+            self.val_list_len = num_timesteps
+            self.current_val_list = np.zeros(self.val_list_len)
+            self.preprocess(fixed_params, num_timesteps)
+        return 0
+
+    def update_current_val(self) -> None:
+        """
+        Adds change_in_current_val attribute to current_val attribute
+            in-place.
+        """
+        # record number of exposed people per day
+        self.cur_time_stamp += 1
+        self.S_to_E_history[self.cur_time_stamp] = np.sum(self.S_to_E.current_val)
+        current_val = 0
+
+        # discrete convolution
+        len_duration = self.viral_shedding_duration * self.num_timesteps
+        if self.cur_time_stamp >= len_duration - 1:
+            current_val = self.S_to_E_history[(self.cur_time_stamp - len_duration + 1):(self.cur_time_stamp + 1)] @ self.viral_shedding
+        else:
+            current_val = self.S_to_E_history[:(self.cur_time_stamp + 1)] @ self.viral_shedding[-(self.cur_time_stamp + 1):]
+
+        self.current_val = current_val
+        self.cur_idx_timestep += 1
+        self.current_val_list[self.cur_idx_timestep] = current_val
+
+    def preprocess(self,
+                   fixed_params: FluFixedParams,
+                   num_timesteps: int):
+        # store the parameters locally
+        self.viral_shedding_duration = copy.deepcopy(fixed_params.viral_shedding_duration)
+        self.viral_shedding_magnitude = copy.deepcopy(fixed_params.viral_shedding_magnitude)
+        self.viral_shedding_peak = copy.deepcopy(fixed_params.viral_shedding_peak)
+        self.viral_shedding_feces_mass = copy.deepcopy(fixed_params.viral_shedding_feces_mass)
+        self.num_timesteps = copy.deepcopy(num_timesteps)
+        num_timesteps = np.float64(num_timesteps)
+        self.viral_shedding = []
+        # trapezoidal integral
+        for time_idx in range(int(fixed_params.viral_shedding_duration * self.num_timesteps)):
+            cur_time_point = time_idx / num_timesteps
+            next_time_point = (time_idx + 1) / num_timesteps
+            next_time_log_viral_shedding = fixed_params.viral_shedding_magnitude * next_time_point /\
+                                          (fixed_params.viral_shedding_peak ** 2 + next_time_point ** 2 )
+            if time_idx == 0:
+                interval_viral_shedding = fixed_params.viral_shedding_feces_mass * 0.5 * (10 ** next_time_log_viral_shedding) / num_timesteps
+            else:
+                cur_time_log_viral_shedding = fixed_params.viral_shedding_magnitude * cur_time_point /\
+                                          (fixed_params.viral_shedding_peak ** 2 + cur_time_point ** 2 )
+                interval_viral_shedding = fixed_params.viral_shedding_feces_mass * 0.5 \
+                                 * (10 ** cur_time_log_viral_shedding + 10 ** next_time_log_viral_shedding) / num_timesteps
+            self.viral_shedding.append(interval_viral_shedding)
+        self.viral_shedding.reverse()
+        self.viral_shedding = np.array(self.viral_shedding)
+
+    def save_history(self) -> None:
+        """
+        Saves daily viral load (accumulated during one day) to history by appending current_val attribute
+            to history_vals_list in place
+
+        """
+        daily_viral_load = np.sum(self.current_val_list)
+        self.history_vals_list.append(daily_viral_load)
+        # reset the index of current_val_list
+        self.cur_idx_timestep = -1
+
+    def clear_history(self) -> None:
+        """
+        Resets history_vals_list attribute to empty list.
+        """
+        self.flag_preprocessed = False
+        self.viral_shedding = []
+        self.viral_shedding_duration = None
+        self.viral_shedding_magnitude = None
+        self.viral_shedding_peak = None
+        self.viral_shedding_feces_mass = None
+        self.S_to_E_len = 5000  # preset to match the simulation time horizon
+        self.S_to_E_history = np.zeros(self.S_to_E_len)
+        self.cur_time_stamp = -1
+        self.num_timesteps = None
+        self.val_list_len = None
+        self.current_val_list = None
+        self.cur_idx_timestep = -1
 
 class BetaReduct(base.DynamicVal):
 
@@ -735,3 +857,10 @@ class FluModelConstructor(base.ModelConstructor):
             PopulationImmunityHosp("pop_immunity_hosp",
                                    getattr(self.sim_state, "pop_immunity_hosp"),
                                    self.transition_variable_lookup["R_to_S"])
+
+
+        # test on the wastewater
+        self.epi_metric_lookup["wastewater"] = \
+            Wastewater("wastewater",
+                       getattr(self.sim_state, "wastewater"), # initial value is set to null for now
+                       self.transition_variable_lookup["S_to_E"])

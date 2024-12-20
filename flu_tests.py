@@ -61,13 +61,13 @@ def test_correct_object_count():
     """
     Based on this model, there should be 6 epi compartments,
         7 transition variables, 2 transition variable groups,
-        and 2 epi metrics
+        and 3 epi metrics
     """
 
     assert len(flu_model.compartments) == 8
     assert len(flu_model.transition_variables) == 10
     assert len(flu_model.transition_variable_groups) == 3
-    assert len(flu_model.epi_metrics) == 2
+    assert len(flu_model.epi_metrics) == 3
     assert len(flu_model.dynamic_vals) == 1
 
 
@@ -167,6 +167,21 @@ def test_num_timesteps():
     for tvar in few_timesteps_model.transition_variables:
         assert (tvar.current_val >=
                 many_timesteps_model.lookup_by_name[tvar.name].current_val).all()
+
+# wastewater test
+@pytest.mark.parametrize("model", flu_model_variations_list)
+def test_wastewater_when_beta_zero(model):
+    """
+    If the transmission rate beta_baseline = 0, then viral load should be zero
+    """
+    model.reset_simulation()
+    model.fixed_params.beta_baseline = 0
+    model.simulate_until_time_period(300)
+
+    ww_history = model.lookup_by_name["wastewater"].history_vals_list
+    tol = 1e-6
+    assert np.sum(np.abs(ww_history) < tol) == len(ww_history)
+
 
 
 @pytest.mark.parametrize("model", flu_model_variations_list)
