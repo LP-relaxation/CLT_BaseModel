@@ -744,6 +744,7 @@ class FluSubpopModel(base.SubpopModel):
         config = self.config
 
         self.current_simulation_day = 0
+
         if isinstance(config.start_real_date, datetime.date):
             self.start_real_date = config.start_real_date
         else:
@@ -752,6 +753,7 @@ class FluSubpopModel(base.SubpopModel):
                     datetime.datetime.strptime(config.start_real_date, "%Y-%m-%d").date()
             except ValueError:
                 print("Error: The date format should be YYYY-MM-DD.")
+
         self.current_real_date = self.start_real_date
 
     def setup_model(self):
