@@ -6,11 +6,11 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Optional, Union
 from pathlib import Path
-import base_components as base
+import clt_base as clt
 
 import sciris as sc
 
-base_path = Path(__file__).parent / "flu_demo_input_files"
+base_path = Path(__file__).parent.parent / "flu_demo_input_files"
 
 
 # Note: for dataclasses, Optional is used to help with static type checking
@@ -19,7 +19,7 @@ base_path = Path(__file__).parent / "flu_demo_input_files"
 
 
 @dataclass
-class FluFixedParams(base.FixedParams):
+class FluFixedParams(clt.FixedParams):
     """
     Data container for pre-specified and fixed epidemiological
     parameters in FluModel flu model. Along with FluSimState,
@@ -150,13 +150,14 @@ class FluFixedParams(base.FixedParams):
     H_to_D_adjusted_prop: Optional[np.ndarray] = None
     IP_relative_inf: Optional[float] = None
     IA_relative_inf: Optional[float] = None
-    viral_shedding_peak: Optional[float] = None # viral shedding parameters
-    viral_shedding_magnitude: Optional[float] = None # viral shedding parameters
-    viral_shedding_duration: Optional[float] = None # viral shedding parameters
-    viral_shedding_feces_mass: Optional[float] = None # viral shedding parameters
+    viral_shedding_peak: Optional[float] = None  # viral shedding parameters
+    viral_shedding_magnitude: Optional[float] = None  # viral shedding parameters
+    viral_shedding_duration: Optional[float] = None  # viral shedding parameters
+    viral_shedding_feces_mass: Optional[float] = None  # viral shedding parameters
+
 
 @dataclass
-class FluSimState(base.SimState):
+class FluSimState(clt.SimState):
     """
     Data container for pre-specified and fixed set of
     EpiCompartment initial values and EpiMetric initial values
@@ -234,9 +235,10 @@ class FluSimState(base.SimState):
     absolute_humidity: Optional[float] = None
     flu_contact_matrix: Optional[np.ndarray] = None
     beta_reduct: Optional[float] = 0.0
-    wastewater: Optional[np.ndarray] = None # wastewater viral load
+    wastewater: Optional[np.ndarray] = None  # wastewater viral load
 
-class SusceptibleToExposed(base.TransitionVariable):
+
+class SusceptibleToExposed(clt.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -262,14 +264,14 @@ class SusceptibleToExposed(base.TransitionVariable):
         return (1 - sim_state.beta_reduct) * beta_humidity_adjusted * summand
 
 
-class RecoveredToSusceptible(base.TransitionVariable):
+class RecoveredToSusceptible(clt.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
         return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups), fixed_params.R_to_S_rate)
 
 
-class ExposedToAsymp(base.TransitionVariable):
+class ExposedToAsymp(clt.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -277,7 +279,7 @@ class ExposedToAsymp(base.TransitionVariable):
                        fixed_params.E_to_I_rate * fixed_params.E_to_IA_prop)
 
 
-class ExposedToPresymp(base.TransitionVariable):
+class ExposedToPresymp(clt.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -285,7 +287,7 @@ class ExposedToPresymp(base.TransitionVariable):
                        fixed_params.E_to_I_rate * (1 - fixed_params.E_to_IA_prop))
 
 
-class PresympToSymp(base.TransitionVariable):
+class PresympToSymp(clt.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -293,7 +295,7 @@ class PresympToSymp(base.TransitionVariable):
                        fixed_params.IP_to_IS_rate)
 
 
-class SympToRecovered(base.TransitionVariable):
+class SympToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -301,7 +303,7 @@ class SympToRecovered(base.TransitionVariable):
                        (1 - fixed_params.IS_to_H_adjusted_prop) * fixed_params.IS_to_R_rate)
 
 
-class AsympToRecovered(base.TransitionVariable):
+class AsympToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -309,7 +311,7 @@ class AsympToRecovered(base.TransitionVariable):
                        fixed_params.IA_to_R_rate)
 
 
-class HospToRecovered(base.TransitionVariable):
+class HospToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -317,7 +319,7 @@ class HospToRecovered(base.TransitionVariable):
                        (1 - fixed_params.H_to_D_adjusted_prop) * fixed_params.H_to_R_rate)
 
 
-class SympToHosp(base.TransitionVariable):
+class SympToHosp(clt.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -325,7 +327,7 @@ class SympToHosp(base.TransitionVariable):
                           (1 + fixed_params.hosp_risk_reduction * sim_state.pop_immunity_hosp))
 
 
-class HospToDead(base.TransitionVariable):
+class HospToDead(clt.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -333,7 +335,7 @@ class HospToDead(base.TransitionVariable):
                           (1 + fixed_params.death_risk_reduction * sim_state.pop_immunity_hosp))
 
 
-class PopulationImmunityHosp(base.EpiMetric):
+class PopulationImmunityHosp(clt.EpiMetric):
 
     def __init__(self, init_val, R_to_S):
         super().__init__(init_val)
@@ -371,7 +373,7 @@ class PopulationImmunityHosp(base.EpiMetric):
         return np.asarray(result, dtype=np.float64)
 
 
-class PopulationImmunityInf(base.EpiMetric):
+class PopulationImmunityInf(clt.EpiMetric):
     def __init__(self, init_val, R_to_S):
         super().__init__(init_val)
         self.R_to_S = R_to_S
@@ -404,7 +406,7 @@ class PopulationImmunityInf(base.EpiMetric):
 
 
 # test on the wastewater viral load simulation
-class Wastewater(base.EpiMetric):
+class Wastewater(clt.EpiMetric):
     def __init__(self, init_val, S_to_E):
         super().__init__(init_val)
         self.S_to_E = S_to_E
@@ -415,7 +417,7 @@ class Wastewater(base.EpiMetric):
         self.viral_shedding_magnitude = None
         self.viral_shedding_peak = None
         self.viral_shedding_feces_mass = None
-        self.S_to_E_len = 5000 # preset to match the simulation time horizon
+        self.S_to_E_len = 5000  # preset to match the simulation time horizon
         self.S_to_E_history = np.zeros(self.S_to_E_len)
         self.cur_time_stamp = -1
         self.num_timesteps = None
@@ -427,7 +429,7 @@ class Wastewater(base.EpiMetric):
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
-        if not self.flag_preprocessed: # preprocess the viral shedding function if not done yet
+        if not self.flag_preprocessed:  # preprocess the viral shedding function if not done yet
             self.val_list_len = num_timesteps
             self.current_val_list = np.zeros(self.val_list_len)
             self.preprocess(fixed_params, num_timesteps)
@@ -446,9 +448,11 @@ class Wastewater(base.EpiMetric):
         # discrete convolution
         len_duration = self.viral_shedding_duration * self.num_timesteps
         if self.cur_time_stamp >= len_duration - 1:
-            current_val = self.S_to_E_history[(self.cur_time_stamp - len_duration + 1):(self.cur_time_stamp + 1)] @ self.viral_shedding
+            current_val = self.S_to_E_history[
+                          (self.cur_time_stamp - len_duration + 1):(self.cur_time_stamp + 1)] @ self.viral_shedding
         else:
-            current_val = self.S_to_E_history[:(self.cur_time_stamp + 1)] @ self.viral_shedding[-(self.cur_time_stamp + 1):]
+            current_val = self.S_to_E_history[:(self.cur_time_stamp + 1)] @ self.viral_shedding[
+                                                                            -(self.cur_time_stamp + 1):]
 
         self.current_val = current_val
         self.cur_idx_timestep += 1
@@ -469,15 +473,17 @@ class Wastewater(base.EpiMetric):
         for time_idx in range(int(fixed_params.viral_shedding_duration * self.num_timesteps)):
             cur_time_point = time_idx / num_timesteps
             next_time_point = (time_idx + 1) / num_timesteps
-            next_time_log_viral_shedding = fixed_params.viral_shedding_magnitude * next_time_point /\
-                                          (fixed_params.viral_shedding_peak ** 2 + next_time_point ** 2 )
+            next_time_log_viral_shedding = fixed_params.viral_shedding_magnitude * next_time_point / \
+                                           (fixed_params.viral_shedding_peak ** 2 + next_time_point ** 2)
             if time_idx == 0:
-                interval_viral_shedding = fixed_params.viral_shedding_feces_mass * 0.5 * (10 ** next_time_log_viral_shedding) / num_timesteps
+                interval_viral_shedding = fixed_params.viral_shedding_feces_mass * 0.5 * (
+                            10 ** next_time_log_viral_shedding) / num_timesteps
             else:
-                cur_time_log_viral_shedding = fixed_params.viral_shedding_magnitude * cur_time_point /\
-                                          (fixed_params.viral_shedding_peak ** 2 + cur_time_point ** 2 )
+                cur_time_log_viral_shedding = fixed_params.viral_shedding_magnitude * cur_time_point / \
+                                              (fixed_params.viral_shedding_peak ** 2 + cur_time_point ** 2)
                 interval_viral_shedding = fixed_params.viral_shedding_feces_mass * 0.5 \
-                                 * (10 ** cur_time_log_viral_shedding + 10 ** next_time_log_viral_shedding) / num_timesteps
+                                          * (
+                                                      10 ** cur_time_log_viral_shedding + 10 ** next_time_log_viral_shedding) / num_timesteps
             self.viral_shedding.append(interval_viral_shedding)
         self.viral_shedding.reverse()
         self.viral_shedding = np.array(self.viral_shedding)
@@ -511,7 +517,8 @@ class Wastewater(base.EpiMetric):
         self.current_val_list = None
         self.cur_idx_timestep = -1
 
-class BetaReduct(base.DynamicVal):
+
+class BetaReduct(clt.DynamicVal):
 
     def __init__(self, init_val, is_enabled):
         super().__init__(init_val, is_enabled)
@@ -561,12 +568,12 @@ def absolute_humidity_func(current_date: datetime.date) -> float:
     return 12.5 - 0.00027 * (day_of_year % 365 - 180) ** 2
 
 
-class AbsoluteHumidity(base.Schedule):
+class AbsoluteHumidity(clt.Schedule):
     def update_current_val(self, current_date: datetime.date) -> None:
         self.current_val = absolute_humidity_func(current_date)
 
 
-class FluContactMatrix(base.Schedule):
+class FluContactMatrix(clt.Schedule):
     """
     Attributes:
         timeseries_df (pd.DataFrame):
@@ -617,7 +624,7 @@ class FluContactMatrix(base.Schedule):
                            (1 - current_row["is_work_day"]) * self.work_contact_matrix
 
 
-class FluSubpopModel(base.SubpopModel):
+class FluSubpopModel(clt.SubpopModel):
     """
     Class for creating ImmunoSEIRS flu model with predetermined fixed
     structure -- initial values and epidemiological structure are
@@ -679,51 +686,18 @@ class FluSubpopModel(base.SubpopModel):
     """
 
     def __init__(self,
-                 config_filepath: Optional[str] = None,
-                 fixed_params_filepath: Optional[str] = None,
-                 state_vars_init_vals_filepath: Optional[str] = None):
+                 sim_state,
+                 fixed_params,
+                 config,
+                 RNG):
         """
-        Create Config, FluFixedParams, and FluSimState instances
-        using values from respective JSON files, and save these instances
-        on the FluSubpopModel to construct a model.
-
-        If any filepath is not specified, then user must manually assign
-        the respective attribute (config, fixed_params, or sim_state)
-        before using constructor to create a model.
-
-        Attributes:
-            config_filepath (Optional[str]):
-                path to config JSON file (path includes actual filename
-                with suffix ".json") -- all JSON fields must match
-                name and datatype of Config instance attributes.
-            fixed_params_filepath (Optional[str]):
-                path to epidemiological parameters JSON file
-                (path includes actual filename with suffix ".json")
-                -- all JSON fields must match name and datatype of
-                FixedParams instance attributes.
-            state_vars_init_vals_filepath (Optional[str]):
-                path to epidemiological compartments JSON file
-                (path includes actual filename with suffix ".json")
-                -- all JSON fields must match name and datatype of
-                StateVariable instance attributes -- these initial
-                values are used to populate sim_state attribute.
         """
 
         # Assign config, fixed_params, and sim_state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
-        if config_filepath:
-            self.config = self.make_dataclass_from_json(base.Config,
-                                                        config_filepath)
 
-        if fixed_params_filepath:
-            self.fixed_params = self.make_dataclass_from_json(FluFixedParams,
-                                                              fixed_params_filepath)
-
-        if state_vars_init_vals_filepath:
-            self.sim_state = \
-                self.make_dataclass_from_json(FluSimState,
-                                              state_vars_init_vals_filepath)
+        super().__init__(sim_state, fixed_params, config, RNG)
 
         self.compartment_lookup = sc.objdict()
         self.transition_variable_lookup = sc.objdict()
@@ -740,21 +714,6 @@ class FluSubpopModel(base.SubpopModel):
         self.epi_metrics = self.epi_metric_lookup.values()
         self.dynamic_vals = self.dynamic_val_lookup.values()
         self.schedules = self.schedule_lookup.values()
-
-        config = self.config
-
-        self.current_simulation_day = 0
-
-        if isinstance(config.start_real_date, datetime.date):
-            self.start_real_date = config.start_real_date
-        else:
-            try:
-                self.start_real_date = \
-                    datetime.datetime.strptime(config.start_real_date, "%Y-%m-%d").date()
-            except ValueError:
-                print("Error: The date format should be YYYY-MM-DD.")
-
-        self.current_real_date = self.start_real_date
 
     def setup_model(self):
 
@@ -781,7 +740,7 @@ class FluSubpopModel(base.SubpopModel):
         """
 
         for name in ("S", "E", "IP", "IS", "IA", "H", "R", "D"):
-            self.compartment_lookup[name] = base.EpiCompartment(getattr(self.sim_state, name))
+            self.compartment_lookup[name] = clt.EpiCompartment(getattr(self.sim_state, name))
 
     def setup_dynamic_vals(self) -> None:
         """
@@ -847,17 +806,17 @@ class FluSubpopModel(base.SubpopModel):
 
         transition_type = self.config.transition_type
 
-        transition_variable_group_lookup.E_out = base.TransitionVariableGroup(compartment_lookup.E,
+        transition_variable_group_lookup.E_out = clt.TransitionVariableGroup(compartment_lookup.E,
                                                                               transition_type,
                                                                               (transition_variable_lookup.E_to_IP,
                                                                                transition_variable_lookup.E_to_IA))
 
-        transition_variable_group_lookup.IS_out = base.TransitionVariableGroup(compartment_lookup.IS,
+        transition_variable_group_lookup.IS_out = clt.TransitionVariableGroup(compartment_lookup.IS,
                                                                                transition_type,
                                                                                (transition_variable_lookup.IS_to_R,
                                                                                 transition_variable_lookup.IS_to_H))
 
-        transition_variable_group_lookup.H_out = base.TransitionVariableGroup(compartment_lookup.H,
+        transition_variable_group_lookup.H_out = clt.TransitionVariableGroup(compartment_lookup.H,
                                                                               transition_type,
                                                                               (transition_variable_lookup.H_to_R,
                                                                                transition_variable_lookup.H_to_D))
@@ -874,7 +833,7 @@ class FluSubpopModel(base.SubpopModel):
                                   self.transition_variable_lookup.R_to_S)
 
         self.epi_metric_lookup.wastewater = \
-            Wastewater(getattr(self.sim_state, "wastewater"), # initial value is set to null for now
+            Wastewater(getattr(self.sim_state, "wastewater"),  # initial value is set to null for now
                        self.transition_variable_lookup.S_to_E)
 
         self.epi_metric_lookup.pop_immunity_hosp = \

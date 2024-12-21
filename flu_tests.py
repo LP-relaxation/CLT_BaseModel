@@ -35,7 +35,7 @@ flu_model = flu_model_constructor.create_transmission_model(RNG_seed=88888888)
 def create_models_all_transition_types_list(model_constructor, RNG_seed):
     models_list = []
 
-    for transition_type in base.TransitionTypes:
+    for transition_type in clt.TransitionTypes:
 
         if "poisson" not in transition_type:
             #  Need deep copy -- otherwise changing "transition_type" on

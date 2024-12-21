@@ -1208,73 +1208,31 @@ class SubpopModel(ABC):
     See __init__ docstring for other attributes.
     """
 
-    def __init__(self):
-        """
-        TODO: maybe group arguments together into dataclass to simplify?
+    def __init__(self, sim_state, fixed_params, config, RNG):
 
-        Args:
-            RNG_seed (positive int):
-                used to initialize the model's RNG for generating
-                random variables and random transitions.
+        self.sim_state = sim_state
+        self.fixed_params = fixed_params
+        self.config = config
+        self.RNG = RNG
 
-        See class docstring for other parameters.
-        """
-
-        # self.state_variable_manager = state_variable_manager
-        # self.compartments = state_variable_manager.compartments
-        # self.epi_metrics = state_variable_manager.epi_metrics
-        # self.dynamic_vals = state_variable_manager.dynamic_vals
-        # self.schedules = state_variable_manager.schedules
-        #
-        # self.transition_variables = transition_variables
-        # self.transition_variable_groups = transition_variable_groups
-        #
-        # self.fixed_params = fixed_params
-        # self.config = config
-        #
-        # # Create bit generator seeded with given RNG_seed
-        # self._bit_generator = np.random.MT19937(seed=RNG_seed)
-        # self.RNG = np.random.Generator(self._bit_generator)
-        #
         self.current_simulation_day = 0
 
+        config = self.config
+
+        if isinstance(config.start_real_date, datetime.date):
+            self.start_real_date = config.start_real_date
+        else:
+            try:
+                self.start_real_date = \
+                    datetime.datetime.strptime(config.start_real_date, "%Y-%m-%d").date()
+            except ValueError:
+                print("Error: The date format should be YYYY-MM-DD.")
+
+        self.current_real_date = self.start_real_date
 
     @abstractmethod
     def setup_model(self, **kwargs):
         pass
-
-    @staticmethod
-    def make_dataclass_from_json(dataclass_ref: Type[Union[Config, SimState, FixedParams]],
-                                     json_filepath: str) -> Union[Config, SimState, FixedParams]:
-        """
-        Create instance of class dataclass_ref,
-        based on information in json_filepath.
-
-        Args:
-            dataclass_ref (Type[Union[Config, SimState, FixedParams]]):
-                (class, not instance) from which to create instance.
-            json_filepath (str):
-                path to json file (path includes actual filename
-                with suffix ".json") -- all json fields must
-                match name and datatype of dataclass_ref instance
-                attributes.
-
-        Returns:
-            Union[Config, SimState, FixedParams]:
-                instance of dataclass_ref with attributes dynamically
-                assigned by json_filepath file contents.
-        """
-
-        with open(json_filepath, 'r') as file:
-            data = json.load(file)
-
-        # convert lists to numpy arrays to support numpy operations
-        #   since json does not have direct support for numpy
-        for key, val in data.items():
-            if type(val) is list:
-                data[key] = np.asarray(val)
-
-        return dataclass_ref(**data)
 
     def modify_random_seed(self, new_seed_number) -> None:
         """
@@ -1505,5 +1463,7 @@ class SubpopModel(ABC):
 
         for tvargroup in self.transition_variable_groups:
             tvargroup.current_vals_list = []
+
+
 
 
