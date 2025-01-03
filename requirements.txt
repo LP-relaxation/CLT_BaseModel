@@ -31,7 +31,7 @@ isort==5.13.2
 jax @ file:///home/conda/feedstock_root/build_artifacts/jax_1674755212127/work
 jaxlib==0.4.1
 jellyfish==1.1.3
-Jinja2==3.1.4
+Jinja2==3.1.5
 joblib @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_dfriz0qjwt/croot/joblib_1685113297703/work
 jsonpickle==4.0.1
 katex==0.0.4
