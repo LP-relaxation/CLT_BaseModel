@@ -1,14 +1,15 @@
 import datetime
-import pandas as pd
 import copy
 
 import numpy as np
+import pandas as pd
+import sciris as sc
+
 from dataclasses import dataclass
 from typing import Optional, Union
 from pathlib import Path
-import clt_base as clt
 
-import sciris as sc
+import clt_base as base
 
 base_path = Path(__file__).parent.parent / "flu_demo_input_files"
 
@@ -19,7 +20,7 @@ base_path = Path(__file__).parent.parent / "flu_demo_input_files"
 
 
 @dataclass
-class FluFixedParams(clt.FixedParams):
+class FluFixedParams(base.FixedParams):
     """
     Data container for pre-specified and fixed epidemiological
     parameters in FluModel flu model. Along with FluSimState,
@@ -157,7 +158,7 @@ class FluFixedParams(clt.FixedParams):
 
 
 @dataclass
-class FluSimState(clt.SimState):
+class FluSimState(base.SimState):
     """
     Data container for pre-specified and fixed set of
     EpiCompartment initial values and EpiMetric initial values
@@ -238,7 +239,7 @@ class FluSimState(clt.SimState):
     wastewater: Optional[np.ndarray] = None  # wastewater viral load
 
 
-class SusceptibleToExposed(clt.TransitionVariable):
+class SusceptibleToExposed(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -264,14 +265,14 @@ class SusceptibleToExposed(clt.TransitionVariable):
         return (1 - sim_state.beta_reduct) * beta_humidity_adjusted * summand
 
 
-class RecoveredToSusceptible(clt.TransitionVariable):
+class RecoveredToSusceptible(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
         return np.full((fixed_params.num_age_groups, fixed_params.num_risk_groups), fixed_params.R_to_S_rate)
 
 
-class ExposedToAsymp(clt.TransitionVariable):
+class ExposedToAsymp(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -279,7 +280,7 @@ class ExposedToAsymp(clt.TransitionVariable):
                        fixed_params.E_to_I_rate * fixed_params.E_to_IA_prop)
 
 
-class ExposedToPresymp(clt.TransitionVariable):
+class ExposedToPresymp(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -287,7 +288,7 @@ class ExposedToPresymp(clt.TransitionVariable):
                        fixed_params.E_to_I_rate * (1 - fixed_params.E_to_IA_prop))
 
 
-class PresympToSymp(clt.TransitionVariable):
+class PresympToSymp(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -295,7 +296,7 @@ class PresympToSymp(clt.TransitionVariable):
                        fixed_params.IP_to_IS_rate)
 
 
-class SympToRecovered(clt.TransitionVariable):
+class SympToRecovered(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -303,7 +304,7 @@ class SympToRecovered(clt.TransitionVariable):
                        (1 - fixed_params.IS_to_H_adjusted_prop) * fixed_params.IS_to_R_rate)
 
 
-class AsympToRecovered(clt.TransitionVariable):
+class AsympToRecovered(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -311,7 +312,7 @@ class AsympToRecovered(clt.TransitionVariable):
                        fixed_params.IA_to_R_rate)
 
 
-class HospToRecovered(clt.TransitionVariable):
+class HospToRecovered(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -319,7 +320,7 @@ class HospToRecovered(clt.TransitionVariable):
                        (1 - fixed_params.H_to_D_adjusted_prop) * fixed_params.H_to_R_rate)
 
 
-class SympToHosp(clt.TransitionVariable):
+class SympToHosp(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -327,7 +328,7 @@ class SympToHosp(clt.TransitionVariable):
                           (1 + fixed_params.hosp_risk_reduction * sim_state.pop_immunity_hosp))
 
 
-class HospToDead(clt.TransitionVariable):
+class HospToDead(base.TransitionVariable):
     def get_current_rate(self,
                          sim_state: FluSimState,
                          fixed_params: FluFixedParams):
@@ -335,7 +336,7 @@ class HospToDead(clt.TransitionVariable):
                           (1 + fixed_params.death_risk_reduction * sim_state.pop_immunity_hosp))
 
 
-class PopulationImmunityHosp(clt.EpiMetric):
+class PopulationImmunityHosp(base.EpiMetric):
 
     def __init__(self, init_val, R_to_S):
         super().__init__(init_val)
@@ -373,7 +374,7 @@ class PopulationImmunityHosp(clt.EpiMetric):
         return np.asarray(result, dtype=np.float64)
 
 
-class PopulationImmunityInf(clt.EpiMetric):
+class PopulationImmunityInf(base.EpiMetric):
     def __init__(self, init_val, R_to_S):
         super().__init__(init_val)
         self.R_to_S = R_to_S
@@ -406,7 +407,7 @@ class PopulationImmunityInf(clt.EpiMetric):
 
 
 # test on the wastewater viral load simulation
-class Wastewater(clt.EpiMetric):
+class Wastewater(base.EpiMetric):
     def __init__(self, init_val, S_to_E):
         super().__init__(init_val)
         self.S_to_E = S_to_E
@@ -518,7 +519,7 @@ class Wastewater(clt.EpiMetric):
         self.cur_idx_timestep = -1
 
 
-class BetaReduct(clt.DynamicVal):
+class BetaReduct(base.DynamicVal):
 
     def __init__(self, init_val, is_enabled):
         super().__init__(init_val, is_enabled)
@@ -568,12 +569,12 @@ def absolute_humidity_func(current_date: datetime.date) -> float:
     return 12.5 - 0.00027 * (day_of_year % 365 - 180) ** 2
 
 
-class AbsoluteHumidity(clt.Schedule):
+class AbsoluteHumidity(base.Schedule):
     def update_current_val(self, current_date: datetime.date) -> None:
         self.current_val = absolute_humidity_func(current_date)
 
 
-class FluContactMatrix(clt.Schedule):
+class FluContactMatrix(base.Schedule):
     """
     Attributes:
         timeseries_df (pd.DataFrame):
@@ -624,7 +625,7 @@ class FluContactMatrix(clt.Schedule):
                            (1 - current_row["is_work_day"]) * self.work_contact_matrix
 
 
-class FluSubpopModel(clt.SubpopModel):
+class FluSubpopModel(base.SubpopModel):
     """
     Class for creating ImmunoSEIRS flu model with predetermined fixed
     structure -- initial values and epidemiological structure are
@@ -740,7 +741,7 @@ class FluSubpopModel(clt.SubpopModel):
         """
 
         for name in ("S", "E", "IP", "IS", "IA", "H", "R", "D"):
-            self.compartment_lookup[name] = clt.EpiCompartment(getattr(self.sim_state, name))
+            self.compartment_lookup[name] = base.EpiCompartment(getattr(self.sim_state, name))
 
     def setup_dynamic_vals(self) -> None:
         """
@@ -806,17 +807,17 @@ class FluSubpopModel(clt.SubpopModel):
 
         transition_type = self.config.transition_type
 
-        transition_variable_group_lookup.E_out = clt.TransitionVariableGroup(compartment_lookup.E,
+        transition_variable_group_lookup.E_out = base.TransitionVariableGroup(compartment_lookup.E,
                                                                               transition_type,
                                                                               (transition_variable_lookup.E_to_IP,
                                                                                transition_variable_lookup.E_to_IA))
 
-        transition_variable_group_lookup.IS_out = clt.TransitionVariableGroup(compartment_lookup.IS,
+        transition_variable_group_lookup.IS_out = base.TransitionVariableGroup(compartment_lookup.IS,
                                                                                transition_type,
                                                                                (transition_variable_lookup.IS_to_R,
                                                                                 transition_variable_lookup.IS_to_H))
 
-        transition_variable_group_lookup.H_out = clt.TransitionVariableGroup(compartment_lookup.H,
+        transition_variable_group_lookup.H_out = base.TransitionVariableGroup(compartment_lookup.H,
                                                                               transition_type,
                                                                               (transition_variable_lookup.H_to_R,
                                                                                transition_variable_lookup.H_to_D))

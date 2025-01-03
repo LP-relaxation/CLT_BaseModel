@@ -1,12 +1,9 @@
-import clt_base as clt
-
-import json
-import numpy as np
-from typing import Optional, Union, Type
+from .base_components import Config, SimState, FixedParams
+from .utils import np, json, Union, Type
 
 
-def make_dataclass_from_json(dataclass_ref: Type[Union[clt.Config, clt.SimState, clt.FixedParams]],
-                             json_filepath: str) -> Union[clt.Config, clt.SimState, clt.FixedParams]:
+def make_dataclass_from_json(dataclass_ref: Type[Union[Config, SimState, FixedParams]],
+                             json_filepath: str) -> Union[Config, SimState, FixedParams]:
     """
     Create instance of class dataclass_ref,
     based on information in json_filepath.

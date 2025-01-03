@@ -1,12 +1,5 @@
-import numpy as np
-import json
-import copy
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Optional, Union, Type
-from enum import Enum
-import datetime
-import sciris as sc
+from .utils import np, copy, ABC, abstractmethod, dataclass, \
+    Optional, Union, Enum, datetime
 
 
 class SubpopModelError(Exception):
@@ -1210,9 +1203,9 @@ class SubpopModel(ABC):
 
     def __init__(self, sim_state, fixed_params, config, RNG):
 
-        self.sim_state = sim_state
-        self.fixed_params = fixed_params
-        self.config = config
+        self.sim_state = copy.deepcopy(sim_state)
+        self.fixed_params = copy.deepcopy(fixed_params)
+        self.config = copy.deepcopy(config)
         self.RNG = RNG
 
         self.current_simulation_day = 0

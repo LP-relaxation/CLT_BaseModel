@@ -1,25 +1,3 @@
-from flu_components import FluSubpopModel
-
-import base_components as base
-import numpy as np
-import copy
-import pytest
-
-from pathlib import Path
-
-base_path = Path(__file__).parent / "flu_demo_input_files"
-
-config_filepath = base_path / "config.json"
-fixed_params_filepath = base_path / "fixed_params.json"
-init_vals_filepath = base_path / "state_variables_init_vals.json"
-
-flu_model_constructor = FluSubpopModel(config_filepath,
-                                            fixed_params_filepath,
-                                            init_vals_filepath)
-
-flu_model = flu_model_constructor.create_transmission_model(RNG_seed=88888888)
-
-
 # WARNING:
 #   Currently excluding Poisson transition types from automatic
 #   test run. Poisson transition types are not always well-behaved
@@ -31,21 +9,47 @@ flu_model = flu_model_constructor.create_transmission_model(RNG_seed=88888888)
 #   these choices of parameter values and parameter initial values
 #   are unsuitable for well-behaved Poisson random variables.
 
+import flu_model as flu
+import clt_base as base
 
-def create_models_all_transition_types_list(model_constructor, RNG_seed):
+import numpy as np
+import copy
+import pytest
+
+from pathlib import Path
+
+base_path = Path(__file__).parent / "flu_demo_input_files"
+
+config_filepath = base_path / "config.json"
+fixed_params_filepath = base_path / "fixed_params.json"
+state_vars_init_vals_filepath = base_path / "state_variables_init_vals.json"
+
+config = base.make_dataclass_from_json(base.Config, config_filepath)
+fixed_params = base.make_dataclass_from_json(flu.FluFixedParams, fixed_params_filepath)
+sim_state = base.make_dataclass_from_json(flu.FluSimState, state_vars_init_vals_filepath)
+
+flu_model = flu.FluSubpopModel(sim_state,
+                               fixed_params,
+                               config,
+                               np.random.default_rng(88888))
+
+
+def create_models_all_transition_types_list(RNG_seed):
     models_list = []
 
-    for transition_type in clt.TransitionTypes:
+    for transition_type in base.TransitionTypes:
 
         if "poisson" not in transition_type:
             #  Need deep copy -- otherwise changing "transition_type" on
             #   model_constructor.config changes config attribute for all
             #   models in models_list
-            model_constructor.config = copy.deepcopy(model_constructor.config)
+            new_config = copy.deepcopy(flu_model.config)
+            new_config.transition_type = transition_type
 
-            model_constructor.config.transition_type = transition_type
-
-            models_list.append(model_constructor.create_transmission_model(RNG_seed))
+            models_list.append(flu.FluSubpopModel(sim_state,
+                                                  fixed_params,
+                                                  config,
+                                                  np.random.default_rng(RNG_seed)))
 
     return models_list
 
@@ -53,8 +57,7 @@ def create_models_all_transition_types_list(model_constructor, RNG_seed):
 starting_random_seed = 123456789123456789
 
 flu_model_variations_list = \
-    create_models_all_transition_types_list(flu_model_constructor,
-                                            starting_random_seed)
+    create_models_all_transition_types_list(starting_random_seed)
 
 
 def test_correct_object_count():
@@ -86,24 +89,34 @@ def test_model_constructor_no_unintended_sharing():
         created by the same constructor are indeed distinct/independent.
     """
 
-    first_model = flu_model_constructor.create_transmission_model(RNG_seed=1)
+    initial_sim_state = copy.deepcopy(sim_state)
 
-    second_model = flu_model_constructor.create_transmission_model(RNG_seed=1)
+    first_model = flu.FluSubpopModel(sim_state,
+                                     fixed_params,
+                                     config,
+                                     np.random.default_rng(1))
+
+    second_model = flu.FluSubpopModel(sim_state,
+                                      fixed_params,
+                                      config,
+                                      np.random.default_rng(1))
 
     first_model.simulate_until_time_period(100)
 
     # The initial state of the second model should still be the same
     #   initial state -- it should not have been affected by simulating
     #   the first model
-    for key in vars(second_model.sim_state).keys():
-        try:
-            assert (getattr(second_model.sim_state, key) ==
-                    getattr(flu_model_constructor.sim_state, key))
-        # if it's an array, have to check equality of each element --
-        #   Python will complain that the truth value of an array is ambiguous
-        except ValueError:
-            assert (getattr(second_model.sim_state, key) ==
-                    getattr(flu_model_constructor.sim_state, key)).all()
+
+    for key, value in vars(initial_sim_state).items():
+        if isinstance(value, (np.ndarray, list)):
+            try:
+                assert (getattr(second_model.sim_state, key) ==
+                        getattr(initial_sim_state, key))
+            # if it's an array, have to check equality of each element --
+            #   Python will complain that the truth value of an array is ambiguous
+            except ValueError:
+                assert (getattr(second_model.sim_state, key) ==
+                        getattr(initial_sim_state, key)).all()
 
 
 def test_model_constructor_reproducible_results():
@@ -120,25 +133,33 @@ def test_model_constructor_reproducible_results():
         should not modify objects on that constructor.
     """
 
-    first_model = flu_model_constructor.create_transmission_model(RNG_seed=1)
+    first_model = flu.FluSubpopModel(sim_state,
+                                     fixed_params,
+                                     config,
+                                     np.random.default_rng(1))
     first_model.simulate_until_time_period(100)
 
     first_model_history_dict = {}
+    first_model_compartment_lookup = first_model.compartment_lookup
 
-    for compartment in first_model.compartments:
-        first_model_history_dict[compartment.name] = compartment.history_vals_list
+    for name in first_model_compartment_lookup.keys():
+        first_model_history_dict[name] = getattr(first_model_compartment_lookup, name).history_vals_list
 
-    second_model = flu_model_constructor.create_transmission_model(RNG_seed=1)
+    second_model = flu.FluSubpopModel(sim_state,
+                                      fixed_params,
+                                      config,
+                                      np.random.default_rng(1))
     second_model.simulate_until_time_period(100)
 
     second_model_history_dict = {}
+    second_model_compartment_lookup = second_model.compartment_lookup
 
-    for compartment in second_model.compartments:
-        second_model_history_dict[compartment.name] = compartment.history_vals_list
+    for name in second_model_compartment_lookup.keys():
+        second_model_history_dict[name] = getattr(second_model_compartment_lookup, name).history_vals_list
 
-    for compartment_name in first_model_history_dict.keys():
-        assert np.array_equal(np.array(first_model_history_dict[compartment_name]),
-                              np.array(second_model_history_dict[compartment_name]))
+    for name in first_model_compartment_lookup.keys():
+        assert np.array_equal(np.array(getattr(first_model_compartment_lookup, name).history_vals_list),
+                              np.array(getattr(second_model_compartment_lookup, name).history_vals_list))
 
 
 def test_num_timesteps():
@@ -150,23 +171,36 @@ def test_num_timesteps():
         for more timesteps per day.
     """
 
-    flu_model_constructor.config.transition_type = "binomial_deterministic"
+    new_config = copy.deepcopy(flu_model.config)
+    new_config.timesteps_per_day = 2
+    new_config.transition_type = "binomial_deterministic"
 
-    flu_model_constructor.config.timesteps_per_day = 2
+    few_timesteps_model = flu.FluSubpopModel(sim_state,
+                                             fixed_params,
+                                             config,
+                                             np.random.default_rng(starting_random_seed))
 
-    few_timesteps_model = flu_model_constructor.create_transmission_model(RNG_seed=88888888)
     few_timesteps_model.prepare_daily_state()
     few_timesteps_model.simulate_timesteps(1)
 
-    flu_model_constructor.config.timesteps_per_day = 20
+    new_config = copy.deepcopy(flu_model.config)
+    new_config.timesteps_per_day = 20
+    new_config.transition_type = "binomial_deterministic"
 
-    many_timesteps_model = flu_model_constructor.create_transmission_model(RNG_seed=88888888)
+    many_timesteps_model = flu.FluSubpopModel(sim_state,
+                                             fixed_params,
+                                             config,
+                                             np.random.default_rng(starting_random_seed))
+
     many_timesteps_model.prepare_daily_state()
     many_timesteps_model.simulate_timesteps(1)
 
-    for tvar in few_timesteps_model.transition_variables:
-        assert (tvar.current_val >=
-                many_timesteps_model.lookup_by_name[tvar.name].current_val).all()
+    for name in few_timesteps_model.transition_variable_lookup.keys():
+        assert (few_timesteps_model.transition_variable_lookup[name].current_val >=
+                many_timesteps_model.transition_variable_lookup[name].current_val).all()
+
+# breakpoint()
+
 
 # wastewater test
 @pytest.mark.parametrize("model", flu_model_variations_list)
@@ -181,7 +215,6 @@ def test_wastewater_when_beta_zero(model):
     ww_history = model.lookup_by_name["wastewater"].history_vals_list
     tol = 1e-6
     assert np.sum(np.abs(ww_history) < tol) == len(ww_history)
-
 
 
 @pytest.mark.parametrize("model", flu_model_variations_list)
@@ -319,4 +352,3 @@ def test_transition_format(model):
 
             for element in tvar.current_rate.flatten():
                 assert isinstance(element, float)
-
