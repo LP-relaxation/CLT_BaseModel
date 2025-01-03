@@ -212,7 +212,7 @@ def test_wastewater_when_beta_zero(model):
     model.fixed_params.beta_baseline = 0
     model.simulate_until_time_period(300)
 
-    ww_history = model.lookup_by_name["wastewater"].history_vals_list
+    ww_history = model.epi_metric_lookup["wastewater"].history_vals_list
     tol = 1e-6
     assert np.sum(np.abs(ww_history) < tol) == len(ww_history)
 
@@ -227,7 +227,7 @@ def test_no_transmission_when_beta_zero(model):
     model.fixed_params.beta_baseline = 0
     model.simulate_until_time_period(300)
 
-    S_history = model.lookup_by_name["S"].history_vals_list
+    S_history = model.compartment_lookup["S"].history_vals_list
 
     assert np.sum((np.diff(np.sum(S_history, axis=(1, 2))) >= 0)) == len(S_history) - 1
 
@@ -243,7 +243,7 @@ def test_dead_compartment_monotonic(model):
     model.fixed_params.beta = 2
     model.simulate_until_time_period(300)
 
-    D_history = model.lookup_by_name["D"].history_vals_list
+    D_history = model.compartment_lookup["D"].history_vals_list
 
     assert np.sum(np.diff(np.sum(D_history, axis=(1, 2))) >= 0) == len(D_history) - 1
 
@@ -282,8 +282,8 @@ def test_reset_simulation_reproducible_results(model):
 
     original_model_history_dict = {}
 
-    for compartment in model.compartments:
-        original_model_history_dict[compartment.name] = \
+    for name, compartment in model.compartment_lookup.items():
+        original_model_history_dict[name] = \
             copy.deepcopy(compartment.history_vals_list)
 
     reset_model_history_dict = {}
@@ -292,13 +292,13 @@ def test_reset_simulation_reproducible_results(model):
     model.modify_random_seed(starting_random_seed)
     model.simulate_until_time_period(100)
 
-    for compartment in model.compartments:
-        reset_model_history_dict[compartment.name] = \
+    for name, compartment in model.compartment_lookup.items():
+        reset_model_history_dict[name] = \
             copy.deepcopy(compartment.history_vals_list)
 
-    for compartment_name in original_model_history_dict.keys():
-        assert np.array_equal(np.array(original_model_history_dict[compartment_name]),
-                              np.array(reset_model_history_dict[compartment_name]))
+    for name in model.compartment_lookup.keys():
+        assert np.array_equal(np.array(original_model_history_dict[name]),
+                              np.array(reset_model_history_dict[name]))
 
 
 @pytest.mark.parametrize("model", flu_model_variations_list)
