@@ -24,13 +24,13 @@ config_filepath = base_path / "config.json"
 fixed_params_filepath = base_path / "fixed_params.json"
 state_vars_init_vals_filepath = base_path / "state_variables_init_vals.json"
 
-config = base.make_dataclass_from_json(base.Config, config_filepath)
-fixed_params = base.make_dataclass_from_json(flu.FluFixedParams, fixed_params_filepath)
-sim_state = base.make_dataclass_from_json(flu.FluSimState, state_vars_init_vals_filepath)
+sim_state_dict = base.load_json(state_vars_init_vals_filepath)
+fixed_params_dict = base.load_json(fixed_params_filepath)
+config_dict = base.load_json(config_filepath)
 
-flu_model = flu.FluSubpopModel(sim_state,
-                               fixed_params,
-                               config,
+flu_model = flu.FluSubpopModel(sim_state_dict,
+                               fixed_params_dict,
+                               config_dict,
                                np.random.default_rng(88888))
 
 
@@ -43,12 +43,12 @@ def create_models_all_transition_types_list(RNG_seed):
             #  Need deep copy -- otherwise changing "transition_type" on
             #   model_constructor.config changes config attribute for all
             #   models in models_list
-            new_config = copy.deepcopy(flu_model.config)
-            new_config.transition_type = transition_type
+            new_config_dict = copy.deepcopy(config_dict)
+            new_config_dict["transition_type"] = transition_type
 
-            models_list.append(flu.FluSubpopModel(sim_state,
-                                                  fixed_params,
-                                                  config,
+            models_list.append(flu.FluSubpopModel(sim_state_dict,
+                                                  fixed_params_dict,
+                                                  new_config_dict,
                                                   np.random.default_rng(RNG_seed)))
 
     return models_list
@@ -89,16 +89,16 @@ def test_model_constructor_no_unintended_sharing():
         created by the same constructor are indeed distinct/independent.
     """
 
-    initial_sim_state = copy.deepcopy(sim_state)
+    initial_sim_state_dict = copy.deepcopy(sim_state_dict)
 
-    first_model = flu.FluSubpopModel(sim_state,
-                                     fixed_params,
-                                     config,
+    first_model = flu.FluSubpopModel(sim_state_dict,
+                                     fixed_params_dict,
+                                     config_dict,
                                      np.random.default_rng(1))
 
-    second_model = flu.FluSubpopModel(sim_state,
-                                      fixed_params,
-                                      config,
+    second_model = flu.FluSubpopModel(sim_state_dict,
+                                      fixed_params_dict,
+                                      config_dict,
                                       np.random.default_rng(1))
 
     first_model.simulate_until_time_period(100)
@@ -107,16 +107,16 @@ def test_model_constructor_no_unintended_sharing():
     #   initial state -- it should not have been affected by simulating
     #   the first model
 
-    for key, value in vars(initial_sim_state).items():
+    for key, value in initial_sim_state_dict.items():
         if isinstance(value, (np.ndarray, list)):
             try:
                 assert (getattr(second_model.sim_state, key) ==
-                        getattr(initial_sim_state, key))
+                        initial_sim_state_dict[key])
             # if it's an array, have to check equality of each element --
             #   Python will complain that the truth value of an array is ambiguous
             except ValueError:
                 assert (getattr(second_model.sim_state, key) ==
-                        getattr(initial_sim_state, key)).all()
+                        initial_sim_state_dict[key]).all()
 
 
 def test_model_constructor_reproducible_results():
@@ -133,33 +133,34 @@ def test_model_constructor_reproducible_results():
         should not modify objects on that constructor.
     """
 
-    first_model = flu.FluSubpopModel(sim_state,
-                                     fixed_params,
-                                     config,
+    first_model = flu.FluSubpopModel(sim_state_dict,
+                                     fixed_params_dict,
+                                     config_dict,
                                      np.random.default_rng(1))
+
     first_model.simulate_until_time_period(100)
 
     first_model_history_dict = {}
-    first_model_compartment_lookup = first_model.compartment_lookup
+    first_model_compartments = first_model.compartments
 
-    for name in first_model_compartment_lookup.keys():
-        first_model_history_dict[name] = getattr(first_model_compartment_lookup, name).history_vals_list
+    for name in first_model_compartments.keys():
+        first_model_history_dict[name] = getattr(first_model_compartments, name).history_vals_list
 
-    second_model = flu.FluSubpopModel(sim_state,
-                                      fixed_params,
-                                      config,
+    second_model = flu.FluSubpopModel(sim_state_dict,
+                                      fixed_params_dict,
+                                      config_dict,
                                       np.random.default_rng(1))
     second_model.simulate_until_time_period(100)
 
     second_model_history_dict = {}
-    second_model_compartment_lookup = second_model.compartment_lookup
+    second_model_compartments = second_model.compartments
 
-    for name in second_model_compartment_lookup.keys():
-        second_model_history_dict[name] = getattr(second_model_compartment_lookup, name).history_vals_list
+    for name in second_model_compartments.keys():
+        second_model_history_dict[name] = getattr(second_model_compartments, name).history_vals_list
 
-    for name in first_model_compartment_lookup.keys():
-        assert np.array_equal(np.array(getattr(first_model_compartment_lookup, name).history_vals_list),
-                              np.array(getattr(second_model_compartment_lookup, name).history_vals_list))
+    for name in first_model_compartments.keys():
+        assert np.array_equal(np.array(getattr(first_model_compartments, name).history_vals_list),
+                              np.array(getattr(second_model_compartments, name).history_vals_list))
 
 
 def test_num_timesteps():
@@ -175,9 +176,9 @@ def test_num_timesteps():
     new_config.timesteps_per_day = 2
     new_config.transition_type = "binomial_deterministic"
 
-    few_timesteps_model = flu.FluSubpopModel(sim_state,
-                                             fixed_params,
-                                             config,
+    few_timesteps_model = flu.FluSubpopModel(sim_state_dict,
+                                             fixed_params_dict,
+                                             config_dict,
                                              np.random.default_rng(starting_random_seed))
 
     few_timesteps_model.prepare_daily_state()
@@ -187,17 +188,17 @@ def test_num_timesteps():
     new_config.timesteps_per_day = 20
     new_config.transition_type = "binomial_deterministic"
 
-    many_timesteps_model = flu.FluSubpopModel(sim_state,
-                                             fixed_params,
-                                             config,
-                                             np.random.default_rng(starting_random_seed))
+    many_timesteps_model = flu.FluSubpopModel(sim_state_dict,
+                                              fixed_params_dict,
+                                              config_dict,
+                                              np.random.default_rng(starting_random_seed))
 
     many_timesteps_model.prepare_daily_state()
     many_timesteps_model.simulate_timesteps(1)
 
-    for name in few_timesteps_model.transition_variable_lookup.keys():
-        assert (few_timesteps_model.transition_variable_lookup[name].current_val >=
-                many_timesteps_model.transition_variable_lookup[name].current_val).all()
+    for name in few_timesteps_model.transition_variables.keys():
+        assert (few_timesteps_model.transition_variables[name].current_val >=
+                many_timesteps_model.transition_variables[name].current_val).all()
 
 # breakpoint()
 
@@ -212,7 +213,7 @@ def test_wastewater_when_beta_zero(model):
     model.fixed_params.beta_baseline = 0
     model.simulate_until_time_period(300)
 
-    ww_history = model.epi_metric_lookup["wastewater"].history_vals_list
+    ww_history = model.epi_metrics["wastewater"].history_vals_list
     tol = 1e-6
     assert np.sum(np.abs(ww_history) < tol) == len(ww_history)
 
@@ -227,7 +228,7 @@ def test_no_transmission_when_beta_zero(model):
     model.fixed_params.beta_baseline = 0
     model.simulate_until_time_period(300)
 
-    S_history = model.compartment_lookup["S"].history_vals_list
+    S_history = model.compartments["S"].history_vals_list
 
     assert np.sum((np.diff(np.sum(S_history, axis=(1, 2))) >= 0)) == len(S_history) - 1
 
@@ -243,7 +244,7 @@ def test_dead_compartment_monotonic(model):
     model.fixed_params.beta = 2
     model.simulate_until_time_period(300)
 
-    D_history = model.compartment_lookup["D"].history_vals_list
+    D_history = model.compartments["D"].history_vals_list
 
     assert np.sum(np.diff(np.sum(D_history, axis=(1, 2))) >= 0) == len(D_history) - 1
 
@@ -262,7 +263,7 @@ def test_population_is_constant(model):
         model.simulate_until_time_period(day)
 
         current_sum_all_compartments = 0
-        for compartment in model.compartments:
+        for compartment in model.compartments.values():
             current_sum_all_compartments += np.sum(compartment.current_val)
 
         assert np.abs(current_sum_all_compartments -
@@ -282,7 +283,7 @@ def test_reset_simulation_reproducible_results(model):
 
     original_model_history_dict = {}
 
-    for name, compartment in model.compartment_lookup.items():
+    for name, compartment in model.compartments.items():
         original_model_history_dict[name] = \
             copy.deepcopy(compartment.history_vals_list)
 
@@ -292,11 +293,11 @@ def test_reset_simulation_reproducible_results(model):
     model.modify_random_seed(starting_random_seed)
     model.simulate_until_time_period(100)
 
-    for name, compartment in model.compartment_lookup.items():
+    for name, compartment in model.compartments.items():
         reset_model_history_dict[name] = \
             copy.deepcopy(compartment.history_vals_list)
 
-    for name in model.compartment_lookup.keys():
+    for name in model.compartments.keys():
         assert np.array_equal(np.array(original_model_history_dict[name]),
                               np.array(reset_model_history_dict[name]))
 
@@ -313,7 +314,7 @@ def test_compartments_integer_population(model):
     for day in [1, 10, 100]:
         model.simulate_until_time_period(day)
 
-        for compartment in model.compartments:
+        for compartment in model.compartments.values():
             assert (compartment.current_val ==
                     np.asarray(compartment.current_val, dtype=int)).all()
 
@@ -346,7 +347,7 @@ def test_transition_format(model):
     for day in [1, 10, 100]:
         model.simulate_until_time_period(day)
 
-        for tvar in model.transition_variables:
+        for tvar in model.transition_variables.values():
             assert np.shape(tvar.current_rate) == (A, L)
             assert np.shape(tvar.current_val) == (A, L)
 

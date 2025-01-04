@@ -1,4 +1,4 @@
-from .utils import np, copy, ABC, abstractmethod, dataclass, \
+from .utils import np, sc, copy, ABC, abstractmethod, dataclass, \
     Optional, Union, Enum, datetime
 
 
@@ -97,29 +97,28 @@ class SimState(ABC):
     Holds current values of simulation state.
     """
 
-    compartment_lookup: Optional[dict] = None
-    epi_metric_lookup: Optional[dict] = None
-    schedule_lookup: Optional[dict] = None
-    dynamic_val_lookup: Optional[dict] = None
+    compartments: Optional[sc.objdict] = None
+    epi_metrics: Optional[sc.objdict] = None
+    schedules: Optional[sc.objdict] = None
+    dynamic_vals: Optional[sc.objdict] = None
 
     def update_values(self, lookup_dict):
         for name, item in lookup_dict.items():
             setattr(self, name, item.current_val)
 
     def update_compartments(self):
-        self.update_values(self.compartment_lookup)
+        self.update_values(self.compartments)
 
     def update_epi_metrics(self):
-        self.update_values(self.epi_metric_lookup)
+        self.update_values(self.epi_metrics)
 
     def update_schedules(self):
-        self.update_values(self.schedule_lookup)
+        self.update_values(self.schedules)
 
     def update_dynamic_vals(self):
-        self.update_values(self.dynamic_val_lookup)
+        self.update_values(self.dynamic_vals)
 
     def update_all(self) -> None:
-
         self.update_compartments()
         self.update_epi_metrics()
         self.update_schedules()
@@ -142,7 +141,7 @@ class TransitionVariableGroup:
     simulation.
 
     Attributes:
-        origin (EpiCompartment):
+        origin (Compartment):
             specifies origin of TransitionVariableGroup --
             corresponding populations leave this compartment.
         _transition_type (str):
@@ -576,9 +575,9 @@ class TransitionVariable(ABC):
                  is_jointly_distributed=False):
         """
         Parameters:
-            origin (EpiCompartment):
+            origin (Compartment):
                 the compartment from which Transition Variable exits.
-            destination (EpiCompartment):
+            destination (Compartment):
                 compartment that the TransitionVariable enters.
             transition_type (str):
                 only values defined in TransitionTypes Enum are valid, specifying
@@ -642,9 +641,9 @@ class TransitionVariable(ABC):
     def update_origin_outflow(self) -> None:
         """
         Adds current realization of TransitionVariable to
-            its origin EpiCompartment's current_outflow.
+            its origin Compartment's current_outflow.
             Used to compute total number leaving that
-            origin EpiCompartment.
+            origin Compartment.
         """
 
         self.origin.current_outflow += self.current_val
@@ -652,9 +651,9 @@ class TransitionVariable(ABC):
     def update_destination_inflow(self) -> None:
         """
         Adds current realization of TransitionVariable to
-            its destination EpiCompartment's current_inflow.
+            its destination Compartment's current_inflow.
             Used to compute total number leaving that
-            destination EpiCompartment.
+            destination Compartment.
         """
 
         self.destination.current_inflow += self.current_val
@@ -706,7 +705,7 @@ class TransitionVariable(ABC):
         """
         Uses RNG to generate binomial random variable with
             number of trials equal to population count in the
-            origin EpiCompartment and probability computed from
+            origin Compartment and probability computed from
             a function of the TransitionVariable's current rate
             -- see the approx_binomial_probability_from_rate
             function for details
@@ -733,7 +732,7 @@ class TransitionVariable(ABC):
         """
         Uses RNG to generate binomial random variable with
             number of trials equal to population count in the
-            origin EpiCompartment and probability equal to
+            origin Compartment and probability equal to
             the TransitionVariable's current_rate / num_timesteps
 
         Parameters:
@@ -757,7 +756,7 @@ class TransitionVariable(ABC):
         """
         Uses RNG to generate Poisson random variable with
             rate equal to (population count in the
-            origin EpiCompartment x the TransitionVariable's
+            origin Compartment x the TransitionVariable's
             current_rate / num_timesteps)
 
         Parameters:
@@ -780,7 +779,7 @@ class TransitionVariable(ABC):
         """
         Deterministically returns mean of binomial distribution
             (number of trials x probability), where number of trials
-            equals population count in the origin EpiCompartment and
+            equals population count in the origin Compartment and
             probability is computed from a function of the TransitionVariable's
             current rate -- see the approx_binomial_probability_from_rate
             function for details
@@ -809,7 +808,7 @@ class TransitionVariable(ABC):
         """
         Deterministically returns mean of binomial distribution
             (number of trials x probability), where number of trials
-            equals population count in the origin EpiCompartment and
+            equals population count in the origin Compartment and
             probability equals the TransitionVariable's current rate /
             num_timesteps
 
@@ -834,7 +833,7 @@ class TransitionVariable(ABC):
                                               num_timesteps: int) -> np.ndarray:
         """
         Deterministically returns mean of Poisson distribution,
-            givey by (population count in the origin EpiCompartment x
+            givey by (population count in the origin Compartment x
             TransitionVariable's current rate / num_timesteps)
 
         Parameters:
@@ -860,17 +859,16 @@ class TransitionVariable(ABC):
 
 class StateVariable:
     """
-    Parent class of EpiCompartment, EpiMetric, DynamicVal, and Schedule
+    Parent class of Compartment, EpiMetric, DynamicVal, and Schedule
     classes. All subclasses have the common attributes "init_val" and "current_val."
     """
 
     def __init__(self, init_val):
-
         self.init_val = init_val
         self.current_val = copy.deepcopy(init_val)
 
 
-class EpiCompartment(StateVariable):
+class Compartment(StateVariable):
     """
     Class for epidemiological compartments (e.g. Susceptible,
         Exposed, Infected, etc...).
@@ -879,7 +877,7 @@ class EpiCompartment(StateVariable):
 
     Attributes:
         current_val (np.ndarray):
-            same size as init_val, holds current value of EpiCompartment
+            same size as init_val, holds current value of Compartment
             for age-risk groups.
         current_inflow (np.ndarray):
             same size as current_val, used to sum up all
@@ -1171,12 +1169,18 @@ class SubpopModel(ABC):
     The "flow" and "physics" information are stored on the objects.
 
     Attributes:
-        state_variable_manager (StateVariableManager):
-            holds all the model's StateVariable instances.
-        transition_variables (list):
-            list of all the model's TransitionVariable instances.
-        transition_variable_groups (list):
-            list of all the model's TransitionVariableGroup instances.
+        compartments (sc.objdict):
+            objdict of all the model's Compartment instances.
+        transition_variables (sc.objdict):
+            objdict of all the model's TransitionVariable instances.
+        transition_variable_groups (sc.objdict):
+            objdict of all the model's TransitionVariableGroup instances.
+        epi_metrics (sc.objdict):
+            objdict of all the model's EpiMetric instances.
+        dynamic_vals (sc.objdict):
+            objdict of all the model's DynamicVal instances.
+        schedules (sc.objdict):
+            objdict of all the model's Schedule instances.
         fixed_params (FixedParams):
             data container for the model's epidemiological parameters,
             such as the "Greek letters" characterizing sojourn times
@@ -1201,30 +1205,86 @@ class SubpopModel(ABC):
     See __init__ docstring for other attributes.
     """
 
-    def __init__(self, sim_state, fixed_params, config, RNG):
+    def __init__(self,
+                 sim_state,
+                 fixed_params,
+                 config,
+                 RNG):
 
         self.sim_state = copy.deepcopy(sim_state)
         self.fixed_params = copy.deepcopy(fixed_params)
         self.config = copy.deepcopy(config)
+
         self.RNG = RNG
 
         self.current_simulation_day = 0
+        self.start_real_date = self.get_start_real_date()
+        self.current_real_date = self.start_real_date
 
-        config = self.config
+        self.compartments = self.create_compartments()
+        self.transition_variables = self.create_transition_variables()
+        self.transition_variable_groups = self.create_transition_variable_groups()
 
-        if isinstance(config.start_real_date, datetime.date):
-            self.start_real_date = config.start_real_date
-        else:
+        # Some epi metrics depend on transition variables, so
+        #   set up epi metrics after transition variables
+        self.epi_metrics = self.create_epi_metrics()
+        self.dynamic_vals = self.create_dynamic_vals()
+        self.schedules = self.create_schedules()
+
+        # The model's sim_state also has access to the model's
+        #   compartments, epi_metrics, dynamic_vals, and schedules --
+        #   so that sim_state can easily retrieve each object's
+        #   current_val and store it
+        self.sim_state.compartments = self.compartments
+        self.sim_state.epi_metrics = self.epi_metrics
+        self.sim_state.dynamic_vals = self.dynamic_vals
+        self.sim_state.schedules = self.schedules
+
+    def get_start_real_date(self):
+        """
+        Fetches start_real_date from config -- converts to
+            proper datetime.date format if originally given as
+            string.
+
+        Returns:
+            start_real_date (datetime.date):
+                real-world date that corresponds to start of
+                simulation.
+        """
+
+        start_real_date = self.config.start_real_date
+
+        if not isinstance(start_real_date, datetime.date):
             try:
-                self.start_real_date = \
-                    datetime.datetime.strptime(config.start_real_date, "%Y-%m-%d").date()
+                start_real_date = \
+                    datetime.datetime.strptime(start_real_date, "%Y-%m-%d").date()
             except ValueError:
                 print("Error: The date format should be YYYY-MM-DD.")
 
-        self.current_real_date = self.start_real_date
+        return start_real_date
 
     @abstractmethod
-    def setup_model(self, **kwargs):
+    def create_compartments(self) -> sc.objdict:
+        pass
+
+    @abstractmethod
+    def create_transition_variables(self) -> sc.objdict:
+        pass
+
+    @abstractmethod
+    def create_transition_variable_groups(self) -> sc.objdict:
+        pass
+
+    @abstractmethod
+    def create_epi_metrics(self) -> sc.objdict:
+        pass
+
+    @abstractmethod
+    def create_dynamic_vals(self) -> sc.objdict:
+        pass
+
+    @abstractmethod
+    def create_schedules(self) -> sc.objdict:
         pass
 
     def modify_random_seed(self, new_seed_number) -> None:
@@ -1248,7 +1308,7 @@ class SubpopModel(ABC):
         which are simulated by iterating through discretized
         timesteps.
 
-        Save daily simulation data as history on each EpiCompartment
+        Save daily simulation data as history on each Compartment
         instance.
 
         Args:
@@ -1259,7 +1319,7 @@ class SubpopModel(ABC):
 
         if self.current_simulation_day > last_simulation_day:
             raise SubpopModelError(f"Current day counter ({self.current_simulation_day}) "
-                                         f"exceeds last simulation day ({last_simulation_day}).")
+                                   f"exceeds last simulation day ({last_simulation_day}).")
 
         save_daily_history = self.config.save_daily_history
         timesteps_per_day = self.config.timesteps_per_day
@@ -1296,7 +1356,6 @@ class SubpopModel(ABC):
         """
 
         for timestep in range(num_timesteps):
-
             self.update_transition_rates()
 
             self.sample_transitions()
@@ -1324,11 +1383,11 @@ class SubpopModel(ABC):
         dynamic_vals = self.dynamic_vals
 
         # Update schedules for current day
-        for schedule in schedules:
+        for schedule in schedules.values():
             schedule.update_current_val(current_real_date)
 
         # Update dynamic values for current day
-        for dval in dynamic_vals:
+        for dval in dynamic_vals.values():
             if dval.is_enabled:
                 dval.update_current_val(sim_state, fixed_params)
 
@@ -1342,7 +1401,7 @@ class SubpopModel(ABC):
         fixed_params = self.fixed_params
         timesteps_per_day = self.config.timesteps_per_day
 
-        for metric in self.epi_metrics:
+        for metric in self.epi_metrics.values():
             metric.change_in_current_val = \
                 metric.get_change_in_current_val(sim_state,
                                                  fixed_params,
@@ -1354,7 +1413,7 @@ class SubpopModel(ABC):
         sim_state = self.sim_state
         fixed_params = self.fixed_params
 
-        for tvar in self.transition_variables:
+        for tvar in self.transition_variables.values():
             tvar.current_rate = tvar.get_current_rate(sim_state, fixed_params)
 
     def sample_transitions(self):
@@ -1364,7 +1423,7 @@ class SubpopModel(ABC):
 
         # Obtain transition variable realizations for jointly distributed transition variables
         #   (i.e. when there are multiple transition variable outflows from an epi compartment)
-        for tvargroup in self.transition_variable_groups:
+        for tvargroup in self.transition_variable_groups.values():
             tvargroup.current_vals_list = tvargroup.get_joint_realization(RNG,
                                                                           timesteps_per_day)
             tvargroup.update_transition_variable_realizations()
@@ -1374,17 +1433,17 @@ class SubpopModel(ABC):
         # If transition variable is jointly distributed, then its realization has already
         #   been computed by its transition variable group container previously,
         #   so skip the marginal computation
-        for tvar in self.transition_variables:
+        for tvar in self.transition_variables.values():
             if not tvar.is_jointly_distributed:
                 tvar.current_val = tvar.get_realization(RNG, timesteps_per_day)
 
     def update_compartments(self):
 
-        for tvar in self.transition_variables:
+        for tvar in self.transition_variables.values():
             tvar.update_origin_outflow()
             tvar.update_destination_inflow()
 
-        for compartment in self.compartments:
+        for compartment in self.compartments.values():
             compartment.update_current_val()
 
             compartment.reset_inflow()
@@ -1407,7 +1466,9 @@ class SubpopModel(ABC):
            TransitionVariableGroup instances also do not
            have history, so do not include.
         """
-        for svar in self.compartments + self.epi_metrics + self.dynamic_vals:
+        for svar in self.compartments.values() + \
+                    self.epi_metrics.values() + \
+                    self.dynamic_vals.values():
             svar.save_history()
 
     def reset_simulation(self) -> None:
@@ -1434,7 +1495,10 @@ class SubpopModel(ABC):
         self.current_real_date = self.start_real_date
 
         # AGAIN, MUST BE CAREFUL ABOUT MUTABLE NUMPY ARRAYS -- MUST USE DEEP COPY
-        for svar in self.compartments + self.epi_metrics + self.dynamic_vals + self.schedules:
+        for svar in self.compartments.values() + \
+                    self.epi_metrics.values() + \
+                    self.dynamic_vals.values() + \
+                    self.schedules.values():
             setattr(svar, "current_val", copy.deepcopy(svar.init_val))
 
         self.sim_state.update_all()
@@ -1442,21 +1506,19 @@ class SubpopModel(ABC):
 
     def clear_history(self):
         """
-        Resets history_vals_list attribute of each EpiCompartment,
+        Resets history_vals_list attribute of each Compartment,
             EpiMetric, and DynamicVal to an empty list.
         """
 
         # Schedules do not have history since they are deterministic
-        for svar in self.compartments + self.epi_metrics + self.dynamic_vals:
+        for svar in self.compartments.values() + \
+                    self.epi_metrics.values() + \
+                    self.dynamic_vals.values():
             svar.clear_history()
 
-        for tvar in self.transition_variables:
+        for tvar in self.transition_variables.values():
             tvar.current_rate = None
             tvar.current_val = 0.0
 
-        for tvargroup in self.transition_variable_groups:
+        for tvargroup in self.transition_variable_groups.values():
             tvargroup.current_vals_list = []
-
-
-
-

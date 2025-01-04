@@ -1,16 +1,70 @@
-from .base_components import Config, SimState, FixedParams
-from .utils import np, json, Union, Type
+from .utils import np, json, Type
+from typing import Protocol
 
 
-def make_dataclass_from_json(dataclass_ref: Type[Union[Config, SimState, FixedParams]],
-                             json_filepath: str) -> Union[Config, SimState, FixedParams]:
+class DataClassProtocol(Protocol):
+    __dataclass_fields__: dict
+
+
+def convert_dict_vals_lists_to_arrays(d: dict) -> dict:
+
+    # convert lists to numpy arrays to support numpy operations
+    for key, val in d.items():
+        if type(val) is list:
+            d[key] = np.asarray(val)
+
+    return d
+
+
+def load_json(json_filepath: str) -> dict:
+
+    # Note: the "with open" is important for file handling
+    #   and avoiding resource leaks -- otherwise,
+    #   we have to manually close the file, which is a bit
+    #   more cumbersome
+    with open(json_filepath, 'r') as file:
+        data = json.load(file)
+
+    # json does not support numpy, so we must convert
+    #   lists to numpy arrays
+    return convert_dict_vals_lists_to_arrays(data)
+
+
+def make_dataclass_from_dict(dataclass_ref: Type[DataClassProtocol],
+                             d: dict) -> DataClassProtocol:
+    """
+    Create instance of class dataclass_ref,
+    based on information in dictionary.
+
+    Args:
+        dataclass_ref (Type[DataClassProtocol]):
+            (class, not instance) from which to create instance --
+            must have dataclass decorator.
+        d (dict):
+            all keys and values respectively must match name and datatype
+            of dataclass_ref instance attributes.
+
+    Returns:
+        DataClassProtocol:
+            instance of dataclass_ref with attributes dynamically
+            assigned by json_filepath file contents.
+    """
+
+    d = convert_dict_vals_lists_to_arrays(d)
+
+    return dataclass_ref(**d)
+
+
+def make_dataclass_from_json(dataclass_ref: Type[DataClassProtocol],
+                             json_filepath: str) -> DataClassProtocol:
     """
     Create instance of class dataclass_ref,
     based on information in json_filepath.
 
     Args:
-        dataclass_ref (Type[Union[Config, SimState, FixedParams]]):
-            (class, not instance) from which to create instance.
+        dataclass_ref (Type[DataClassProtocol]):
+            (class, not instance) from which to create instance --
+            must have dataclass decorator.
         json_filepath (str):
             path to json file (path includes actual filename
             with suffix ".json") -- all json fields must
@@ -18,18 +72,12 @@ def make_dataclass_from_json(dataclass_ref: Type[Union[Config, SimState, FixedPa
             attributes.
 
     Returns:
-        Union[Config, SimState, FixedParams]:
+        DataClassProtocol:
             instance of dataclass_ref with attributes dynamically
             assigned by json_filepath file contents.
     """
 
-    with open(json_filepath, 'r') as file:
-        data = json.load(file)
+    d = load_json(json_filepath)
 
-    # convert lists to numpy arrays to support numpy operations
-    #   since json does not have direct support for numpy
-    for key, val in data.items():
-        if type(val) is list:
-            data[key] = np.asarray(val)
+    return make_dataclass_from_dict(dataclass_ref, d)
 
-    return dataclass_ref(**data)

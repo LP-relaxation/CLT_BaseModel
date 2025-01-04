@@ -161,7 +161,7 @@ class FluFixedParams(base.FixedParams):
 class FluSimState(base.SimState):
     """
     Data container for pre-specified and fixed set of
-    EpiCompartment initial values and EpiMetric initial values
+    Compartment initial values and EpiMetric initial values
     in FluModel flu model.
 
     Each field below should be A x L np.ndarray, where
@@ -175,28 +175,28 @@ class FluSimState(base.SimState):
     Attributes:
         S (np.ndarray of positive floats):
             susceptible compartment for age-risk groups --
-            (holds current_val of EpiCompartment "S").
+            (holds current_val of Compartment "S").
         E (np.ndarray of positive floats):
             exposed compartment for age-risk groups --
-            (holds current_val of EpiCompartment "E").
+            (holds current_val of Compartment "E").
         IP (np.ndarray of positive floats):
             infected pre-symptomatic compartment for age-risk groups
-            (holds current_val of EpiCompartment "IP").
+            (holds current_val of Compartment "IP").
         IS (np.ndarray of positive floats):
             infected symptomatic compartment for age-risk groups
-            (holds current_val of EpiCompartment "IS").
+            (holds current_val of Compartment "IS").
         IA (np.ndarray of positive floats):
             infected asymptomatic compartment for age-risk groups
-            (holds current_val of EpiCompartment "IA").
+            (holds current_val of Compartment "IA").
         H (np.ndarray of positive floats):
             hospital compartment for age-risk groups
-            (holds current_val of EpiCompartment "H").
+            (holds current_val of Compartment "H").
         R (np.ndarray of positive floats):
             recovered compartment for age-risk groups
-            (holds current_val of EpiCompartment "R").
+            (holds current_val of Compartment "R").
         D (np.ndarray of positive floats):
             dead compartment for age-risk groups
-            (holds current_val of EpiCompartment "D").
+            (holds current_val of Compartment "D").
         pop_immunity_hosp (np.ndarray of positive floats):
             infection-induced population-level immunity against
             hospitalization, for age-risk groups (holds current_val
@@ -478,13 +478,13 @@ class Wastewater(base.EpiMetric):
                                            (fixed_params.viral_shedding_peak ** 2 + next_time_point ** 2)
             if time_idx == 0:
                 interval_viral_shedding = fixed_params.viral_shedding_feces_mass * 0.5 * (
-                            10 ** next_time_log_viral_shedding) / num_timesteps
+                        10 ** next_time_log_viral_shedding) / num_timesteps
             else:
                 cur_time_log_viral_shedding = fixed_params.viral_shedding_magnitude * cur_time_point / \
                                               (fixed_params.viral_shedding_peak ** 2 + cur_time_point ** 2)
                 interval_viral_shedding = fixed_params.viral_shedding_feces_mass * 0.5 \
                                           * (
-                                                      10 ** cur_time_log_viral_shedding + 10 ** next_time_log_viral_shedding) / num_timesteps
+                                                  10 ** cur_time_log_viral_shedding + 10 ** next_time_log_viral_shedding) / num_timesteps
             self.viral_shedding.append(interval_viral_shedding)
         self.viral_shedding.reverse()
         self.viral_shedding = np.array(self.viral_shedding)
@@ -664,179 +664,188 @@ class FluSubpopModel(base.SubpopModel):
     Transition rates and update formulas are specified in
         corresponding classes.
 
-    Attributes:
-        config (Config):
-            holds configuration values.
-        fixed_params (FluFixedParams):
-            holds epidemiological parameter values, read-in
-            from user-specified JSON.
-        sim_state (FluSimState):
-            holds current simulation state information,
-            such as current values of epidemiological compartments
-            and epi metrics, read in from user-specified JSON.
-        transition_variable_lookup (dict):
-            maps string to corresponding TransitionVariable.
-        transition_variable_group_lookup (dict):
-            maps string to corresponding TransitionVariableGroup.
-        compartment_lookup (dict):
-            maps string to corresponding EpiCompartment,
-            using the value of the EpiCompartment's "name" attribute.
-        epi_metric_lookup (dict):
-            maps string to corresponding EpiMetric,
-            using the value of the EpiMetric's "name" attribute.
+    See parent class SubpopModel's docstring for additional attributes.
     """
 
     def __init__(self,
-                 sim_state,
-                 fixed_params,
-                 config,
-                 RNG):
+                 sim_state_dict: dict,
+                 fixed_params_dict: dict,
+                 config_dict: dict,
+                 RNG: np.random.Generator):
+
         """
+        Args:
+            sim_state_dict (dict):
+                holds current simulation state information,
+                such as current values of epidemiological compartments
+                and epi metrics -- keys and values respectively
+                must match field names and format of FluSimState.
+            fixed_params_dict (dict):
+                holds epidemiological parameter values -- keys and
+                values respectively must match field names and
+                format of FluFixedParams.
+            config_dict (dict):
+                holds configuration values -- keys and values
+                respectively must match field names and format of
+                Config.
+            RNG (np.random.Generator):
+                numpy random generator object used to obtain
+                random numbers.
         """
 
         # Assign config, fixed_params, and sim_state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
 
+        sim_state = base.make_dataclass_from_dict(FluSimState, sim_state_dict)
+        fixed_params = base.make_dataclass_from_dict(FluFixedParams, fixed_params_dict)
+        config = base.make_dataclass_from_dict(base.Config, config_dict)
+
+        # IMPORTANT NOTE: as always, we must be careful with mutable objects
+        #   and generally use deep copies to avoid modification of the same
+        #   object. But in this function call, using deep copies is unnecessary
+        #   (redundant) because the parent class SubpopModel's __init__()
+        #   creates deep copies.
         super().__init__(sim_state, fixed_params, config, RNG)
 
-        self.compartment_lookup = sc.objdict()
-        self.transition_variable_lookup = sc.objdict()
-        self.transition_variable_group_lookup = sc.objdict()
-        self.epi_metric_lookup = sc.objdict()
-        self.dynamic_val_lookup = sc.objdict()
-        self.schedule_lookup = sc.objdict()
-
-        self.setup_model()
-
-        self.compartments = self.compartment_lookup.values()
-        self.transition_variables = self.transition_variable_lookup.values()
-        self.transition_variable_groups = self.transition_variable_group_lookup.values()
-        self.epi_metrics = self.epi_metric_lookup.values()
-        self.dynamic_vals = self.dynamic_val_lookup.values()
-        self.schedules = self.schedule_lookup.values()
-
-    def setup_model(self):
-
-        # Setup objects for model
-        self.setup_epi_compartments()
-        self.setup_transition_variables()
-        self.setup_transition_variable_groups()
-
-        # Some epi metrics depend on transition variables, so
-        #   set up epi metrics after transition variables
-        self.setup_epi_metrics()
-        self.setup_dynamic_vals()
-        self.setup_schedules()
-
-        self.sim_state.compartment_lookup = self.compartment_lookup
-        self.sim_state.epi_metric_lookup = self.epi_metric_lookup
-        self.sim_state.dynamic_val_lookup = self.dynamic_val_lookup
-        self.sim_state.schedule_lookup = self.schedule_lookup
-
-    def setup_epi_compartments(self) -> None:
+    def create_compartments(self) -> sc.objdict:
         """
-        Create EpiCompartment instances S-E-I-H-R-D (6 compartments total)
-        and add them to compartment_lookup for dictionary access
+        Create Compartment instances S-E-I-H-R-D (6 compartments total),
+            save in sc.objdict, and return objdict
         """
+
+        compartments = sc.objdict()
 
         for name in ("S", "E", "IP", "IS", "IA", "H", "R", "D"):
-            self.compartment_lookup[name] = base.EpiCompartment(getattr(self.sim_state, name))
+            compartments[name] = base.Compartment(getattr(self.sim_state, name))
 
-    def setup_dynamic_vals(self) -> None:
-        """
-        Create all DynamicVal instances and add them to dynamic_val_lookup attribute
-            for dictionary access
-        """
+        return compartments
 
-        self.dynamic_val_lookup["beta_reduct"] = BetaReduct(init_val=0.0,
-                                                            is_enabled=False)
-
-    def setup_schedules(self) -> None:
+    def create_dynamic_vals(self) -> sc.objdict:
         """
-        Create all Schedule instances and add them to schedule_lookup attribute
-            for dictionary access
+        Create all DynamicVal instances, save in sc.objdict, and return objdict
         """
 
-        self.schedule_lookup["absolute_humidity"] = AbsoluteHumidity()
-        self.schedule_lookup["flu_contact_matrix"] = FluContactMatrix()
+        dynamic_vals = sc.objdict()
 
-    def setup_transition_variables(self) -> None:
+        dynamic_vals["beta_reduct"] = BetaReduct(init_val=0.0,
+                                                 is_enabled=False)
+
+        return dynamic_vals
+
+    def create_schedules(self) -> sc.objdict():
         """
-        Create all TransitionVariable instances (7 transition variables total)
-            and add them to transition_variable_lookup attribute
-            for dictionary access
+        Create all Schedule instances, save in sc.objdict, and return objdict
         """
 
+        schedules = sc.objdict()
+
+        schedules["absolute_humidity"] = AbsoluteHumidity()
+        schedules["flu_contact_matrix"] = FluContactMatrix()
+
+        return schedules
+
+    def create_transition_variables(self) -> sc.objdict:
+        """
+        Create all TransitionVariable instances (7 transition variables total),
+            save in sc.objdict, and return objdict
+        """
+
+        # NOTE: see the parent class SubpopModel's __init__() --
+        #   create_transition_variables is called after
+        #   self.config is assigned and after self.compartments
+        #   has been created -- so these variables do exist
+        # TODO: there is potentially a better way to design this
+        #   (in SubpopModel) to be more EXPLICIT -- think about this...
         transition_type = self.config.transition_type
+        compartments = self.compartments
 
-        transition_variable_lookup = self.transition_variable_lookup
-        compartment_lookup = self.compartment_lookup
+        transition_variables = sc.objdict()
 
-        S = compartment_lookup.S
-        E = compartment_lookup.E
-        IP = compartment_lookup.IP
-        IS = compartment_lookup.IS
-        IA = compartment_lookup.IA
-        H = compartment_lookup.H
-        R = compartment_lookup.R
-        D = compartment_lookup.D
+        S = compartments.S
+        E = compartments.E
+        IP = compartments.IP
+        IS = compartments.IS
+        IA = compartments.IA
+        H = compartments.H
+        R = compartments.R
+        D = compartments.D
 
-        transition_variable_lookup.R_to_S = RecoveredToSusceptible(R, S, transition_type)
-        transition_variable_lookup.S_to_E = SusceptibleToExposed(S, E, transition_type)
-        transition_variable_lookup.IP_to_IS = PresympToSymp(IP, IS, transition_type)
-        transition_variable_lookup.IA_to_R = AsympToRecovered(IA, R, transition_type)
-        transition_variable_lookup.E_to_IP = ExposedToPresymp(E, IP, transition_type, True)
-        transition_variable_lookup.E_to_IA = ExposedToAsymp(E, IA, transition_type, True)
-        transition_variable_lookup.IS_to_R = SympToRecovered(IS, R, transition_type, True)
-        transition_variable_lookup.IS_to_H = SympToHosp(IS, H, transition_type, True)
-        transition_variable_lookup.H_to_R = HospToRecovered(H, R, transition_type, True)
-        transition_variable_lookup.H_to_D = HospToDead(H, D, transition_type, True)
+        transition_variables.R_to_S = RecoveredToSusceptible(R, S, transition_type)
+        transition_variables.S_to_E = SusceptibleToExposed(S, E, transition_type)
+        transition_variables.IP_to_IS = PresympToSymp(IP, IS, transition_type)
+        transition_variables.IA_to_R = AsympToRecovered(IA, R, transition_type)
+        transition_variables.E_to_IP = ExposedToPresymp(E, IP, transition_type, True)
+        transition_variables.E_to_IA = ExposedToAsymp(E, IA, transition_type, True)
+        transition_variables.IS_to_R = SympToRecovered(IS, R, transition_type, True)
+        transition_variables.IS_to_H = SympToHosp(IS, H, transition_type, True)
+        transition_variables.H_to_R = HospToRecovered(H, R, transition_type, True)
+        transition_variables.H_to_D = HospToDead(H, D, transition_type, True)
 
-    def setup_transition_variable_groups(self) -> None:
+        return transition_variables
+
+    def create_transition_variable_groups(self) -> sc.objdict:
         """
         Create all transition variable groups described in docstring (2 transition
-        variable groups total) and add them to transition_variable_group_lookup attribute
-        for dictionary access
+        variable groups total), save in sc.objdict, return
         """
 
         # Shortcuts for attribute access
-        transition_variable_lookup = self.transition_variable_lookup
-        transition_variable_group_lookup = self.transition_variable_group_lookup
-        compartment_lookup = self.compartment_lookup
-
+        # NOTE: see the parent class SubpopModel's __init__() --
+        #   create_transition_variable_groups is called after
+        #   self.config is assigned and after
+        #   self.compartments and self.transition_variables are created
+        #   -- so these variables do exist
+        # See similar NOTE in create_transition_variables function
         transition_type = self.config.transition_type
+        compartments = self.compartments
+        transition_variables = self.transition_variables
 
-        transition_variable_group_lookup.E_out = base.TransitionVariableGroup(compartment_lookup.E,
-                                                                              transition_type,
-                                                                              (transition_variable_lookup.E_to_IP,
-                                                                               transition_variable_lookup.E_to_IA))
+        transition_variable_groups = sc.objdict()
 
-        transition_variable_group_lookup.IS_out = base.TransitionVariableGroup(compartment_lookup.IS,
-                                                                               transition_type,
-                                                                               (transition_variable_lookup.IS_to_R,
-                                                                                transition_variable_lookup.IS_to_H))
+        transition_variable_groups.E_out = base.TransitionVariableGroup(compartments.E,
+                                                                        transition_type,
+                                                                        (transition_variables.E_to_IP,
+                                                                         transition_variables.E_to_IA))
 
-        transition_variable_group_lookup.H_out = base.TransitionVariableGroup(compartment_lookup.H,
-                                                                              transition_type,
-                                                                              (transition_variable_lookup.H_to_R,
-                                                                               transition_variable_lookup.H_to_D))
+        transition_variable_groups.IS_out = base.TransitionVariableGroup(compartments.IS,
+                                                                         transition_type,
+                                                                         (transition_variables.IS_to_R,
+                                                                          transition_variables.IS_to_H))
 
-    def setup_epi_metrics(self) -> None:
+        transition_variable_groups.H_out = base.TransitionVariableGroup(compartments.H,
+                                                                        transition_type,
+                                                                        (transition_variables.H_to_R,
+                                                                         transition_variables.H_to_D))
+
+        return transition_variable_groups
+
+    def create_epi_metrics(self) -> sc.objdict:
         """
         Create all epi metric described in docstring (2 state
-        variables total) and add them to epi_metric_lookup attribute
-        for dictionary access
+        variables total), save in sc.objdict, and return objdict
         """
 
-        self.epi_metric_lookup.pop_immunity_inf = \
+        epi_metrics = sc.objdict()
+
+        # Shortcuts for attribute access
+        # NOTE: see the parent class SubpopModel's __init__() --
+        #   create_epi_metrics is called after self.transition_variables
+        #   are created -- so this variable exists
+        # See similar NOTE in create_transition_variables
+        #   and create_transition_variable_groups function
+        transition_variables = self.transition_variables
+
+        epi_metrics.pop_immunity_inf = \
             PopulationImmunityInf(getattr(self.sim_state, "pop_immunity_inf"),
-                                  self.transition_variable_lookup.R_to_S)
+                                  transition_variables.R_to_S)
 
-        self.epi_metric_lookup.wastewater = \
+        epi_metrics.wastewater = \
             Wastewater(getattr(self.sim_state, "wastewater"),  # initial value is set to null for now
-                       self.transition_variable_lookup.S_to_E)
+                       transition_variables.S_to_E)
 
-        self.epi_metric_lookup.pop_immunity_hosp = \
+        epi_metrics.pop_immunity_hosp = \
             PopulationImmunityHosp(getattr(self.sim_state, "pop_immunity_hosp"),
-                                   self.transition_variable_lookup.R_to_S)
+                                   transition_variables.R_to_S)
+
+        return epi_metrics
