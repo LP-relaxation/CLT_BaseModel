@@ -10,7 +10,7 @@
 #   are unsuitable for well-behaved Poisson random variables.
 
 import flu_model as flu
-import clt_base as base
+import clt_base as clt
 
 import numpy as np
 import copy
@@ -24,9 +24,9 @@ config_filepath = base_path / "config.json"
 fixed_params_filepath = base_path / "fixed_params.json"
 state_vars_init_vals_filepath = base_path / "state_variables_init_vals.json"
 
-sim_state_dict = base.load_json(state_vars_init_vals_filepath)
-fixed_params_dict = base.load_json(fixed_params_filepath)
-config_dict = base.load_json(config_filepath)
+sim_state_dict = clt.load_json(state_vars_init_vals_filepath)
+fixed_params_dict = clt.load_json(fixed_params_filepath)
+config_dict = clt.load_json(config_filepath)
 
 flu_model = flu.FluSubpopModel(sim_state_dict,
                                fixed_params_dict,
@@ -37,7 +37,7 @@ flu_model = flu.FluSubpopModel(sim_state_dict,
 def create_models_all_transition_types_list(RNG_seed):
     models_list = []
 
-    for transition_type in base.TransitionTypes:
+    for transition_type in clt.TransitionTypes:
 
         if "poisson" not in transition_type:
             #  Need deep copy -- otherwise changing "transition_type" on
