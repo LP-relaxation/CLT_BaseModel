@@ -116,11 +116,12 @@ class FluFixedParams(base.FixedParams):
             relative infectiousness of asymptomatic to symptomatic
             people (IA to IS compartment).
         viral_shedding_peak (positive float):
-            the peak time of an indiviudal's viral shedding.
+            the peak time of an individual's viral shedding.
         viral_shedding_magnitude (positive float):
             magnitude of the viral shedding.
         viral_shedding_duration (positive float):
-            duration of the viral shedding, must be larger than viral_shedding_peak
+            duration of the viral shedding,
+            must be larger than viral_shedding_peak
         viral_shedding_feces_mass (positive float)
             average mass of feces (gram)
     """
@@ -346,32 +347,19 @@ class PopulationImmunityHosp(base.EpiMetric):
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
-        # Note: I'm not actually sure all these precision
-        #   precautions are necessary... I initially added this
-        #   because I thought some floating point errors were
-        #   responsible for a bug (the problem actually came
-        #   from a different source).
 
-        # Ensure consistent float64 precision
-        factor = np.float64(fixed_params.immunity_hosp_increase_factor)
-        susceptible = np.float64(self.R_to_S.current_val)
-        population = np.float64(fixed_params.total_population_val)
-        saturation = np.float64(fixed_params.immunity_saturation)
-        pop_immunity = np.float64(sim_state.pop_immunity_hosp)
-        waning_factor = np.float64(fixed_params.waning_factor_hosp)
-        num_timesteps = np.float64(num_timesteps)
+        pop_immunity_hosp = sim_state.pop_immunity_hosp
 
-        # Break down calculations
-        gain_numerator = factor * susceptible
-        gain_denominator = population * (1 + saturation * pop_immunity)
-        immunity_gain = gain_numerator / gain_denominator
+        immunity_gain_numerator = fixed_params.immunity_hosp_increase_factor * self.R_to_S.current_val
+        immunity_gain_denominator = fixed_params.total_population_val * \
+                                    (1 + fixed_params.immunity_saturation * pop_immunity_hosp)
 
-        immunity_loss = waning_factor * pop_immunity
+        immunity_gain = immunity_gain_numerator / immunity_gain_denominator
+        immunity_loss = fixed_params.waning_factor_hosp * sim_state.pop_immunity_hosp
 
-        # Final result
-        result = (immunity_gain - immunity_loss) / num_timesteps
+        final_change = (immunity_gain - immunity_loss) / num_timesteps
 
-        return np.asarray(result, dtype=np.float64)
+        return np.asarray(final_change, dtype=np.float64)
 
 
 class PopulationImmunityInf(base.EpiMetric):
@@ -383,31 +371,24 @@ class PopulationImmunityInf(base.EpiMetric):
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
-        # Convert all parameters to consistent float64 for high precision
-        increase_factor = np.float64(fixed_params.immunity_inf_increase_factor)
-        R_to_S = np.float64(self.R_to_S.current_val)
-        total_population = np.float64(fixed_params.total_population_val)
-        saturation = np.float64(fixed_params.immunity_saturation)
-        population_immunity = np.float64(sim_state.pop_immunity_inf)
-        waning_factor = np.float64(fixed_params.waning_factor_inf)
-        num_timesteps = np.float64(num_timesteps)
 
-        # Break down calculations for better readability and to avoid compounded rounding errors
-        gain_numerator = increase_factor * R_to_S
-        gain_denominator = total_population * (1 + saturation * population_immunity)
-        immunity_gain = gain_numerator / gain_denominator
+        pop_immunity_inf = np.float64(sim_state.pop_immunity_inf)
 
-        immunity_loss = waning_factor * population_immunity
+        immunity_gain_numerator = fixed_params.immunity_inf_increase_factor * self.R_to_S.current_val
+        immunity_gain_denominator = fixed_params.total_population_val * \
+                                    (1 + fixed_params.immunity_saturation * pop_immunity_inf)
 
-        # Compute result with full precision
-        result = (immunity_gain - immunity_loss) / num_timesteps
+        immunity_gain = immunity_gain_numerator / immunity_gain_denominator
+        immunity_loss = fixed_params.waning_factor_inf * sim_state.pop_immunity_inf
 
-        # Ensure the result is a NumPy array
-        return np.asarray(result, dtype=np.float64)
+        final_change = (immunity_gain - immunity_loss) / num_timesteps
+
+        return np.asarray(final_change, dtype=np.float64)
 
 
 # test on the wastewater viral load simulation
 class Wastewater(base.EpiMetric):
+
     def __init__(self, init_val, S_to_E):
         super().__init__(init_val)
         self.S_to_E = S_to_E
