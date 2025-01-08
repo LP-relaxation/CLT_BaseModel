@@ -1,5 +1,6 @@
 from .utils import np, sc, copy, ABC, abstractmethod, dataclass, \
     Optional, Union, Enum, datetime
+from collections import defaultdict
 
 
 class SubpopModelError(Exception):
@@ -1206,16 +1207,19 @@ class SubpopModel(ABC):
     """
 
     def __init__(self,
-                 sim_state,
-                 fixed_params,
-                 config,
-                 RNG):
+                 sim_state: SimState,
+                 fixed_params: FixedParams,
+                 config: Config,
+                 RNG: np.random.Generator,
+                 name: str = ""):
 
         self.sim_state = copy.deepcopy(sim_state)
         self.fixed_params = copy.deepcopy(fixed_params)
         self.config = copy.deepcopy(config)
 
         self.RNG = RNG
+
+        self.name = name
 
         self.current_simulation_day = 0
         self.start_real_date = self.get_start_real_date()
@@ -1333,7 +1337,7 @@ class SubpopModel(ABC):
             self.simulate_timesteps(timesteps_per_day)
 
             if save_daily_history:
-                self._save_daily_history()
+                self.save_daily_history()
 
             self.increment_simulation_day()
 
@@ -1457,7 +1461,7 @@ class SubpopModel(ABC):
         self.current_simulation_day += 1
         self.current_real_date += datetime.timedelta(days=1)
 
-    def _save_daily_history(self):
+    def save_daily_history(self) -> None:
         """
         Update history at end of each day, not at end of every
            discretization timestep, to be efficient.
@@ -1504,7 +1508,7 @@ class SubpopModel(ABC):
         self.sim_state.update_all()
         self.clear_history()
 
-    def clear_history(self):
+    def clear_history(self) -> None:
         """
         Resets history_vals_list attribute of each Compartment,
             EpiMetric, and DynamicVal to an empty list.
@@ -1522,3 +1526,66 @@ class SubpopModel(ABC):
 
         for tvargroup in self.transition_variable_groups.values():
             tvargroup.current_vals_list = []
+
+    def find_name_by_compartment(self,
+                                 target_compartment: Compartment):
+        for name, compartment in self.compartments.items():
+            if compartment == target_compartment:
+                return name
+
+    def display(self) -> None:
+        """
+        Prints structure of model (compartments and linkages),
+            transition variables, epi metrics, schedules,
+            and dynamic values.
+        """
+
+        # We build origin_dict so that we can print
+        #   compartment transitions in an easy-to-read way --
+        #   for connections between origin --> destination,
+        #   we print all connections with the same origin
+        #   consecutively
+        origin_dict = defaultdict(list)
+
+        # Each key in origin_dict is a string corresponding to
+        #   an origin (Compartment) name
+        # Each val in origin_dict is a list of 3-tuples
+        # Each 3-tuple has the name of a destination (Compartment)
+        #   connected to the given origin, the name of the transition
+        #   variable connecting the origin and destination,
+        #   and Boolean indicating if the transition variable is jointly
+        #   distributed
+        for tvar_name, tvar in self.transition_variables.items():
+            origin_dict[self.find_name_by_compartment(tvar.origin)].append(
+                (self.find_name_by_compartment(tvar.destination),
+                 tvar_name, tvar.is_jointly_distributed))
+
+        print(f"\n>>> Displaying SubpopModel {self.name}")
+
+        print("\nCompartments and transition variables")
+        print("=====================================")
+        for origin_name, origin in self.compartments.items():
+            for output in origin_dict[origin_name]:
+                if output[2]:
+                    print(f"{origin_name} --> {output[0]}, via {output[1]}: jointly distributed")
+                else:
+                    print(f"{origin_name} --> {output[0]}, via {output[1]}")
+
+        print("\nEpi metrics")
+        print("===========")
+        for name in self.epi_metrics.keys():
+            print(f"{name}")
+
+        print("\nSchedules")
+        print("=========")
+        for name in self.schedules.keys():
+            print(f"{name}")
+
+        print("\nDynamic values")
+        print("==============")
+        for name, dynamic_val in self.dynamic_vals.items():
+            if dynamic_val.is_enabled:
+                print(f"{name}: enabled")
+            else:
+                print(f"{name}: disabled")
+        print("\n")

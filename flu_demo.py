@@ -26,9 +26,9 @@ flu_demo_model = flu.FluSubpopModel(sim_state_dict,
                                     config_dict,
                                     np.random.default_rng(88888))
 
-flu_demo_model.display()
+flu_demo_model.run_model_checks()
 
-breakpoint()
+flu_demo_model.display()
 
 # Simulate 300 days
 flu_demo_model.simulate_until_time_period(300)
@@ -36,8 +36,9 @@ flu_demo_model.simulate_until_time_period(300)
 # Plot
 clt.create_basic_compartment_history_plot(flu_demo_model, "flu_demo_model.png")
 
-ww = flu_demo_model.epi_metrics.wastewater.history_vals_list
-print(ww)
-plt.plot(ww)
-plt.grid(True)
-plt.show()
+if flu_demo_model.wastewater_enabled:
+    ww = flu_demo_model.epi_metrics.wastewater.history_vals_list
+    print(ww)
+    plt.plot(ww)
+    plt.grid(True)
+    plt.show()

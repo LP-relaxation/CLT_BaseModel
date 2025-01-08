@@ -5,8 +5,6 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 
-from collections import defaultdict
-
 from dataclasses import dataclass
 from typing import Optional, Union
 from pathlib import Path
@@ -49,7 +47,7 @@ class FluFixedParams(clt.FixedParams):
         num_risk_groups (positive int):
             number of risk groups.
         beta_baseline (positive float): transmission rate.
-        total_population_val (np.ndarray of positive ints):
+        total_pop_age_risk (np.ndarray of positive ints):
             total number in population, summed across all
             age-risk groups.
         humidity_impact (positive float):
@@ -131,7 +129,7 @@ class FluFixedParams(clt.FixedParams):
     num_age_groups: Optional[int] = None
     num_risk_groups: Optional[int] = None
     beta_baseline: Optional[float] = None
-    total_population_val: Optional[np.ndarray] = None
+    total_pop_age_risk: Optional[np.ndarray] = None
     humidity_impact: Optional[float] = None
     immunity_hosp_increase_factor: Optional[float] = None
     immunity_inf_increase_factor: Optional[float] = None
@@ -256,7 +254,7 @@ class SusceptibleToExposed(clt.TransitionVariable):
         # Expand ratio for broadcasting -> new shape is (1, 1, A, L)
         I_N_ratio_expanded = ((
                                       sim_state.IS + sim_state.IP * fixed_params.IP_relative_inf + sim_state.IA * fixed_params.IA_relative_inf)
-                              / fixed_params.total_population_val)[None, None, :, :]
+                              / fixed_params.total_pop_age_risk)[None, None, :, :]
 
         # Expand force_of_immunity for broadcasting -> new shape is (A, L, 1, 1)
         force_of_immunity_expanded = force_of_immunity[:, :, None, None]
@@ -349,11 +347,10 @@ class PopulationImmunityHosp(clt.EpiMetric):
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
-
         pop_immunity_hosp = sim_state.pop_immunity_hosp
 
         immunity_gain_numerator = fixed_params.immunity_hosp_increase_factor * self.R_to_S.current_val
-        immunity_gain_denominator = fixed_params.total_population_val * \
+        immunity_gain_denominator = fixed_params.total_pop_age_risk * \
                                     (1 + fixed_params.immunity_saturation * pop_immunity_hosp)
 
         immunity_gain = immunity_gain_numerator / immunity_gain_denominator
@@ -373,11 +370,10 @@ class PopulationImmunityInf(clt.EpiMetric):
                                   sim_state: FluSimState,
                                   fixed_params: FluFixedParams,
                                   num_timesteps: int):
-
         pop_immunity_inf = np.float64(sim_state.pop_immunity_inf)
 
         immunity_gain_numerator = fixed_params.immunity_inf_increase_factor * self.R_to_S.current_val
-        immunity_gain_denominator = fixed_params.total_population_val * \
+        immunity_gain_denominator = fixed_params.total_pop_age_risk * \
                                     (1 + fixed_params.immunity_saturation * pop_immunity_inf)
 
         immunity_gain = immunity_gain_numerator / immunity_gain_denominator
@@ -513,7 +509,7 @@ class BetaReduct(clt.DynamicVal):
         self.permanent_lockdown = False
 
     def update_current_val(self, sim_state, fixed_params):
-        if np.sum(sim_state.I) / np.sum(fixed_params.total_population_val) > 0.05:
+        if np.sum(sim_state.I) / np.sum(fixed_params.total_pop_age_risk) > 0.05:
             self.current_val = .5
             self.permanent_lockdown = True
         else:
@@ -658,8 +654,8 @@ class FluSubpopModel(clt.SubpopModel):
                  sim_state_dict: dict,
                  fixed_params_dict: dict,
                  config_dict: dict,
-                 RNG: np.random.Generator):
-
+                 RNG: np.random.Generator,
+                 wastewater_enabled: bool=False):
         """
         Args:
             sim_state_dict (dict):
@@ -678,11 +674,16 @@ class FluSubpopModel(clt.SubpopModel):
             RNG (np.random.Generator):
                 numpy random generator object used to obtain
                 random numbers.
+            wastewater_enabled (bool):
+                if True, includes "wastewater" EpiMetric. Otherwise,
+                excludes it.
         """
 
         # Assign config, fixed_params, and sim_state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
+
+        self.wastewater_enabled = wastewater_enabled
 
         sim_state = clt.make_dataclass_from_dict(FluSimState, sim_state_dict)
         fixed_params = clt.make_dataclass_from_dict(FluFixedParams, fixed_params_dict)
@@ -791,19 +792,19 @@ class FluSubpopModel(clt.SubpopModel):
         transition_variable_groups = sc.objdict()
 
         transition_variable_groups.E_out = clt.TransitionVariableGroup(compartments.E,
-                                                                        transition_type,
-                                                                        (transition_variables.E_to_IP,
-                                                                         transition_variables.E_to_IA))
+                                                                       transition_type,
+                                                                       (transition_variables.E_to_IP,
+                                                                        transition_variables.E_to_IA))
 
         transition_variable_groups.IS_out = clt.TransitionVariableGroup(compartments.IS,
-                                                                         transition_type,
-                                                                         (transition_variables.IS_to_R,
-                                                                          transition_variables.IS_to_H))
+                                                                        transition_type,
+                                                                        (transition_variables.IS_to_R,
+                                                                         transition_variables.IS_to_H))
 
         transition_variable_groups.H_out = clt.TransitionVariableGroup(compartments.H,
-                                                                        transition_type,
-                                                                        (transition_variables.H_to_R,
-                                                                         transition_variables.H_to_D))
+                                                                       transition_type,
+                                                                       (transition_variables.H_to_R,
+                                                                        transition_variables.H_to_D))
 
         return transition_variable_groups
 
@@ -827,9 +828,10 @@ class FluSubpopModel(clt.SubpopModel):
             PopulationImmunityInf(getattr(self.sim_state, "pop_immunity_inf"),
                                   transition_variables.R_to_S)
 
-        epi_metrics.wastewater = \
-            Wastewater(getattr(self.sim_state, "wastewater"),  # initial value is set to null for now
-                       transition_variables.S_to_E)
+        if self.wastewater_enabled:
+            epi_metrics.wastewater = \
+                Wastewater(getattr(self.sim_state, "wastewater"),  # initial value is set to null for now
+                           transition_variables.S_to_E)
 
         epi_metrics.pop_immunity_hosp = \
             PopulationImmunityHosp(getattr(self.sim_state, "pop_immunity_hosp"),
@@ -838,22 +840,66 @@ class FluSubpopModel(clt.SubpopModel):
         return epi_metrics
 
     def run_model_checks(self):
-        pass
 
-    def find_name_by_compartment(self,
-                                 target_compartment: clt.Compartment):
+        print(">>> Running flu model checks... \n")
+        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+
+        error_counter = 0
+
+        sim_state = self.sim_state
+
+        for name, val in vars(sim_state).items():
+            if isinstance(val, np.ndarray):
+                flattened_array = val.flatten()
+                for val in flattened_array:
+                    if val < 0:
+                        print(f"STOP! INPUT ERROR: {name} should not have negative values.")
+                        error_counter += 1
+            elif isinstance(val, float):
+                if val < 0:
+                    print(f"STOP! INPUT ERROR: {name} should not be negative.")
+                    error_counter += 1
+
+        compartment_population_sum = np.zeros((self.fixed_params.num_age_groups,
+                                               self.fixed_params.num_risk_groups))
+
         for name, compartment in self.compartments.items():
-            if compartment == target_compartment:
-                return name
+            compartment_population_sum += compartment.current_val
+            flattened_current_val = compartment.current_val.flatten()
+            for val in flattened_current_val:
+                if val != int(val):
+                    print(f"STOP! INPUT ERROR: {name} should not have non-negative values.")
+                    error_counter += 1
 
-    def display(self):
+        if (compartment_population_sum != self.fixed_params.total_pop_age_risk).any():
+            print(f"STOP! INPUT ERROR: sum of population in compartments must \n"
+                  f"match specified total population value. Check \n"
+                  f"\"total_pop_age_risk\" in fixed params JSON and \n"
+                  f"check compartments in state variables' init vals JSON.")
+            error_counter += 1
 
-        origin_dict = defaultdict(list)
+        fixed_params = self.fixed_params
 
-        for tvar_name, tvar in self.transition_variables.items():
-            origin_dict[self.find_name_by_compartment(tvar.origin)].append(
-                (self.find_name_by_compartment(tvar.destination), tvar_name))
+        # TODO: this has identical logic as the loop over sim_state -- pull out as
+        #   separate function
+        for name, val in vars(fixed_params).items():
+            if isinstance(val, np.ndarray):
+                flattened_array = val.flatten()
+                for val in flattened_array:
+                    if val < 0:
+                        print(f"STOP! INPUT ERROR: {name} should not have negative values.")
+                        error_counter += 1
+            elif isinstance(val, float):
+                if val < 0:
+                    print(f"STOP! INPUT ERROR: {name} should not be negative.")
+                    error_counter += 1
 
-        for origin_name in self.compartments.keys():
-            for output in origin_dict[origin_name]:
-                print(f"{origin_name} --> {output[0]}      transition variable {output[1]}")
+        if error_counter == 0:
+
+
+            print("OKAY! Flu model has passed input checks: \n"
+                  "Compartment populations are nonnegative whole numbers \n"
+                  "and match the specified \"total_pop_age_risk\" values. \n"
+                  "Fixed parameters are nonnegative.")
+
+        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")

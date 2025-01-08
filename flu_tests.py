@@ -70,7 +70,12 @@ def test_correct_object_count():
     assert len(flu_model.compartments) == 8
     assert len(flu_model.transition_variables) == 10
     assert len(flu_model.transition_variable_groups) == 3
-    assert len(flu_model.epi_metrics) == 3
+
+    if flu_model.wastewater_enabled:
+        assert len(flu_model.epi_metrics) == 3
+    else:
+        assert len(flu_model.epi_metrics) == 2
+
     assert len(flu_model.dynamic_vals) == 1
 
 
@@ -213,9 +218,10 @@ def test_wastewater_when_beta_zero(model):
     model.fixed_params.beta_baseline = 0
     model.simulate_until_time_period(300)
 
-    ww_history = model.epi_metrics["wastewater"].history_vals_list
-    tol = 1e-6
-    assert np.sum(np.abs(ww_history) < tol) == len(ww_history)
+    if model.wastewater_enabled:
+        ww_history = model.epi_metrics["wastewater"].history_vals_list
+        tol = 1e-6
+        assert np.sum(np.abs(ww_history) < tol) == len(ww_history)
 
 
 @pytest.mark.parametrize("model", flu_model_variations_list)
@@ -267,7 +273,7 @@ def test_population_is_constant(model):
             current_sum_all_compartments += np.sum(compartment.current_val)
 
         assert np.abs(current_sum_all_compartments -
-                      np.sum(model.fixed_params.total_population_val)) < 1e-6
+                      np.sum(model.fixed_params.total_pop_age_risk)) < 1e-6
 
 
 @pytest.mark.parametrize("model", flu_model_variations_list)
