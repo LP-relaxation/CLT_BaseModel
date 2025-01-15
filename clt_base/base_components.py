@@ -639,8 +639,8 @@ class TransitionVariable(ABC):
 
     @abstractmethod
     def get_current_rate(self,
-                         subpop_state: SubpopState,
-                         subpop_params: SubpopParams) -> np.ndarray:
+                         state: SubpopState,
+                         params: SubpopParams) -> np.ndarray:
         """
         Computes and returns current rate of transition variable,
         based on current state of the simulation and epidemiological parameters.
@@ -648,9 +648,9 @@ class TransitionVariable(ABC):
         number of age groups and L is number of risk groups.
 
         Args:
-            subpop_state (SubpopState):
+            state (SubpopState):
                 holds subpop simulation state (current values of StateVariable instances).
-            subpop_params (SubpopParams):
+            params (SubpopParams):
                 holds values of epidemiological parameters.
 
         Returns:
@@ -1018,8 +1018,8 @@ class EpiMetric(StateVariable, ABC):
 
     @abstractmethod
     def get_change_in_current_val(self,
-                                  subpop_state: SubpopState,
-                                  subpop_params: SubpopParams,
+                                  state: SubpopState,
+                                  params: SubpopParams,
                                   num_timesteps: int) -> np.ndarray:
         """
         Computes and returns change in current value of dynamic val,
@@ -1029,10 +1029,10 @@ class EpiMetric(StateVariable, ABC):
         is number of age groups and L is number of risk groups.
 
         Args:
-            subpop_state (SubpopState):
+            state (SubpopState):
                 holds subpop simulation state (current values of StateVariable
                 instances).
-            subpop_params (SubpopParams):
+            params (SubpopParams):
                 holds values of epidemiological parameters.
             num_timesteps (int):
                 number of timesteps per day -- used to determine time interval
@@ -1119,14 +1119,14 @@ class DynamicVal(StateVariable, ABC):
 
     @abstractmethod
     def update_current_val(self, 
-                           subpop_state: SubpopState, 
-                           subpop_params: SubpopParams) -> None:
+                           state: SubpopState, 
+                           params: SubpopParams) -> None:
         """
         Args:
-            subpop_state (SubpopState):
+            state (SubpopState):
                 holds subpop simulation state (current values of StateVariable
                 instances).
-            subpop_params (SubpopParams):
+            params (SubpopParams):
                 holds values of epidemiological parameters.
         """
 
@@ -1200,7 +1200,7 @@ class Interaction(StateVariable, ABC):
         Args:
             metapop_state (MetapopState):
                 holds metapop simulation state (current values of StateVariable instances).
-            subpop_params (SubpopParams):
+            params (SubpopParams):
                 holds values of epidemiological parameters.
         """
 
@@ -1235,7 +1235,7 @@ class SubpopModel(ABC):
             objdict of all the model's DynamicVal instances.
         schedules (sc.objdict):
             objdict of all the model's Schedule instances.
-        subpop_params (SubpopParams):
+        params (SubpopParams):
             data container for the model's epidemiological parameters,
             such as the "Greek letters" characterizing sojourn times
             in compartments.
@@ -1260,14 +1260,14 @@ class SubpopModel(ABC):
     """
 
     def __init__(self,
-                 subpop_state: SubpopState,
-                 subpop_params: SubpopParams,
+                 state: SubpopState,
+                 params: SubpopParams,
                  config: Config,
                  RNG: np.random.Generator,
                  name: str = ""):
 
-        self.subpop_state = copy.deepcopy(subpop_state)
-        self.subpop_params = copy.deepcopy(subpop_params)
+        self.state = copy.deepcopy(state)
+        self.params = copy.deepcopy(params)
         self.config = copy.deepcopy(config)
 
         self.RNG = RNG
@@ -1288,14 +1288,14 @@ class SubpopModel(ABC):
         self.dynamic_vals = self.create_dynamic_vals()
         self.schedules = self.create_schedules()
 
-        # The model's subpop_state also has access to the model's
+        # The model's state also has access to the model's
         #   compartments, epi_metrics, dynamic_vals, and schedules --
-        #   so that subpop_state can easily retrieve each object's
+        #   so that state can easily retrieve each object's
         #   current_val and store it
-        self.subpop_state.compartments = self.compartments
-        self.subpop_state.epi_metrics = self.epi_metrics
-        self.subpop_state.dynamic_vals = self.dynamic_vals
-        self.subpop_state.schedules = self.schedules
+        self.state.compartments = self.compartments
+        self.state.epi_metrics = self.epi_metrics
+        self.state.dynamic_vals = self.dynamic_vals
+        self.state.schedules = self.schedules
 
         self.metapop_model = None
         self.metapop_state = None
@@ -1425,8 +1425,8 @@ class SubpopModel(ABC):
 
             self.update_compartments()
 
-            self.subpop_state.update_epi_metrics()
-            self.subpop_state.update_compartments()
+            self.state.update_epi_metrics()
+            self.state.update_compartments()
 
     def prepare_daily_state(self) -> None:
         """
@@ -1436,8 +1436,8 @@ class SubpopModel(ABC):
         for every discretized timestep.
         """
 
-        subpop_state = self.subpop_state
-        subpop_params = self.subpop_params
+        state = self.state
+        params = self.params
         current_real_date = self.current_real_date
 
         schedules = self.schedules
@@ -1450,32 +1450,32 @@ class SubpopModel(ABC):
         # Update dynamic values for current day
         for dval in dynamic_vals.values():
             if dval.is_enabled:
-                dval.update_current_val(subpop_state, subpop_params)
+                dval.update_current_val(state, params)
 
         # Sync subpop simulation state
-        self.subpop_state.update_schedules()
-        self.subpop_state.update_dynamic_vals()
+        self.state.update_schedules()
+        self.state.update_dynamic_vals()
 
     def update_epi_metrics(self):
 
-        subpop_state = self.subpop_state
-        subpop_params = self.subpop_params
+        state = self.state
+        params = self.params
         timesteps_per_day = self.config.timesteps_per_day
 
         for metric in self.epi_metrics.values():
             metric.change_in_current_val = \
-                metric.get_change_in_current_val(subpop_state,
-                                                 subpop_params,
+                metric.get_change_in_current_val(state,
+                                                 params,
                                                  timesteps_per_day)
             metric.update_current_val()
 
     def update_transition_rates(self):
 
-        subpop_state = self.subpop_state
-        subpop_params = self.subpop_params
+        state = self.state
+        params = self.params
 
         for tvar in self.transition_variables.values():
-            tvar.current_rate = tvar.get_current_rate(subpop_state, subpop_params)
+            tvar.current_rate = tvar.get_current_rate(state, params)
 
     def sample_transitions(self):
 
@@ -1539,7 +1539,7 @@ class SubpopModel(ABC):
         day 0 state.
 
         Returns current_simulation_day to 0.
-        Restores subpop_state values to initial values.
+        Restores state values to initial values.
         Clears history on model's state variables.
         Resets transition variables' current_val attribute to 0.
 
@@ -1562,7 +1562,7 @@ class SubpopModel(ABC):
                     self.schedules.values():
             setattr(svar, "current_val", copy.deepcopy(svar.init_val))
 
-        self.subpop_state.update_all()
+        self.state.update_all()
         self.clear_history()
 
     def clear_history(self) -> None:

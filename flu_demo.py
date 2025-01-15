@@ -14,15 +14,15 @@ base_path = Path(__file__).parent / "flu_demo_input_files"
 # Get filepaths for initial values of state variables, fixed parameters,
 #   and configuration
 state_vars_init_vals_filepath = base_path / "state_variables_init_vals.json"
-fixed_params_filepath = base_path / "fixed_params.json"
+params_filepath = base_path / "subpop_params.json"
 config_filepath = base_path / "config.json"
 
-subpop_state_dict = clt.load_json(state_vars_init_vals_filepath)
-fixed_params_dict = clt.load_json(fixed_params_filepath)
+state_dict = clt.load_json(state_vars_init_vals_filepath)
+params_dict = clt.load_json(params_filepath)
 config_dict = clt.load_json(config_filepath)
 
-flu_demo_model = flu.FluSubpopModel(subpop_state_dict,
-                                    fixed_params_dict,
+flu_demo_model = flu.FluSubpopModel(state_dict,
+                                    params_dict,
                                     config_dict,
                                     np.random.default_rng(88888))
 

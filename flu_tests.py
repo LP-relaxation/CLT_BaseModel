@@ -21,15 +21,15 @@ from pathlib import Path
 base_path = Path(__file__).parent / "flu_demo_input_files"
 
 config_filepath = base_path / "config.json"
-fixed_params_filepath = base_path / "fixed_params.json"
+params_filepath = base_path / "subpop_params.json"
 state_vars_init_vals_filepath = base_path / "state_variables_init_vals.json"
 
-subpop_state_dict = clt.load_json(state_vars_init_vals_filepath)
-fixed_params_dict = clt.load_json(fixed_params_filepath)
+state_dict = clt.load_json(state_vars_init_vals_filepath)
+params_dict = clt.load_json(params_filepath)
 config_dict = clt.load_json(config_filepath)
 
-flu_model = flu.FluSubpopModel(subpop_state_dict,
-                               fixed_params_dict,
+flu_model = flu.FluSubpopModel(state_dict,
+                               params_dict,
                                config_dict,
                                np.random.default_rng(88888))
 
@@ -46,8 +46,8 @@ def create_models_all_transition_types_list(RNG_seed):
             new_config_dict = copy.deepcopy(config_dict)
             new_config_dict["transition_type"] = transition_type
 
-            models_list.append(flu.FluSubpopModel(subpop_state_dict,
-                                                  fixed_params_dict,
+            models_list.append(flu.FluSubpopModel(state_dict,
+                                                  params_dict,
                                                   new_config_dict,
                                                   np.random.default_rng(RNG_seed)))
 
@@ -94,15 +94,15 @@ def test_model_constructor_no_unintended_sharing():
         created by the same constructor are indeed distinct/independent.
     """
 
-    initial_subpop_state_dict = copy.deepcopy(subpop_state_dict)
+    initial_state_dict = copy.deepcopy(state_dict)
 
-    first_model = flu.FluSubpopModel(subpop_state_dict,
-                                     fixed_params_dict,
+    first_model = flu.FluSubpopModel(state_dict,
+                                     params_dict,
                                      config_dict,
                                      np.random.default_rng(1))
 
-    second_model = flu.FluSubpopModel(subpop_state_dict,
-                                      fixed_params_dict,
+    second_model = flu.FluSubpopModel(state_dict,
+                                      params_dict,
                                       config_dict,
                                       np.random.default_rng(1))
 
@@ -112,16 +112,16 @@ def test_model_constructor_no_unintended_sharing():
     #   initial state -- it should not have been affected by simulating
     #   the first model
 
-    for key, value in initial_subpop_state_dict.items():
+    for key, value in initial_state_dict.items():
         if isinstance(value, (np.ndarray, list)):
             try:
-                assert (getattr(second_model.subpop_state, key) ==
-                        initial_subpop_state_dict[key])
+                assert (getattr(second_model.state, key) ==
+                        initial_state_dict[key])
             # if it's an array, have to check equality of each element --
             #   Python will complain that the truth value of an array is ambiguous
             except ValueError:
-                assert (getattr(second_model.subpop_state, key) ==
-                        initial_subpop_state_dict[key]).all()
+                assert (getattr(second_model.state, key) ==
+                        initial_state_dict[key]).all()
 
 
 def test_model_constructor_reproducible_results():
@@ -138,8 +138,8 @@ def test_model_constructor_reproducible_results():
         should not modify objects on that constructor.
     """
 
-    first_model = flu.FluSubpopModel(subpop_state_dict,
-                                     fixed_params_dict,
+    first_model = flu.FluSubpopModel(state_dict,
+                                     params_dict,
                                      config_dict,
                                      np.random.default_rng(1))
 
@@ -151,8 +151,8 @@ def test_model_constructor_reproducible_results():
     for name in first_model_compartments.keys():
         first_model_history_dict[name] = getattr(first_model_compartments, name).history_vals_list
 
-    second_model = flu.FluSubpopModel(subpop_state_dict,
-                                      fixed_params_dict,
+    second_model = flu.FluSubpopModel(state_dict,
+                                      params_dict,
                                       config_dict,
                                       np.random.default_rng(1))
     second_model.simulate_until_time_period(100)
@@ -181,8 +181,8 @@ def test_num_timesteps():
     new_config.timesteps_per_day = 2
     new_config.transition_type = "binomial_deterministic"
 
-    few_timesteps_model = flu.FluSubpopModel(subpop_state_dict,
-                                             fixed_params_dict,
+    few_timesteps_model = flu.FluSubpopModel(state_dict,
+                                             params_dict,
                                              config_dict,
                                              np.random.default_rng(starting_random_seed))
 
@@ -193,8 +193,8 @@ def test_num_timesteps():
     new_config.timesteps_per_day = 20
     new_config.transition_type = "binomial_deterministic"
 
-    many_timesteps_model = flu.FluSubpopModel(subpop_state_dict,
-                                              fixed_params_dict,
+    many_timesteps_model = flu.FluSubpopModel(state_dict,
+                                              params_dict,
                                               config_dict,
                                               np.random.default_rng(starting_random_seed))
 
@@ -216,7 +216,7 @@ def test_wastewater_when_beta_zero(model):
     """
     if model.wastewater_enabled:
         model.reset_simulation()
-        model.fixed_params.beta_baseline = 0
+        model.params.beta_baseline = 0
         model.simulate_until_time_period(300)
 
         ww_history = model.epi_metrics["wastewater"].history_vals_list
@@ -231,7 +231,7 @@ def test_no_transmission_when_beta_zero(model):
     """
 
     model.reset_simulation()
-    model.fixed_params.beta_baseline = 0
+    model.params.beta_baseline = 0
     model.simulate_until_time_period(300)
 
     S_history = model.compartments["S"].history_vals_list
@@ -247,7 +247,7 @@ def test_dead_compartment_monotonic(model):
     """
 
     model.reset_simulation()
-    model.fixed_params.beta = 2
+    model.params.beta = 2
     model.simulate_until_time_period(300)
 
     D_history = model.compartments["D"].history_vals_list
@@ -263,7 +263,7 @@ def test_population_is_constant(model):
     """
 
     model.reset_simulation()
-    model.fixed_params.beta = 0.25
+    model.params.beta = 0.25
 
     for day in range(300):
         model.simulate_until_time_period(day)
@@ -273,7 +273,7 @@ def test_population_is_constant(model):
             current_sum_all_compartments += np.sum(compartment.current_val)
 
         assert np.abs(current_sum_all_compartments -
-                      np.sum(model.fixed_params.total_pop_age_risk)) < 1e-6
+                      np.sum(model.params.total_pop_age_risk)) < 1e-6
 
 
 @pytest.mark.parametrize("model", flu_model_variations_list)
@@ -344,8 +344,8 @@ def test_transition_format(model):
         after the fact.
     """
 
-    A = model.fixed_params.num_age_groups
-    L = model.fixed_params.num_risk_groups
+    A = model.params.num_age_groups
+    L = model.params.num_risk_groups
 
     model.reset_simulation()
     model.modify_random_seed(starting_random_seed)
