@@ -85,19 +85,39 @@ class Config:
 
 
 @dataclass
-class FixedParams(ABC):
+class MetapopParams(ABC):
     """
-    Stores epidemiological parameters.
+    Stores epidemiological parameters for
+        across-subpopulation phenomenon.
+        These parameters are indexed by TWO
+        subpopulations.
     """
     pass
 
 
 @dataclass
-class SimState(ABC):
+class SubpopParams(ABC):
     """
-    Holds current values of simulation state.
+    Stores epidemiological parameters for
+        a given subpopulation.
+    """
+    pass
+
+
+@dataclass
+class MetapopState(ABC):
+    """
+    Holds current values of metapop simulation state.
     """
 
+
+@dataclass
+class SubpopState(ABC):
+    """
+    Holds current values of subpop simulation state.
+    """
+
+    interactions: Optional[sc.objdict] = None
     compartments: Optional[sc.objdict] = None
     epi_metrics: Optional[sc.objdict] = None
     schedules: Optional[sc.objdict] = None
@@ -106,6 +126,9 @@ class SimState(ABC):
     def update_values(self, lookup_dict):
         for name, item in lookup_dict.items():
             setattr(self, name, item.current_val)
+            
+    def update_interactions(self):
+        self.update_values(self.interactions)
 
     def update_compartments(self):
         self.update_values(self.compartments)
@@ -554,7 +577,7 @@ class TransitionVariable(ABC):
             probability distribution of transitions between compartments.
         get_current_rate (function):
             provides specific implementation for computing current rate
-            as a function of current simulation state and epidemiological parameters.
+            as a function of current subpop simulation state and epidemiological parameters.
         current_rate (np.ndarray):
             holds output from get_current_rate method -- used to generate
             random variable realizations for transitions between compartments.
@@ -616,8 +639,8 @@ class TransitionVariable(ABC):
 
     @abstractmethod
     def get_current_rate(self,
-                         sim_state: SimState,
-                         fixed_params: FixedParams) -> np.ndarray:
+                         subpop_state: SubpopState,
+                         subpop_params: SubpopParams) -> np.ndarray:
         """
         Computes and returns current rate of transition variable,
         based on current state of the simulation and epidemiological parameters.
@@ -625,9 +648,9 @@ class TransitionVariable(ABC):
         number of age groups and L is number of risk groups.
 
         Args:
-            sim_state (SimState):
-                holds simulation state (current values of StateVariable instances).
-            fixed_params (FixedParams):
+            subpop_state (SubpopState):
+                holds subpop simulation state (current values of StateVariable instances).
+            subpop_params (SubpopParams):
                 holds values of epidemiological parameters.
 
         Returns:
@@ -950,7 +973,7 @@ class EpiMetric(StateVariable, ABC):
     Abstract base class for epi metrics in epidemiological model.
 
     This is intended for variables that are aggregate deterministic functions of
-    the simulation state (including epi compartment values, other parameters,
+    the subpop simulation state (including epi compartment values, other parameters,
     and time.)
 
     For example, population-level immunity variables should be
@@ -995,8 +1018,8 @@ class EpiMetric(StateVariable, ABC):
 
     @abstractmethod
     def get_change_in_current_val(self,
-                                  sim_state: SimState,
-                                  fixed_params: FixedParams,
+                                  subpop_state: SubpopState,
+                                  subpop_params: SubpopParams,
                                   num_timesteps: int) -> np.ndarray:
         """
         Computes and returns change in current value of dynamic val,
@@ -1006,10 +1029,10 @@ class EpiMetric(StateVariable, ABC):
         is number of age groups and L is number of risk groups.
 
         Args:
-            sim_state (SimState):
-                holds simulation state (current values of StateVariable
+            subpop_state (SubpopState):
+                holds subpop simulation state (current values of StateVariable
                 instances).
-            fixed_params (FixedParams):
+            subpop_params (SubpopParams):
                 holds values of epidemiological parameters.
             num_timesteps (int):
                 number of timesteps per day -- used to determine time interval
@@ -1094,6 +1117,19 @@ class DynamicVal(StateVariable, ABC):
         self.is_enabled = is_enabled
         self.history_vals_list = []
 
+    @abstractmethod
+    def update_current_val(self, 
+                           subpop_state: SubpopState, 
+                           subpop_params: SubpopParams) -> None:
+        """
+        Args:
+            subpop_state (SubpopState):
+                holds subpop simulation state (current values of StateVariable
+                instances).
+            subpop_params (SubpopParams):
+                holds values of epidemiological parameters.
+        """
+
     def save_history(self) -> None:
         """
         Saves current value to history by appending current_val attribute
@@ -1152,6 +1188,23 @@ class Schedule(StateVariable, ABC):
         pass
 
 
+class Interaction(StateVariable, ABC):
+
+    @abstractmethod
+    def update_current_val(self,
+                           metapop_state: MetapopState) -> None:
+        """
+        Subclasses must provide a concrete implementation of
+        updating self.current_val in-place.
+
+        Args:
+            metapop_state (MetapopState):
+                holds metapop simulation state (current values of StateVariable instances).
+            subpop_params (SubpopParams):
+                holds values of epidemiological parameters.
+        """
+
+
 class SubpopModel(ABC):
     """
     Contains and manages all necessary components for
@@ -1182,7 +1235,7 @@ class SubpopModel(ABC):
             objdict of all the model's DynamicVal instances.
         schedules (sc.objdict):
             objdict of all the model's Schedule instances.
-        fixed_params (FixedParams):
+        subpop_params (SubpopParams):
             data container for the model's epidemiological parameters,
             such as the "Greek letters" characterizing sojourn times
             in compartments.
@@ -1207,14 +1260,14 @@ class SubpopModel(ABC):
     """
 
     def __init__(self,
-                 sim_state: SimState,
-                 fixed_params: FixedParams,
+                 subpop_state: SubpopState,
+                 subpop_params: SubpopParams,
                  config: Config,
                  RNG: np.random.Generator,
                  name: str = ""):
 
-        self.sim_state = copy.deepcopy(sim_state)
-        self.fixed_params = copy.deepcopy(fixed_params)
+        self.subpop_state = copy.deepcopy(subpop_state)
+        self.subpop_params = copy.deepcopy(subpop_params)
         self.config = copy.deepcopy(config)
 
         self.RNG = RNG
@@ -1235,14 +1288,18 @@ class SubpopModel(ABC):
         self.dynamic_vals = self.create_dynamic_vals()
         self.schedules = self.create_schedules()
 
-        # The model's sim_state also has access to the model's
+        # The model's subpop_state also has access to the model's
         #   compartments, epi_metrics, dynamic_vals, and schedules --
-        #   so that sim_state can easily retrieve each object's
+        #   so that subpop_state can easily retrieve each object's
         #   current_val and store it
-        self.sim_state.compartments = self.compartments
-        self.sim_state.epi_metrics = self.epi_metrics
-        self.sim_state.dynamic_vals = self.dynamic_vals
-        self.sim_state.schedules = self.schedules
+        self.subpop_state.compartments = self.compartments
+        self.subpop_state.epi_metrics = self.epi_metrics
+        self.subpop_state.dynamic_vals = self.dynamic_vals
+        self.subpop_state.schedules = self.schedules
+
+        self.metapop_model = None
+        self.metapop_state = None
+        self.metapop_params = None
 
     def get_start_real_date(self):
         """
@@ -1368,8 +1425,8 @@ class SubpopModel(ABC):
 
             self.update_compartments()
 
-            self.sim_state.update_epi_metrics()
-            self.sim_state.update_compartments()
+            self.subpop_state.update_epi_metrics()
+            self.subpop_state.update_compartments()
 
     def prepare_daily_state(self) -> None:
         """
@@ -1379,8 +1436,8 @@ class SubpopModel(ABC):
         for every discretized timestep.
         """
 
-        sim_state = self.sim_state
-        fixed_params = self.fixed_params
+        subpop_state = self.subpop_state
+        subpop_params = self.subpop_params
         current_real_date = self.current_real_date
 
         schedules = self.schedules
@@ -1393,32 +1450,32 @@ class SubpopModel(ABC):
         # Update dynamic values for current day
         for dval in dynamic_vals.values():
             if dval.is_enabled:
-                dval.update_current_val(sim_state, fixed_params)
+                dval.update_current_val(subpop_state, subpop_params)
 
-        # Sync simulation state
-        self.sim_state.update_schedules()
-        self.sim_state.update_dynamic_vals()
+        # Sync subpop simulation state
+        self.subpop_state.update_schedules()
+        self.subpop_state.update_dynamic_vals()
 
     def update_epi_metrics(self):
 
-        sim_state = self.sim_state
-        fixed_params = self.fixed_params
+        subpop_state = self.subpop_state
+        subpop_params = self.subpop_params
         timesteps_per_day = self.config.timesteps_per_day
 
         for metric in self.epi_metrics.values():
             metric.change_in_current_val = \
-                metric.get_change_in_current_val(sim_state,
-                                                 fixed_params,
+                metric.get_change_in_current_val(subpop_state,
+                                                 subpop_params,
                                                  timesteps_per_day)
             metric.update_current_val()
 
     def update_transition_rates(self):
 
-        sim_state = self.sim_state
-        fixed_params = self.fixed_params
+        subpop_state = self.subpop_state
+        subpop_params = self.subpop_params
 
         for tvar in self.transition_variables.values():
-            tvar.current_rate = tvar.get_current_rate(sim_state, fixed_params)
+            tvar.current_rate = tvar.get_current_rate(subpop_state, subpop_params)
 
     def sample_transitions(self):
 
@@ -1482,7 +1539,7 @@ class SubpopModel(ABC):
         day 0 state.
 
         Returns current_simulation_day to 0.
-        Restores sim_state values to initial values.
+        Restores subpop_state values to initial values.
         Clears history on model's state variables.
         Resets transition variables' current_val attribute to 0.
 
@@ -1505,7 +1562,7 @@ class SubpopModel(ABC):
                     self.schedules.values():
             setattr(svar, "current_val", copy.deepcopy(svar.init_val))
 
-        self.sim_state.update_all()
+        self.subpop_state.update_all()
         self.clear_history()
 
     def clear_history(self) -> None:
@@ -1589,3 +1646,12 @@ class SubpopModel(ABC):
             else:
                 print(f"{name}: disabled")
         print("\n")
+
+
+class MetapopModel(ABC):
+
+    def __init__(self,
+                 subpop_models_dict: sc.objdict,
+                 name: str=""):
+        pass
+

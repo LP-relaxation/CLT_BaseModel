@@ -17,16 +17,18 @@ state_vars_init_vals_filepath = base_path / "state_variables_init_vals.json"
 fixed_params_filepath = base_path / "fixed_params.json"
 config_filepath = base_path / "config.json"
 
-sim_state_dict = clt.load_json(state_vars_init_vals_filepath)
+subpop_state_dict = clt.load_json(state_vars_init_vals_filepath)
 fixed_params_dict = clt.load_json(fixed_params_filepath)
 config_dict = clt.load_json(config_filepath)
 
-flu_demo_model = flu.FluSubpopModel(sim_state_dict,
+flu_demo_model = flu.FluSubpopModel(subpop_state_dict,
                                     fixed_params_dict,
                                     config_dict,
                                     np.random.default_rng(88888))
 
 flu_demo_model.run_model_checks()
+
+breakpoint()
 
 flu_demo_model.display()
 

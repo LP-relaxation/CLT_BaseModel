@@ -24,11 +24,11 @@ config_filepath = base_path / "config.json"
 fixed_params_filepath = base_path / "fixed_params.json"
 state_vars_init_vals_filepath = base_path / "state_variables_init_vals.json"
 
-sim_state_dict = clt.load_json(state_vars_init_vals_filepath)
+subpop_state_dict = clt.load_json(state_vars_init_vals_filepath)
 fixed_params_dict = clt.load_json(fixed_params_filepath)
 config_dict = clt.load_json(config_filepath)
 
-flu_model = flu.FluSubpopModel(sim_state_dict,
+flu_model = flu.FluSubpopModel(subpop_state_dict,
                                fixed_params_dict,
                                config_dict,
                                np.random.default_rng(88888))
@@ -46,7 +46,7 @@ def create_models_all_transition_types_list(RNG_seed):
             new_config_dict = copy.deepcopy(config_dict)
             new_config_dict["transition_type"] = transition_type
 
-            models_list.append(flu.FluSubpopModel(sim_state_dict,
+            models_list.append(flu.FluSubpopModel(subpop_state_dict,
                                                   fixed_params_dict,
                                                   new_config_dict,
                                                   np.random.default_rng(RNG_seed)))
@@ -82,26 +82,26 @@ def test_correct_object_count():
 def test_model_constructor_no_unintended_sharing():
     """
     Regression test: there was a previous bug where the same
-        SimState object was being shared across multiple models created
+        SubpopState object was being shared across multiple models created
         by subsequent creation calls on the model constructor.
         This is remedied using deep copies -- we make sure that
         the model constructor always creates a transmission model
-        with its own distinct/independent SimState OBJECT,
-        even if the actual initial SimState VALUES are the same
+        with its own distinct/independent SubpopState OBJECT,
+        even if the actual initial SubpopState VALUES are the same
         across models.
 
-    This test makes sure that SimState objects across models
+    This test makes sure that SubpopState objects across models
         created by the same constructor are indeed distinct/independent.
     """
 
-    initial_sim_state_dict = copy.deepcopy(sim_state_dict)
+    initial_subpop_state_dict = copy.deepcopy(subpop_state_dict)
 
-    first_model = flu.FluSubpopModel(sim_state_dict,
+    first_model = flu.FluSubpopModel(subpop_state_dict,
                                      fixed_params_dict,
                                      config_dict,
                                      np.random.default_rng(1))
 
-    second_model = flu.FluSubpopModel(sim_state_dict,
+    second_model = flu.FluSubpopModel(subpop_state_dict,
                                       fixed_params_dict,
                                       config_dict,
                                       np.random.default_rng(1))
@@ -112,16 +112,16 @@ def test_model_constructor_no_unintended_sharing():
     #   initial state -- it should not have been affected by simulating
     #   the first model
 
-    for key, value in initial_sim_state_dict.items():
+    for key, value in initial_subpop_state_dict.items():
         if isinstance(value, (np.ndarray, list)):
             try:
-                assert (getattr(second_model.sim_state, key) ==
-                        initial_sim_state_dict[key])
+                assert (getattr(second_model.subpop_state, key) ==
+                        initial_subpop_state_dict[key])
             # if it's an array, have to check equality of each element --
             #   Python will complain that the truth value of an array is ambiguous
             except ValueError:
-                assert (getattr(second_model.sim_state, key) ==
-                        initial_sim_state_dict[key]).all()
+                assert (getattr(second_model.subpop_state, key) ==
+                        initial_subpop_state_dict[key]).all()
 
 
 def test_model_constructor_reproducible_results():
@@ -138,7 +138,7 @@ def test_model_constructor_reproducible_results():
         should not modify objects on that constructor.
     """
 
-    first_model = flu.FluSubpopModel(sim_state_dict,
+    first_model = flu.FluSubpopModel(subpop_state_dict,
                                      fixed_params_dict,
                                      config_dict,
                                      np.random.default_rng(1))
@@ -151,7 +151,7 @@ def test_model_constructor_reproducible_results():
     for name in first_model_compartments.keys():
         first_model_history_dict[name] = getattr(first_model_compartments, name).history_vals_list
 
-    second_model = flu.FluSubpopModel(sim_state_dict,
+    second_model = flu.FluSubpopModel(subpop_state_dict,
                                       fixed_params_dict,
                                       config_dict,
                                       np.random.default_rng(1))
@@ -181,7 +181,7 @@ def test_num_timesteps():
     new_config.timesteps_per_day = 2
     new_config.transition_type = "binomial_deterministic"
 
-    few_timesteps_model = flu.FluSubpopModel(sim_state_dict,
+    few_timesteps_model = flu.FluSubpopModel(subpop_state_dict,
                                              fixed_params_dict,
                                              config_dict,
                                              np.random.default_rng(starting_random_seed))
@@ -193,7 +193,7 @@ def test_num_timesteps():
     new_config.timesteps_per_day = 20
     new_config.transition_type = "binomial_deterministic"
 
-    many_timesteps_model = flu.FluSubpopModel(sim_state_dict,
+    many_timesteps_model = flu.FluSubpopModel(subpop_state_dict,
                                               fixed_params_dict,
                                               config_dict,
                                               np.random.default_rng(starting_random_seed))
@@ -214,11 +214,11 @@ def test_wastewater_when_beta_zero(model):
     """
     If the transmission rate beta_baseline = 0, then viral load should be zero
     """
-    model.reset_simulation()
-    model.fixed_params.beta_baseline = 0
-    model.simulate_until_time_period(300)
-
     if model.wastewater_enabled:
+        model.reset_simulation()
+        model.fixed_params.beta_baseline = 0
+        model.simulate_until_time_period(300)
+
         ww_history = model.epi_metrics["wastewater"].history_vals_list
         tol = 1e-6
         assert np.sum(np.abs(ww_history) < tol) == len(ww_history)
