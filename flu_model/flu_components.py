@@ -124,6 +124,14 @@ class FluSubpopParams(clt.SubpopParams):
             must be larger than viral_shedding_peak
         viral_shedding_feces_mass (positive float):
             average mass of feces (gram)
+        relative_suscept_by_age (np.ndarray of positive floats in [0,1]):
+            relative susceptibility to infection by age group
+        time_away_prop_by_age (np.ndarray of positive floats in [0,1]):
+            total proportion of time spent away from home by age group
+        contact_reduction_travel (positive float in [0,1]):
+            multiplier to reduce contact rate of traveling individuals
+        contact_reduction_symp (positive float in [0,1]):
+            multiplier to reduce contact rate of symptomatic individuals
     """
 
     num_age_groups: Optional[int] = None
@@ -156,6 +164,10 @@ class FluSubpopParams(clt.SubpopParams):
     viral_shedding_magnitude: Optional[float] = None  # viral shedding parameters
     viral_shedding_duration: Optional[float] = None  # viral shedding parameters
     viral_shedding_feces_mass: Optional[float] = None  # viral shedding parameters
+    relative_suscept_by_age: Optional[np.ndarray] = None,
+    time_away_prop_by_age: Optional[np.ndarray] = None,
+    contact_reduction_travel: Optional[float] = None
+    contact_reduction_symp: Optional[float] = None
 
 
 @dataclass
@@ -578,8 +590,7 @@ class FluContactMatrix(clt.Schedule):
             named "is_school_day" (bool) and "is_work_day" (bool)
             corresponding to type of day.
         total_contact_matrix (np.ndarray):
-            (A x L) x (A x L) np.ndarray, where A is the number
-            of age groups and L is the number of risk groups.
+            A x A np.ndarray, where A is the number of age groups
 
     See parent class docstring for other attributes.
     """
@@ -599,7 +610,7 @@ class FluContactMatrix(clt.Schedule):
 
     def update_current_val(self, current_date: datetime.date) -> None:
         """
-        Subclasses must provide a concrete implementation of
+        Subpopclasses must provide a concrete implementation of
         updating self.current_val in-place
 
         Args:
@@ -618,6 +629,22 @@ class FluContactMatrix(clt.Schedule):
         self.current_val = self.total_contact_matrix - \
                            (1 - current_row["is_school_day"]) * self.school_contact_matrix - \
                            (1 - current_row["is_work_day"]) * self.work_contact_matrix
+
+
+class InfectionForce(clt.InteractionTerm):
+
+    def __init__(self,
+                 subpop_name: str):
+        self.subpop_name = subpop_name
+
+    def update_current_val(self,
+                           subpop_states_repo: clt.InterSubpopManager,
+                           travel_proportions: pd.DataFrame,
+                           subpop_params: clt.SubpopParams) -> None:
+
+        pairwise_infection_forces = []
+
+        self.current_val = np.sum(pairwise_infection_forces)
 
 
 class FluSubpopModel(clt.SubpopModel):
@@ -728,6 +755,21 @@ class FluSubpopModel(clt.SubpopModel):
             total_pop_age_risk += compartment.current_val
 
         return total_pop_age_risk
+
+    def create_interaction_terms(self) -> sc.objdict:
+
+        if self.metapop_model:
+
+            interaction_terms = sc.objdict()
+
+            for name in self.metapop_model.subpop_model_dict.keys():
+                interaction_terms[name] = InfectionForce(name)
+
+            return interaction_terms
+
+        else:
+
+            return sc.objdict()
 
     def create_compartments(self) -> sc.objdict:
         """
