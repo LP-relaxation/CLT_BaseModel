@@ -85,17 +85,6 @@ class Config:
 
 
 @dataclass
-class MetapopParams(ABC):
-    """
-    Stores epidemiological parameters for
-        across-subpopulation phenomenon.
-        These parameters are indexed by TWO
-        Subpopulations.
-    """
-    pass
-
-
-@dataclass
 class SubpopParams(ABC):
     """
     Stores epidemiological parameters for
@@ -105,18 +94,14 @@ class SubpopParams(ABC):
 
 
 @dataclass
-class InterSubpopManager(ABC):
+class InterSubpopRepo(ABC):
     """
     Holds collection of SubpopState instances, with
         actions to query and interact with them.
     """
 
-    subpop_models_dict: Optional[sc.objdict] = None
+    subpop_models: Optional[sc.objdict] = None
     travel_proportions: Optional[pd.DataFrame] = None
-    
-    def get_weighted_infected_by_subpop_across_age(self,
-                                                   subpop_name):
-        pass
 
 
 @dataclass
@@ -125,36 +110,9 @@ class SubpopState(ABC):
     Holds current values of Subpop simulation state.
     """
 
-    interaction_terms: Optional[sc.objdict] = None
-    compartments: Optional[sc.objdict] = None
-    epi_metrics: Optional[sc.objdict] = None
-    schedules: Optional[sc.objdict] = None
-    dynamic_vals: Optional[sc.objdict] = None
-
-    def update_values(self, lookup_dict):
+    def sync_to_current_vals(self, lookup_dict):
         for name, item in lookup_dict.items():
             setattr(self, name, item.current_val)
-
-    def update_interaction_terms(self):
-        self.update_values(self.interaction_terms)
-
-    def update_compartments(self):
-        self.update_values(self.compartments)
-
-    def update_epi_metrics(self):
-        self.update_values(self.epi_metrics)
-
-    def update_schedules(self):
-        self.update_values(self.schedules)
-
-    def update_dynamic_vals(self):
-        self.update_values(self.dynamic_vals)
-
-    def update_all(self) -> None:
-        self.update_compartments()
-        self.update_epi_metrics()
-        self.update_schedules()
-        self.update_dynamic_vals()
 
 
 class TransitionVariableGroup:
@@ -1199,17 +1157,19 @@ class Schedule(StateVariable, ABC):
 
 class InteractionTerm(StateVariable, ABC):
 
+    def __init__(self):
+        self.history_vals_list = []
+
     @abstractmethod
     def update_current_val(self,
-                           inter_subpop_manager: InterSubpopManager,
-                           travel_proportions: pd.DataFrame,
+                           inter_subpop_repo: InterSubpopRepo,
                            subpop_params: SubpopParams) -> None:
         """
         Subpop classes must provide a concrete implementation of
         updating self.current_val in-place.
 
         Args:
-            inter_subpop_manager (InterSubpopManager):
+            inter_subpop_repo (InterSubpopRepo):
                 manages collection of subpop models with
                 methods for querying information.
             travel_proportions (pd.DataFrame):
@@ -1223,26 +1183,44 @@ class InteractionTerm(StateVariable, ABC):
 
         pass
 
+    def save_history(self) -> None:
+        """
+        Saves current value to history by appending current_val attribute
+            to history_vals_list in place
+
+        Deep copying is CRUCIAL because current_val is a mutable
+            np.ndarray -- without deep copying, history_vals_list would
+            have the same value for all elements
+        """
+        self.history_vals_list.append(copy.deepcopy(self.current_val))
+
+    def clear_history(self) -> None:
+        self.history_vals_list = []
 
 
 class MetapopModel(ABC):
 
     def __init__(self,
-                 subpop_models_dict: sc.objdict,
+                 subpop_models: sc.objdict,
                  travel_proportions: pd.DataFrame,
                  name: str = ""):
         
-        self.subpop_models_dict = subpop_models_dict
+        self.subpop_models = subpop_models
 
-        self.subpop_states_repo = InterSubpopManager(subpop_models_dict,
-                                                     travel_proportions)
+        self.assign_inter_subpop_repo(subpop_models, travel_proportions)
         
         self.name = name
         
-        for model in subpop_models_dict.values():
+        for model in subpop_models.values():
             model.metapop_model = self
             model.interaction_terms = model.create_interaction_terms()
             model.state.interaction_terms = model.interaction_terms
+
+    @abstractmethod
+    def assign_inter_subpop_repo(self,
+                                 subpop_models,
+                                 travel_proportions):
+        pass
 
     def extract_states_dict_from_models_dict(self,
                                              models_dict: sc.objdict) -> sc.objdict:
@@ -1250,7 +1228,27 @@ class MetapopModel(ABC):
             sc.objdict({name: model.state for name, model in models_dict.items()})
 
         return states_dict
-    
+
+    def simulate_until_time_period(self, last_simulation_day) -> None:
+        """
+        Advance simulation model time until last_simulation_day.
+
+        Advance time by iterating over each subpopulation for
+        each simulation day, which are simulated by iterating
+        through discretized timesteps.
+
+        Save daily simulation data as history on each Compartment
+        instance.
+
+        Args:
+            last_simulation_day (positive int):
+                stop simulation at last_simulation_day (i.e. exclusive,
+                simulate up to but not including last_simulation_day).
+        """
+
+        for subpop_model in self.subpop_models.values():
+            subpop_model.simulate_until_time_period(last_simulation_day)
+
 
 class SubpopModel(ABC):
     """
@@ -1319,8 +1317,8 @@ class SubpopModel(ABC):
                  params: SubpopParams,
                  config: Config,
                  RNG: np.random.Generator,
-                 metapop_model: MetapopModel = None,
-                 name: str = ""):
+                 name: str = "",
+                 metapop_model: MetapopModel = None):
 
         self.state = copy.deepcopy(state)
         self.params = copy.deepcopy(params)
@@ -1346,6 +1344,12 @@ class SubpopModel(ABC):
         self.dynamic_vals = self.create_dynamic_vals()
         self.schedules = self.create_schedules()
 
+        self.all_state_variables = {**self.interaction_terms,
+                                    **self.compartments,
+                                    **self.epi_metrics,
+                                    **self.dynamic_vals,
+                                    **self.schedules}
+
         # The model's state also has access to the model's
         #   compartments, epi_metrics, dynamic_vals, and schedules --
         #   so that state can easily retrieve each object's
@@ -1355,6 +1359,27 @@ class SubpopModel(ABC):
         self.state.epi_metrics = self.epi_metrics
         self.state.dynamic_vals = self.dynamic_vals
         self.state.schedules = self.schedules
+
+        self.params.total_pop_age_risk = self.compute_total_pop_age_risk()
+
+    def compute_total_pop_age_risk(self) -> np.ndarray:
+        """
+
+        Returns:
+             total_pop_age_risk (np.ndarray):
+
+        """
+
+        total_pop_age_risk = np.zeros((self.params.num_age_groups,
+                                       self.params.num_risk_groups))
+
+        # At initialization (before simulation is run), each
+        #   compartment's current val is equivalent to the initial val
+        #   specified in the state variables' init val JSON.
+        for compartment in self.compartments.values():
+            total_pop_age_risk += compartment.current_val
+
+        return total_pop_age_risk
 
     def get_start_real_date(self):
         """
@@ -1447,7 +1472,6 @@ class SubpopModel(ABC):
         # last_simulation_day is exclusive endpoint
         while self.current_simulation_day < last_simulation_day:
 
-            # Get current values of Schedule and DynamicVal instances
             self.prepare_daily_state()
 
             self.simulate_timesteps(timesteps_per_day)
@@ -1476,6 +1500,7 @@ class SubpopModel(ABC):
         """
 
         for timestep in range(num_timesteps):
+
             self.update_transition_rates()
 
             self.sample_transitions()
@@ -1484,8 +1509,8 @@ class SubpopModel(ABC):
 
             self.update_compartments()
 
-            self.state.update_epi_metrics()
-            self.state.update_compartments()
+            self.state.sync_to_current_vals(self.epi_metrics)
+            self.state.sync_to_current_vals(self.compartments)
 
     def prepare_daily_state(self) -> None:
         """
@@ -1499,26 +1524,30 @@ class SubpopModel(ABC):
         subpop_params = self.params
         current_real_date = self.current_real_date
 
-        interaction_terms = self.interaction_terms
         schedules = self.schedules
         dynamic_vals = self.dynamic_vals
-
-        # Update interaction terms for current day
-        for iterm in interaction_terms.values():
-            iterm.update_current_val(current_real_date)
+        interaction_terms = self.interaction_terms
 
         # Update schedules for current day
         for schedule in schedules.values():
             schedule.update_current_val(current_real_date)
+
+        self.state.sync_to_current_vals(self.schedules)
 
         # Update dynamic values for current day
         for dval in dynamic_vals.values():
             if dval.is_enabled:
                 dval.update_current_val(subpop_state, subpop_params)
 
+        self.state.sync_to_current_vals(self.dynamic_vals)
+
+        # Update interaction terms for current day
+        for iterm in interaction_terms.values():
+            iterm.update_current_val(self.metapop_model.inter_subpop_repo, subpop_params)
+
         # Sync Subpop simulation state
-        self.state.update_schedules()
-        self.state.update_dynamic_vals()
+        self.state.sync_to_current_vals(self.interaction_terms)
+
 
     def update_epi_metrics(self):
 
@@ -1621,13 +1650,10 @@ class SubpopModel(ABC):
         self.current_real_date = self.start_real_date
 
         # AGAIN, MUST BE CAREFUL ABOUT MUTABLE NUMPY ARRAYS -- MUST USE DEEP COPY
-        for svar in self.compartments.values() + \
-                    self.epi_metrics.values() + \
-                    self.dynamic_vals.values() + \
-                    self.schedules.values():
+        for svar in self.all_state_variables.values():
             setattr(svar, "current_val", copy.deepcopy(svar.init_val))
 
-        self.state.update_all()
+        self.state.sync_to_current_vals(self.all_state_variables)
         self.clear_history()
 
     def clear_history(self) -> None:

@@ -126,11 +126,11 @@ class FluSubpopParams(clt.SubpopParams):
             average mass of feces (gram)
         relative_suscept_by_age (np.ndarray of positive floats in [0,1]):
             relative susceptibility to infection by age group
-        time_away_prop_by_age (np.ndarray of positive floats in [0,1]):
+        prop_time_away_by_age (np.ndarray of positive floats in [0,1]):
             total proportion of time spent away from home by age group
-        contact_reduction_travel (positive float in [0,1]):
+        contact_reduct_travel (positive float in [0,1]):
             multiplier to reduce contact rate of traveling individuals
-        contact_reduction_symp (positive float in [0,1]):
+        contact_reduct_symp (positive float in [0,1]):
             multiplier to reduce contact rate of symptomatic individuals
     """
 
@@ -164,10 +164,10 @@ class FluSubpopParams(clt.SubpopParams):
     viral_shedding_magnitude: Optional[float] = None  # viral shedding parameters
     viral_shedding_duration: Optional[float] = None  # viral shedding parameters
     viral_shedding_feces_mass: Optional[float] = None  # viral shedding parameters
-    relative_suscept_by_age: Optional[np.ndarray] = None,
-    time_away_prop_by_age: Optional[np.ndarray] = None,
-    contact_reduction_travel: Optional[float] = None
-    contact_reduction_symp: Optional[float] = None
+    relative_suscept_by_age: Optional[np.ndarray] = None
+    prop_time_away_by_age: Optional[np.ndarray] = None
+    contact_reduct_travel: Optional[float] = None
+    contact_reduct_symp: Optional[float] = None
 
 
 @dataclass
@@ -234,6 +234,10 @@ class FluSubpopState(clt.SubpopState):
             emulates a simple staged-alert policy
         wastewater (np.ndarray of positive floats):
             wastewater viral load
+        infection_force (np.ndarray of positive floats):
+            total force of infection from movement within
+            home location, travel to other locations,
+            and visitors from other locations
     """
 
     S: Optional[np.ndarray] = None
@@ -250,32 +254,14 @@ class FluSubpopState(clt.SubpopState):
     flu_contact_matrix: Optional[np.ndarray] = None
     beta_reduct: Optional[float] = 0.0
     wastewater: Optional[np.ndarray] = None  # wastewater viral load
+    infection_force: Optional[np.ndarray] = None
 
 
 class SusceptibleToExposed(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams):
-        force_of_immunity = (1 + params.inf_risk_reduction * state.pop_immunity_inf)
-
-        # We subtract absolute_humidity because higher humidity means less transmission
-        beta_humidity_adjusted = (1 - state.absolute_humidity * params.humidity_impact) * \
-                                 params.beta_baseline
-
-        # Compute I / N -> original shape is (A, L)
-        # Expand ratio for broadcasting -> new shape is (1, 1, A, L)
-        I_N_ratio_expanded = ((
-                                      state.IS + state.IP * params.IP_relative_inf + state.IA * params.IA_relative_inf)
-                              / params.total_pop_age_risk)[None, None, :, :]
-
-        # Expand force_of_immunity for broadcasting -> new shape is (A, L, 1, 1)
-        force_of_immunity_expanded = force_of_immunity[:, :, None, None]
-
-        # Element-wise multiplication and division by M_expanded
-        # Sum over a' and l' (last two dimensions) -> result has shape (A, L)
-        summand = np.sum(state.flu_contact_matrix * I_N_ratio_expanded / force_of_immunity_expanded, axis=(2, 3))
-
-        return (1 - state.beta_reduct) * beta_humidity_adjusted * summand
+        return state.infection_force
 
 
 class RecoveredToSusceptible(clt.TransitionVariable):
@@ -533,7 +519,7 @@ class BetaReduct(clt.DynamicVal):
         self.permanent_lockdown = False
 
     def update_current_val(self, state, params):
-        if np.sum(state.I) / np.sum(params.total_pop_age_risk) > 0.05:
+        if np.sum(state.IS) / np.sum(params.total_pop_age_risk) > 0.05:
             self.current_val = .5
             self.permanent_lockdown = True
         else:
@@ -604,9 +590,9 @@ class FluContactMatrix(clt.Schedule):
 
         self.time_series_df = df
 
-        self.total_contact_matrix = np.array([[2.5, 0.5], [2, 1.5]]).reshape((2, 1, 2, 1))
-        self.school_contact_matrix = np.array([[0.5, 0], [0.05, 0.1]]).reshape((2, 1, 2, 1))
-        self.work_contact_matrix = np.array([[0, 0], [0, 0.0]]).reshape((2, 1, 2, 1))
+        self.total_contact_matrix = np.array([[2.5, 0.5], [2, 1.5]])
+        self.school_contact_matrix = np.array([[0.5, 0], [0.05, 0.1]])
+        self.work_contact_matrix = np.array([[0, 0], [0, 0.0]])
 
     def update_current_val(self, current_date: datetime.date) -> None:
         """
@@ -631,20 +617,105 @@ class FluContactMatrix(clt.Schedule):
                            (1 - current_row["is_work_day"]) * self.work_contact_matrix
 
 
+def compute_weighted_presymp_asymp(subpop_state: FluSubpopState,
+                                   subpop_params: FluSubpopParams):
+    """
+    Sums across risk groups.
+    """
+
+    # sum over risk groups
+    weighted_IP = \
+        subpop_params.IP_relative_inf * np.sum(subpop_state.IP, axis=1)
+    weighted_IA = \
+        subpop_params.IA_relative_inf * np.sum(subpop_state.IA, axis=1)
+
+    return weighted_IP + weighted_IA
+
+
+def compute_immunity_force(subpop_state: FluSubpopState,
+                           subpop_params: FluSubpopParams):
+    return 1 + (subpop_params.inf_risk_reduction *
+                subpop_state.pop_immunity_inf)
+
+
+def compute_beta_humidity_adjusted(subpop_state: FluSubpopState,
+                           subpop_params: FluSubpopParams):
+    # We subtract absolute_humidity because
+    # higher humidity means less transmission
+    return (1 - subpop_state.absolute_humidity * subpop_params.humidity_impact) \
+           * subpop_params.beta_baseline
+
+
+def compute_pop_sum_across_risk(subpop_params: FluSubpopParams):
+    return subpop_params.total_pop_age_risk.sum(axis=1)
+
+
+@dataclass
+class FluInterSubpopRepo(clt.InterSubpopRepo):
+    """
+    Holds collection of SubpopState instances, with
+        actions to query and interact with them.
+    """
+
+    subpop_models: Optional[sc.objdict] = None
+    travel_proportions: Optional[pd.DataFrame] = None
+
+    def sum_prop_residents_traveling(self,
+                                     subpop_name):
+        travel_prop_df = self.travel_proportions
+        filtered_travel_prop_df = \
+            travel_prop_df[travel_prop_df["subpop_name"] == subpop_name].drop(columns=subpop_name)
+        sum_prop_residents_traveling = \
+            float(filtered_travel_prop_df[filtered_travel_prop_df["subpop_name"] == subpop_name].sum(
+                axis=1, numeric_only=True))
+
+        return sum_prop_residents_traveling
+
+    def inf_from_home_region_movement_rate(self,
+                                           subpop_name: str):
+        subpop_model = self.subpop_models[subpop_name]
+        subpop_state = subpop_model.state
+        subpop_params = subpop_model.params
+
+        beta = compute_beta_humidity_adjusted(subpop_state, subpop_params)
+        relative_suscept_by_age = subpop_params.relative_suscept_by_age
+        immunity_force = compute_immunity_force(subpop_state, subpop_params)
+
+        prop_time_away_by_age = subpop_params.prop_time_away_by_age
+        sum_prop_residents_traveling = self.sum_prop_residents_traveling(subpop_name)
+
+        contact_matrix = subpop_state.flu_contact_matrix
+        weighted_infected_across_risk = (compute_weighted_presymp_asymp(subpop_state,
+                                                                        subpop_params) +
+                                         subpop_state.IS).sum(axis=1)
+
+        pop_sum_across_risk = compute_pop_sum_across_risk(subpop_params)
+
+        weighted_infected_to_pop_sum_ratio = np.divide(weighted_infected_across_risk,
+                                   pop_sum_across_risk)[:, np.newaxis]
+
+        return beta * np.divide(relative_suscept_by_age, immunity_force) * \
+               (1 - prop_time_away_by_age * sum_prop_residents_traveling) * \
+               np.matmul(contact_matrix, weighted_infected_to_pop_sum_ratio)
+
+    def inf_from_outside_visitors_rate(self):
+        pass
+
+    def inf_from_residents_traveling_rate(self):
+        pass
+
+
 class InfectionForce(clt.InteractionTerm):
 
     def __init__(self,
                  subpop_name: str):
+        super().__init__()
         self.subpop_name = subpop_name
 
     def update_current_val(self,
-                           subpop_states_repo: clt.InterSubpopManager,
-                           travel_proportions: pd.DataFrame,
-                           subpop_params: clt.SubpopParams) -> None:
-
-        pairwise_infection_forces = []
-
-        self.current_val = np.sum(pairwise_infection_forces)
+                           inter_subpop_repo: FluInterSubpopRepo,
+                           subpop_params: FluSubpopParams) -> None:
+        self.current_val = inter_subpop_repo.inf_from_home_region_movement_rate(self.subpop_name)
 
 
 class FluSubpopModel(clt.SubpopModel):
@@ -694,7 +765,8 @@ class FluSubpopModel(clt.SubpopModel):
                  params_dict: dict,
                  config_dict: dict,
                  RNG: np.random.Generator,
-                 wastewater_enabled: bool=False):
+                 name: str = "",
+                 wastewater_enabled: bool = False):
         """
         Args:
             state_dict (dict):
@@ -713,6 +785,8 @@ class FluSubpopModel(clt.SubpopModel):
             RNG (np.random.Generator):
                 numpy random generator object used to obtain
                 random numbers.
+            name (str):
+                name.
             wastewater_enabled (bool):
                 if True, includes "wastewater" EpiMetric. Otherwise,
                 excludes it.
@@ -733,28 +807,7 @@ class FluSubpopModel(clt.SubpopModel):
         #   object. But in this function call, using deep copies is unnecessary
         #   (redundant) because the parent class SubpopModel's __init__()
         #   creates deep copies.
-        super().__init__(state, params, config, RNG)
-
-        self.params.total_pop_age_risk = self.compute_total_pop_age_risk()
-
-    def compute_total_pop_age_risk(self) -> np.ndarray:
-        """
-
-        Returns:
-             total_pop_age_risk (np.ndarray):
-
-        """
-
-        total_pop_age_risk = np.zeros((self.params.num_age_groups,
-                                       self.params.num_risk_groups))
-
-        # At initialization (before simulation is run), each
-        #   compartment's current val is equivalent to the initial val
-        #   specified in the state variables' init val JSON.
-        for compartment in self.compartments.values():
-            total_pop_age_risk += compartment.current_val
-
-        return total_pop_age_risk
+        super().__init__(state, params, config, RNG, name)
 
     def create_interaction_terms(self) -> sc.objdict:
 
@@ -762,8 +815,7 @@ class FluSubpopModel(clt.SubpopModel):
 
             interaction_terms = sc.objdict()
 
-            for name in self.metapop_model.subpop_model_dict.keys():
-                interaction_terms[name] = InfectionForce(name)
+            interaction_terms["infection_force"] = InfectionForce(self.name)
 
             return interaction_terms
 
@@ -970,10 +1022,22 @@ class FluSubpopModel(clt.SubpopModel):
                     error_counter += 1
 
         if error_counter == 0:
-
             print("OKAY! Flu model has passed input checks: \n"
                   "Compartment populations are nonnegative whole numbers \n"
                   "and add up to \"total_pop_age_risk\" in model's \n"
                   "\"params attribute.\" Fixed parameters are nonnegative.")
 
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+
+
+class FluMetapopModel(clt.MetapopModel):
+
+    def __init__(self,
+                 subpop_models: sc.objdict,
+                 travel_proportions: pd.DataFrame,
+                 name: str = ""):
+        super().__init__(subpop_models, travel_proportions, name)
+
+    def assign_inter_subpop_repo(self, subpop_models, travel_proportions):
+        self.inter_subpop_repo = FluInterSubpopRepo(subpop_models,
+                                                    travel_proportions)

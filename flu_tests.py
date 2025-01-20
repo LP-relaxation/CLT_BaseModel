@@ -21,7 +21,7 @@ from pathlib import Path
 base_path = Path(__file__).parent / "flu_demo_input_files"
 
 config_filepath = base_path / "config.json"
-params_filepath = base_path / "subpop_params.json"
+params_filepath = base_path / "common_params.json"
 state_vars_init_vals_filepath = base_path / "state_variables_init_vals.json"
 
 state_dict = clt.load_json(state_vars_init_vals_filepath)

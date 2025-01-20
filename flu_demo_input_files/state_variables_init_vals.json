@@ -20,5 +20,6 @@
 	"absolute_humidity": null,
 	"flu_contact_matrix": null,
 	"beta_reduct": 0.0,
-	"wastewater": null
+	"wastewater": null,
+	"infection_force": null
 }
