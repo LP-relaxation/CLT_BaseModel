@@ -39,14 +39,15 @@ def plot_subpop_epi_metrics(subpop_model: SubpopModel,
 
 
 def plot_metapop_epi_metrics(metapop_model: MetapopModel,
-                             savefig_filename=None):
+                             savefig_filename: str = None):
     """
     Plots the EpiMetric data for a metapopulation model.
 
     Args:
         metapop_model (MetapopModel):
             Metapopulation model containing compartments.
-        savefig_filename: Optional filename to save the figure.
+        savefig_filename (str):
+            Optional filename to save the figure.
     """
 
     num_plots = len(metapop_model.subpop_models)
@@ -117,14 +118,15 @@ def plot_subpop_total_infected_deaths(subpop_model: SubpopModel,
 
 
 def plot_metapop_total_infected_deaths(metapop_model: MetapopModel,
-                                       savefig_filename=None):
+                                       savefig_filename: str = None):
     """
     Plots the total infected (IP+IS+IA) and deaths data for a metapopulation model.
 
     Args:
         metapop_model (MetapopModel):
             Metapopulation model containing compartments.
-        savefig_filename: Optional filename to save the figure.
+        savefig_filename (str):
+            Optional filename to save the figure.
     """
 
     num_plots = len(metapop_model.subpop_models)
@@ -189,14 +191,15 @@ def plot_subpop_basic_compartment_history(subpop_model: SubpopModel,
 
 
 def plot_metapop_basic_compartment_history(metapop_model: MetapopModel,
-                                           savefig_filename=None):
+                                           savefig_filename: str = None):
     """
     Plots the compartment data for a metapopulation model.
 
     Args:
         metapop_model (MetapopModel):
             Metapopulation model containing compartments.
-        savefig_filename: Optional filename to save the figure.
+        savefig_filename (str):
+            Optional filename to save the figure.
     """
 
     num_plots = len(metapop_model.subpop_models)
