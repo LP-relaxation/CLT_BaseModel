@@ -128,9 +128,9 @@ class FluSubpopParams(clt.SubpopParams):
             relative susceptibility to infection by age group
         prop_time_away_by_age (np.ndarray of positive floats in [0,1]):
             total proportion of time spent away from home by age group
-        contact_reduct_travel (positive float in [0,1]):
+        contact_multiplier_travel (positive float in [0,1]):
             multiplier to reduce contact rate of traveling individuals
-        contact_reduct_symp (positive float in [0,1]):
+        contact_multiplier_symp (positive float in [0,1]):
             multiplier to reduce contact rate of symptomatic individuals
     """
 
@@ -166,8 +166,8 @@ class FluSubpopParams(clt.SubpopParams):
     viral_shedding_feces_mass: Optional[float] = None  # viral shedding parameters
     relative_suscept_by_age: Optional[np.ndarray] = None
     prop_time_away_by_age: Optional[np.ndarray] = None
-    contact_reduct_travel: Optional[float] = None
-    contact_reduct_symp: Optional[float] = None
+    contact_multiplier_travel: Optional[float] = None
+    contact_multiplier_symp: Optional[float] = None
 
 
 @dataclass
@@ -261,7 +261,15 @@ class SusceptibleToExposed(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams):
-        return state.infection_force
+        if state.infection_force:
+            return state.infection_force
+        else:
+            wtd_presymp_asymp = compute_wtd_presymp_asymp(state, params)
+
+            return compute_common_coeff_infection_force(state, params) * \
+                   np.matmul(state.flu_contact_matrix,
+                             np.divide(state.IS + wtd_presymp_asymp,
+                                       compute_pop_sum_by_age(params)))
 
 
 class RecoveredToSusceptible(clt.TransitionVariable):
@@ -617,19 +625,19 @@ class FluContactMatrix(clt.Schedule):
                            (1 - current_row["is_work_day"]) * self.work_contact_matrix
 
 
-def compute_weighted_presymp_asymp(subpop_state: FluSubpopState,
-                                   subpop_params: FluSubpopParams):
+def compute_wtd_presymp_asymp(subpop_state: FluSubpopState,
+                              subpop_params: FluSubpopParams):
     """
     Sums across risk groups.
     """
 
     # sum over risk groups
-    weighted_IP = \
-        subpop_params.IP_relative_inf * np.sum(subpop_state.IP, axis=1)
-    weighted_IA = \
-        subpop_params.IA_relative_inf * np.sum(subpop_state.IA, axis=1)
+    wtd_IP = \
+        subpop_params.IP_relative_inf * np.sum(subpop_state.IP, axis=1, keepdims=True)
+    wtd_IA = \
+        subpop_params.IA_relative_inf * np.sum(subpop_state.IA, axis=1, keepdims=True)
 
-    return weighted_IP + weighted_IA
+    return wtd_IP + wtd_IA
 
 
 def compute_immunity_force(subpop_state: FluSubpopState,
@@ -638,16 +646,25 @@ def compute_immunity_force(subpop_state: FluSubpopState,
                 subpop_state.pop_immunity_inf)
 
 
+def compute_common_coeff_infection_force(subpop_state: FluSubpopState,
+                                         subpop_params: FluSubpopParams):
+    beta = compute_beta_humidity_adjusted(subpop_state, subpop_params)
+    relative_suscept_by_age = subpop_params.relative_suscept_by_age
+    immunity_force = compute_immunity_force(subpop_state, subpop_params)
+
+    return beta * np.divide(relative_suscept_by_age, immunity_force)
+
+
 def compute_beta_humidity_adjusted(subpop_state: FluSubpopState,
-                           subpop_params: FluSubpopParams):
+                                   subpop_params: FluSubpopParams):
     # We subtract absolute_humidity because
     # higher humidity means less transmission
     return (1 - subpop_state.absolute_humidity * subpop_params.humidity_impact) \
            * subpop_params.beta_baseline
 
 
-def compute_pop_sum_across_risk(subpop_params: FluSubpopParams):
-    return subpop_params.total_pop_age_risk.sum(axis=1)
+def compute_pop_sum_by_age(subpop_params: FluSubpopParams):
+    return np.sum(subpop_params.total_pop_age_risk, axis=1, keepdims=True)
 
 
 @dataclass
@@ -660,49 +677,251 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
     subpop_models: Optional[sc.objdict] = None
     travel_proportions: Optional[pd.DataFrame] = None
 
+    def prop_residents_traveling_df(self,
+                                    subpop_name):
+        travel_prop_df = self.travel_proportions
+        return travel_prop_df[travel_prop_df["subpop_name"] == subpop_name]
+
+    def prop_residents_traveling_pairwise(self,
+                                          origin_subpop_name,
+                                          dest_subpop_name):
+        return float(self.prop_residents_traveling_df(origin_subpop_name)
+                     [dest_subpop_name])
+
     def sum_prop_residents_traveling(self,
                                      subpop_name):
-        travel_prop_df = self.travel_proportions
         filtered_travel_prop_df = \
-            travel_prop_df[travel_prop_df["subpop_name"] == subpop_name].drop(columns=subpop_name)
+            self.prop_residents_traveling_df(subpop_name).drop(columns=subpop_name)
         sum_prop_residents_traveling = \
             float(filtered_travel_prop_df[filtered_travel_prop_df["subpop_name"] == subpop_name].sum(
                 axis=1, numeric_only=True))
 
         return sum_prop_residents_traveling
 
-    def inf_from_home_region_movement_rate(self,
-                                           subpop_name: str):
+    def create_wtd_no_symp_by_age_cache(self):
+
+        wtd_no_symp_by_age_cache = {}
+
+        for subpop_model in self.subpop_models.values():
+            wtd_no_symp_by_age_cache[subpop_model.name] = \
+                compute_wtd_presymp_asymp(subpop_model.state,
+                                          subpop_model.params)
+
+        return wtd_no_symp_by_age_cache
+
+    def create_pop_by_age_cache(self):
+
+        pop_by_age_cache = {}
+
+        for subpop_model in self.subpop_models.values():
+            pop_by_age_cache[subpop_model.name] = \
+                compute_pop_sum_by_age(subpop_model.params)
+
+        return pop_by_age_cache
+
+    def create_pop_not_severe_by_age_cache(self):
+
+        pop_not_severe_by_age_cache = {}
+
+        pop_by_age_cache = self.create_pop_by_age_cache()
+
+        for subpop_model in self.subpop_models.values():
+            subpop_name = subpop_model.name
+            subpop_state = subpop_model.state
+
+            pop_not_severe_by_age_cache[subpop_name] = \
+                (pop_by_age_cache[subpop_name] -
+                 subpop_model.params.contact_multiplier_symp *
+                 np.sum(subpop_state.IS, axis=1, keepdims=True) +
+                 np.sum(subpop_state.H, axis=1, keepdims=True))
+
+        return pop_not_severe_by_age_cache
+
+    def sum_wtd_visitors_by_age(self,
+                                subpop_name: str,
+                                pop_not_severe_by_age_cache: dict):
+
+        wtd_visitors_by_origin = []
+
+        for origin_subpop_name in self.subpop_models.keys():
+            if origin_subpop_name == subpop_name:
+                continue
+            else:
+                wtd_visitors_by_origin.append(
+                    self.prop_residents_traveling_pairwise(origin_subpop_name,
+                                                           subpop_name) *
+                    pop_not_severe_by_age_cache[origin_subpop_name])
+
+        return np.sum(wtd_visitors_by_origin, axis=1)
+
+    def create_effective_pop_by_age_cache(self):
+
+        pop_by_age_cache = self.create_pop_by_age_cache()
+        pop_not_severe_by_age_cache = self.create_pop_not_severe_by_age_cache()
+
+        effective_pop_by_age_cache = {}
+
+        for subpop_model in self.subpop_models.values():
+            subpop_name = subpop_model.name
+            subpop_params = subpop_model.params
+
+            effective_pop_by_age_cache[subpop_name] = \
+                pop_by_age_cache[subpop_name] + \
+                subpop_params.prop_time_away_by_age * \
+                (self.sum_wtd_visitors_by_age(subpop_name, pop_not_severe_by_age_cache) -
+                 self.sum_prop_residents_traveling(subpop_name) *
+                 pop_not_severe_by_age_cache[subpop_name])
+
+            # breakpoint()
+
+        return effective_pop_by_age_cache
+
+    def inf_from_home_region_movement_prob(self,
+                                           subpop_name: str,
+                                           wtd_no_symp_by_age_cache: dict,
+                                           effective_pop_by_age_cache: dict):
+
         subpop_model = self.subpop_models[subpop_name]
         subpop_state = subpop_model.state
         subpop_params = subpop_model.params
-
-        beta = compute_beta_humidity_adjusted(subpop_state, subpop_params)
-        relative_suscept_by_age = subpop_params.relative_suscept_by_age
-        immunity_force = compute_immunity_force(subpop_state, subpop_params)
 
         prop_time_away_by_age = subpop_params.prop_time_away_by_age
         sum_prop_residents_traveling = self.sum_prop_residents_traveling(subpop_name)
 
         contact_matrix = subpop_state.flu_contact_matrix
-        weighted_infected_across_risk = (compute_weighted_presymp_asymp(subpop_state,
-                                                                        subpop_params) +
-                                         subpop_state.IS).sum(axis=1)
+        wtd_infected_by_age = \
+            wtd_no_symp_by_age_cache[subpop_name] + \
+            np.sum(subpop_state.IS, axis=1, keepdims=True)
 
-        pop_sum_across_risk = compute_pop_sum_across_risk(subpop_params)
+        wtd_infected_to_pop_sum_ratio = np.divide(wtd_infected_by_age,
+                                                  effective_pop_by_age_cache[subpop_name])
 
-        weighted_infected_to_pop_sum_ratio = np.divide(weighted_infected_across_risk,
-                                   pop_sum_across_risk)[:, np.newaxis]
+        return (1 - prop_time_away_by_age * sum_prop_residents_traveling) * \
+               np.matmul(contact_matrix, wtd_infected_to_pop_sum_ratio)
 
-        return beta * np.divide(relative_suscept_by_age, immunity_force) * \
-               (1 - prop_time_away_by_age * sum_prop_residents_traveling) * \
-               np.matmul(contact_matrix, weighted_infected_to_pop_sum_ratio)
+    def inf_from_visitors_prob(self,
+                               subpop_name: str,
+                               wtd_no_symp_by_age_cache: dict,
+                               effective_pop_by_age_cache: dict):
 
-    def inf_from_outside_visitors_rate(self):
-        pass
+        subpop_model = self.subpop_models[subpop_name]
+        subpop_state = subpop_model.state
+        subpop_params = subpop_model.params
 
-    def inf_from_residents_traveling_rate(self):
-        pass
+        all_subpop_models_names = self.subpop_models.keys()
+        inf_from_visitors_pairwise = []
+
+        for visitors_subpop_name in all_subpop_models_names:
+
+            if visitors_subpop_name == subpop_name:
+                continue
+
+            else:
+
+                contact_multiplier_symp = subpop_params.contact_multiplier_symp
+
+                prop_residents_traveling_pairwise = \
+                    self.prop_residents_traveling_pairwise(visitors_subpop_name,
+                                                           subpop_name)
+
+                prop_time_away_by_age = subpop_params.prop_time_away_by_age
+
+                contact_matrix = subpop_state.flu_contact_matrix
+
+                visitors_subpop_model = self.subpop_models[visitors_subpop_name]
+                visitors_subpop_state = visitors_subpop_model.state
+
+                wtd_infected_by_age = \
+                    wtd_no_symp_by_age_cache[visitors_subpop_name] + \
+                    contact_multiplier_symp * np.sum(visitors_subpop_state.IS, axis=1, keepdims=True)
+
+                wtd_infected_to_pop_sum_ratio = \
+                    np.divide(wtd_infected_by_age,
+                              effective_pop_by_age_cache[subpop_name])
+
+                inf_from_visitors_pairwise.append(
+                    prop_residents_traveling_pairwise *
+                    np.matmul(contact_matrix,
+                              prop_time_away_by_age * wtd_infected_to_pop_sum_ratio))
+
+        return np.sum(inf_from_visitors_pairwise, axis=1)
+
+    def inf_from_residents_traveling_prob(self,
+                                          subpop_name: str,
+                                          wtd_no_symp_by_age_cache: dict,
+                                          effective_pop_by_age_cache: dict):
+
+        subpop_model = self.subpop_models[subpop_name]
+        subpop_state = subpop_model.state
+        subpop_params = subpop_model.params
+
+        all_subpop_models_names = self.subpop_models.keys()
+        inf_from_residents_traveling_pairwise = []
+
+        for dest_subpop_name in all_subpop_models_names:
+
+            if dest_subpop_name == subpop_name:
+                continue
+
+            else:
+                prop_residents_traveling_pairwise = \
+                    float(self.prop_residents_traveling_df(subpop_name)
+                          [dest_subpop_name])
+
+                prop_time_away_by_age = subpop_params.prop_time_away_by_age
+
+                contact_matrix = subpop_state.flu_contact_matrix
+
+                dest_subpop_model = self.subpop_models[dest_subpop_name]
+                dest_subpop_state = dest_subpop_model.state
+
+                wtd_infected_by_age = \
+                    wtd_no_symp_by_age_cache[dest_subpop_name] + \
+                    np.sum(dest_subpop_state.IS, axis=1, keepdims=True)
+
+                wtd_infected_to_pop_sum_ratio = \
+                    np.divide(wtd_infected_by_age,
+                              effective_pop_by_age_cache[dest_subpop_name])
+
+                inf_from_residents_traveling_pairwise.append(
+                    prop_residents_traveling_pairwise *
+                    wtd_infected_to_pop_sum_ratio *
+                    np.matmul(contact_matrix,
+                              prop_time_away_by_age))
+
+        return np.sum(inf_from_residents_traveling_pairwise, axis=1)
+
+    def inf_total_rate(self,
+                       subpop_name: str):
+
+        subpop_model = self.subpop_models[subpop_name]
+        subpop_state = subpop_model.state
+        subpop_params = subpop_model.params
+
+        common_coeff = compute_common_coeff_infection_force(subpop_state, subpop_params)
+
+        contact_multiplier_travel = subpop_params.contact_multiplier_travel
+
+        wtd_no_symp_by_age_cache = \
+            self.create_wtd_no_symp_by_age_cache()
+
+        effective_pop_by_age_cache = self.create_effective_pop_by_age_cache()
+
+        inf_from_home_region_movement_prob = \
+            self.inf_from_home_region_movement_prob(subpop_name,
+                                                    wtd_no_symp_by_age_cache,
+                                                    effective_pop_by_age_cache)
+        inf_from_visitors_prob = self.inf_from_visitors_prob(subpop_name,
+                                                             wtd_no_symp_by_age_cache,
+                                                             effective_pop_by_age_cache)
+        inf_from_residents_traveling_prob = \
+            self.inf_from_residents_traveling_prob(subpop_name,
+                                                   wtd_no_symp_by_age_cache,
+                                                   effective_pop_by_age_cache)
+
+        return common_coeff * (inf_from_home_region_movement_prob +
+                               contact_multiplier_travel *
+                               (inf_from_visitors_prob + inf_from_residents_traveling_prob))
 
 
 class InfectionForce(clt.InteractionTerm):
@@ -715,7 +934,9 @@ class InfectionForce(clt.InteractionTerm):
     def update_current_val(self,
                            inter_subpop_repo: FluInterSubpopRepo,
                            subpop_params: FluSubpopParams) -> None:
-        self.current_val = inter_subpop_repo.inf_from_home_region_movement_rate(self.subpop_name)
+        subpop_name = self.subpop_name
+        self.current_val = \
+            inter_subpop_repo.inf_total_rate(subpop_name)
 
 
 class FluSubpopModel(clt.SubpopModel):

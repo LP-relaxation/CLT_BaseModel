@@ -1201,11 +1201,11 @@ class InteractionTerm(StateVariable, ABC):
 class MetapopModel(ABC):
 
     def __init__(self,
-                 subpop_models: sc.objdict,
+                 subpop_models: dict,
                  travel_proportions: pd.DataFrame,
                  name: str = ""):
         
-        self.subpop_models = subpop_models
+        self.subpop_models = sc.objdict(subpop_models)
 
         self.assign_inter_subpop_repo(subpop_models, travel_proportions)
         

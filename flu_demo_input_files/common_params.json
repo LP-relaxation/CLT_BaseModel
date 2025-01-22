@@ -37,6 +37,6 @@
 	"viral_shedding_feces_mass": 255,
 	"relative_suscept_by_age": [[0.6],[0.6]],
 	"prop_time_away_by_age": [[0.4],[0.4]],
-	"contact_reduct_travel": 1.0,
-	"contact_reduct_symp": 1.0
+	"contact_multiplier_travel": 1.0,
+	"contact_multiplier_symp": 1.0
 }
