@@ -16,7 +16,7 @@ def convert_dict_vals_lists_to_arrays(d: dict) -> dict:
     return d
 
 
-def load_json(json_filepath: str) -> dict:
+def load_json_new_dict(json_filepath: str) -> dict:
 
     # Note: the "with open" is important for file handling
     #   and avoiding resource leaks -- otherwise,
@@ -28,6 +28,19 @@ def load_json(json_filepath: str) -> dict:
     # json does not support numpy, so we must convert
     #   lists to numpy arrays
     return convert_dict_vals_lists_to_arrays(data)
+
+
+def load_json_augment_dict(json_filepath: str, d: dict) -> dict:
+
+    with open(json_filepath, 'r') as file:
+        data = json.load(file)
+
+    data = convert_dict_vals_lists_to_arrays(data)
+
+    for key, val in data.items():
+        d[key] = val
+
+    return d
 
 
 def make_dataclass_from_dict(dataclass_ref: Type[DataClassProtocol],
@@ -77,7 +90,7 @@ def make_dataclass_from_json(dataclass_ref: Type[DataClassProtocol],
             assigned by json_filepath file contents.
     """
 
-    d = load_json(json_filepath)
+    d = load_json_new_dict(json_filepath)
 
     return make_dataclass_from_dict(dataclass_ref, d)
 

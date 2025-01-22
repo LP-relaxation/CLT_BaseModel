@@ -22,11 +22,11 @@ base_path = Path(__file__).parent / "flu_demo_input_files"
 
 config_filepath = base_path / "config.json"
 params_filepath = base_path / "common_params.json"
-state_vars_init_vals_filepath = base_path / "state_variables_init_vals.json"
+state_vars_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
 
-state_dict = clt.load_json(state_vars_init_vals_filepath)
-params_dict = clt.load_json(params_filepath)
-config_dict = clt.load_json(config_filepath)
+state_dict = clt.load_json_new_dict(state_vars_init_vals_filepath)
+params_dict = clt.load_json_new_dict(params_filepath)
+config_dict = clt.load_json_new_dict(config_filepath)
 
 flu_model = flu.FluSubpopModel(state_dict,
                                params_dict,

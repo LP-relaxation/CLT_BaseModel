@@ -23,13 +23,7 @@ base_path = Path(__file__).parent.parent / "flu_demo_input_files"
 class FluSubpopParams(clt.SubpopParams):
     """
     Data container for pre-specified and fixed epidemiological
-    parameters in FluModel flu model. Along with FluSubpopState,
-    is passed to get_current_rate and get_change_in_current_val.
-
-    Assume that FluSubpopParams fields are constant or piecewise
-    constant throughout the simulation. For variables that
-    are more complicated and time-dependent, use a EpiMetric
-    instead.
+    parameters in FluModel flu model.
 
     Each field of datatype np.ndarray must be A x L,
     where A is the number of age groups and L is the number of
@@ -258,10 +252,18 @@ class FluSubpopState(clt.SubpopState):
 
 
 class SusceptibleToExposed(clt.TransitionVariable):
+
     def get_current_rate(self,
                          state: FluSubpopState,
-                         params: FluSubpopParams):
-        if state.infection_force:
+                         params: FluSubpopParams) -> np.ndarray:
+
+        # If there is no InfectionForce Interaction instance,
+        #   then there is no travel model -- so, simulate
+        #   this subpopulation entirely independently and
+        #   use the simplified transition rate that does not
+        #   depend on travel dynamics
+
+        if state.infection_force is not None:
             return state.infection_force
         else:
             wtd_presymp_asymp = compute_wtd_presymp_asymp(state, params)
@@ -628,7 +630,10 @@ class FluContactMatrix(clt.Schedule):
 def compute_wtd_presymp_asymp(subpop_state: FluSubpopState,
                               subpop_params: FluSubpopParams):
     """
-    Sums across risk groups.
+    Returns weighted sum of IP and IA compartment for
+        subpopulation with given state and parameters.
+        IP and IA are weighted by their relative infectiousness
+        respectively, and then summed over risk groups.
     """
 
     # sum over risk groups
@@ -642,12 +647,14 @@ def compute_wtd_presymp_asymp(subpop_state: FluSubpopState,
 
 def compute_immunity_force(subpop_state: FluSubpopState,
                            subpop_params: FluSubpopParams):
+
     return 1 + (subpop_params.inf_risk_reduction *
                 subpop_state.pop_immunity_inf)
 
 
 def compute_common_coeff_infection_force(subpop_state: FluSubpopState,
                                          subpop_params: FluSubpopParams):
+
     beta = compute_beta_humidity_adjusted(subpop_state, subpop_params)
     relative_suscept_by_age = subpop_params.relative_suscept_by_age
     immunity_force = compute_immunity_force(subpop_state, subpop_params)
@@ -771,8 +778,6 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
                 (self.sum_wtd_visitors_by_age(subpop_name, pop_not_severe_by_age_cache) -
                  self.sum_prop_residents_traveling(subpop_name) *
                  pop_not_severe_by_age_cache[subpop_name])
-
-            # breakpoint()
 
         return effective_pop_by_age_cache
 
@@ -1260,5 +1265,5 @@ class FluMetapopModel(clt.MetapopModel):
         super().__init__(subpop_models, travel_proportions, name)
 
     def assign_inter_subpop_repo(self, subpop_models, travel_proportions):
-        self.inter_subpop_repo = FluInterSubpopRepo(subpop_models,
-                                                    travel_proportions)
+        return FluInterSubpopRepo(subpop_models,
+                                  travel_proportions)

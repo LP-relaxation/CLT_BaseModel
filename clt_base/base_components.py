@@ -50,7 +50,8 @@ def approx_binomial_probability_from_rate(rate: np.ndarray,
             length of time interval in simulation days.
 
     Returns:
-        np.ndarray: array of positive scalars, dimension A x L
+        np.ndarray:
+            array of positive scalars, dimension A x L
     """
 
     return 1 - np.exp(-rate * interval_length)
@@ -87,9 +88,15 @@ class Config:
 @dataclass
 class SubpopParams(ABC):
     """
-    Stores epidemiological parameters for
-        a given Subpopulation.
+    Data container for pre-specified and fixed epidemiological
+    parameters in model.
+
+    Assume that SubpopParams fields are constant or piecewise
+    constant throughout the simulation. For variables that
+    are more complicated and time-dependent, use an EpiMetric
+    instead.
     """
+
     pass
 
 
@@ -850,7 +857,7 @@ class TransitionVariable(ABC):
 
 class StateVariable:
     """
-    Parent class of Compartment, EpiMetric, DynamicVal, and Schedule
+    Parent class of Interaction, Compartment, EpiMetric, DynamicVal, and Schedule
     classes. All subclasses have the common attributes "init_val" and "current_val."
     """
 
@@ -1157,6 +1164,30 @@ class Schedule(StateVariable, ABC):
 
 class InteractionTerm(StateVariable, ABC):
 
+    """
+    Abstract base class for variables that depend on the state of
+    more than one SubpopModel (i.e., that depend on more than one
+    SubpopState). These variables are functions of how subpopulations
+    interact.
+
+    In contrast to other state variables, interaction terms
+    take in an InterSubpopRepo instance to update its current value.
+    Other state variables that are "local" and depend on
+    exactly one subpopulation only need to take in one SubpopState
+    and one SubpopParams instance to update its current value.
+
+    Inherits attributes from StateVariable.
+
+    Params:
+        history_vals_list (list[np.ndarray]):
+        each element is the same size of current_val, holds
+        history of interaction term realizations for age-risk
+        groups -- element t corresponds to previous current_val value
+        at end of simulation day t.
+
+    See __init__ docstring for other attributes.
+    """
+
     def __init__(self):
         self.history_vals_list = []
 
@@ -1172,11 +1203,6 @@ class InteractionTerm(StateVariable, ABC):
             inter_subpop_repo (InterSubpopRepo):
                 manages collection of subpop models with
                 methods for querying information.
-            travel_proportions (pd.DataFrame):
-                each i-j pair is the proportion of people in
-                subpopulation i who travel to j (values must be
-                in [0,1]), and row and column names correspond
-                to names of subpopulations
             subpop_params (SubpopParams):
                 holds values of Subpop's epidemiological parameters.
         """
@@ -1195,19 +1221,61 @@ class InteractionTerm(StateVariable, ABC):
         self.history_vals_list.append(copy.deepcopy(self.current_val))
 
     def clear_history(self) -> None:
+        """
+        Resets history_vals_list attribute to empty list.
+        """
+
         self.history_vals_list = []
 
 
 class MetapopModel(ABC):
+    """
+    Abstract base class that bundles SubpopModels linked using
+        a travel model.
+
+    Params:
+        inter_subpop_repo (InterSubpopRepo):
+            Accesses and manages SubpopState instances
+            of corresponding SubpopModels, and provides
+            methods to query current values.
+
+    See __init__ docstring for other attributes.
+    """
 
     def __init__(self,
                  subpop_models: dict,
                  travel_proportions: pd.DataFrame,
                  name: str = ""):
+        """
+        Params:
+            subpop_models (dict):
+                dictionary of SubpopModel instances -- keys are
+                unique names, values are the instances
+            travel_proportions (pd.DataFrame):
+                DataFrame with specific structure that identifies
+                traveling proportions. One column is named "subpop_name"
+                and has strings corresponding to SubpopModel names
+                (strings must match). For each string in "subpop_name" column,
+                there is another column with the same name. Other values in
+                DataFrame are floats in [0,1] corresponding to proportion of
+                people in subpop i who travel to subpop j. Subpop i is given
+                by row position in "subpop_name" column, and subpop j is given
+                by column position and corresponding name of that column.
+
+                Example valid DataFrame (corresponding to MetapopModel with
+                two SubpopModels, one named "north" and one named "south"):
+                    subpop_name,north,south
+                    "north",0.1,0.2
+                    "south",0.8,0.1
+            name (str):
+                unique identifier for metapopulation model.
+        """
         
         self.subpop_models = sc.objdict(subpop_models)
 
-        self.assign_inter_subpop_repo(subpop_models, travel_proportions)
+        self.inter_subpop_repo = \
+            self.assign_inter_subpop_repo(subpop_models,
+                                          travel_proportions)
         
         self.name = name
         
@@ -1218,12 +1286,25 @@ class MetapopModel(ABC):
 
     @abstractmethod
     def assign_inter_subpop_repo(self,
-                                 subpop_models,
-                                 travel_proportions):
+                                 subpop_models: sc.objdict,
+                                 travel_proportions: pd.DataFrame) -> InterSubpopRepo:
+        """
+        Concrete implementations must return an InterSubpopRepo instance,
+            which gets assigned to the inter_subpop_repo attribute.
+        """
         pass
 
     def extract_states_dict_from_models_dict(self,
                                              models_dict: sc.objdict) -> sc.objdict:
+        """
+        (Currently unused utility function.)
+
+        Takes objdict of subpop models, where keys are subpop model names and
+            values are the subpop model instances, and returns objdict of
+            subpop model states, where keys are subpop model names and
+            values are the subpop model SubpopState instances.
+        """
+
         states_dict = \
             sc.objdict({name: model.state for name, model in models_dict.items()})
 
@@ -1253,13 +1334,15 @@ class MetapopModel(ABC):
 class SubpopModel(ABC):
     """
     Contains and manages all necessary components for
-    simulating a compartmental model, including compartments
+    simulating a compartmental model for a given subpopulation.
+
+    Each SubpopModel instance includes compartments,
     epi metrics, dynamic vals, a data container for the current simulation
     state, transition variables and transition variable groups,
     epidemiological parameters, simulation experiment configuration
     parameters, and a random number generator.
 
-    All city-level models, regardless of disease type and
+    All city-level subpopulation models, regardless of disease type and
     compartment/transition structure, are instances of this class.
 
     When creating an instance, the order of elements does not matter
@@ -1280,14 +1363,6 @@ class SubpopModel(ABC):
             objdict of all the model's DynamicVal instances.
         schedules (sc.objdict):
             objdict of all the model's Schedule instances.
-        params (SubpopParams):
-            data container for the model's epidemiological parameters,
-            such as the "Greek letters" characterizing sojourn times
-            in compartments.
-        config (Config):
-            data container for the model's simulation configuration values.
-        RNG (np.random.Generator object):
-            used to generate random variables and control reproducibility.
         current_simulation_day (int):
             tracks current simulation day -- incremented by +1
             when config.timesteps_per_day discretized timesteps
@@ -1296,18 +1371,6 @@ class SubpopModel(ABC):
             tracks real-world date -- advanced by +1 day when
             config.timesteps_per_day discretized timesteps
             have completed.
-        state (SubpopState):
-        metapop_model (Optional[MetapopModel]):
-            if not None, is MetapopModel instance associated with
-            this SubpopModel.
-        metapop_state (Optional[MetapopState]):
-            if not None, is the MetapopState instance 
-            of the MetapopModel instance associated with this 
-            SubpopModel. 
-        metapop_params (Optional[MetapopParams]):
-            if not None, is the MetapopParams instance
-            of the MetapopModel instance associated with this
-            SubpopModel.
 
     See __init__ docstring for other attributes.
     """
@@ -1319,6 +1382,26 @@ class SubpopModel(ABC):
                  RNG: np.random.Generator,
                  name: str = "",
                  metapop_model: MetapopModel = None):
+
+        """
+        Params:
+            state (SubpopState):
+                holds current values of SubpopModel's state variables.
+            params (SubpopParams):
+                data container for the model's epidemiological parameters,
+                such as the "Greek letters" characterizing sojourn times
+                in compartments.
+            config (Config):
+                data container for the model's simulation configuration values.
+            RNG (np.random.Generator):
+                 used to generate random variables and control
+                 reproducibility.
+            name (str):
+                unique identifier of SubpopModel
+            metapop_model (Optional[MetapopModel]):
+                if not None, is the MetapopModel instance
+                associated with this SubpopModel.
+        """
 
         self.state = copy.deepcopy(state)
         self.params = copy.deepcopy(params)
@@ -1364,10 +1447,12 @@ class SubpopModel(ABC):
 
     def compute_total_pop_age_risk(self) -> np.ndarray:
         """
-
         Returns:
-             total_pop_age_risk (np.ndarray):
-
+             np.ndarray:
+                A x L array, where A is the number of age groups
+                and L is the number of risk groups, corresponding to
+                total population for that age-risk group (summed
+                over all compartments in the subpop model).
         """
 
         total_pop_age_risk = np.zeros((self.params.num_age_groups,
@@ -1445,7 +1530,8 @@ class SubpopModel(ABC):
         self._bit_generator = np.random.MT19937(seed=new_seed_number)
         self.RNG = np.random.Generator(self._bit_generator)
 
-    def simulate_until_time_period(self, last_simulation_day) -> None:
+    def simulate_until_time_period(self,
+                                   last_simulation_day: int) -> None:
         """
         Advance simulation model time until last_simulation_day.
 
@@ -1493,7 +1579,7 @@ class SubpopModel(ABC):
         Properly scales transition variable realizations and changes
         in dynamic vals by specified timesteps per day.
 
-        Parameters:
+        Args:
             num_timesteps (int):
                 number of timesteps per day -- used to determine time interval
                 length for discretization.
@@ -1524,6 +1610,12 @@ class SubpopModel(ABC):
         subpop_params = self.params
         current_real_date = self.current_real_date
 
+        # Important note: this order of updating is important,
+        #   because schedules do not depend on other state variables,
+        #   but dynamic vals may depend on schedules, and
+        #   interaction terms may depend on both schedules
+        #   and dynamic vals.
+
         schedules = self.schedules
         dynamic_vals = self.dynamic_vals
         interaction_terms = self.interaction_terms
@@ -1548,8 +1640,11 @@ class SubpopModel(ABC):
         # Sync Subpop simulation state
         self.state.sync_to_current_vals(self.interaction_terms)
 
-
-    def update_epi_metrics(self):
+    def update_epi_metrics(self) -> None:
+        """
+        Update current value attribute on each associated
+            EpiMetric instance.
+        """
 
         state = self.state
         params = self.params
@@ -1562,7 +1657,12 @@ class SubpopModel(ABC):
                                                  timesteps_per_day)
             metric.update_current_val()
 
-    def update_transition_rates(self):
+    def update_transition_rates(self) -> None:
+        """
+        Compute current transition rates for each transition variable,
+            and store this updated value on each variable's
+            current_rate attribute.
+        """
 
         state = self.state
         params = self.params
@@ -1570,7 +1670,14 @@ class SubpopModel(ABC):
         for tvar in self.transition_variables.values():
             tvar.current_rate = tvar.get_current_rate(state, params)
 
-    def sample_transitions(self):
+    def sample_transitions(self) -> None:
+        """
+        For each transition variable, sample a random realization
+            using its current rate. Handle jointly distributed transition
+            variables first (using TransitionVariableGroup logic), then
+            handle marginally distributed transition variables.
+            Use SubpopModel's RNG to generate random variables.
+        """
 
         RNG = self.RNG
         timesteps_per_day = self.config.timesteps_per_day
@@ -1591,7 +1698,13 @@ class SubpopModel(ABC):
             if not tvar.is_jointly_distributed:
                 tvar.current_val = tvar.get_realization(RNG, timesteps_per_day)
 
-    def update_compartments(self):
+    def update_compartments(self) -> None:
+        """
+        Update current value of each Compartment, by
+            looping through all TransitionVariable instances
+            and subtracting/adding their current values
+            from origin/destination compartments respectively.
+        """
 
         for tvar in self.transition_variables.values():
             tvar.update_origin_outflow()
@@ -1600,12 +1713,16 @@ class SubpopModel(ABC):
         for compartment in self.compartments.values():
             compartment.update_current_val()
 
+            # After updating the compartment's current value,
+            #   reset its inflow and outflow attributes, to
+            #   prepare for the next iteration.
             compartment.reset_inflow()
             compartment.reset_outflow()
 
     def increment_simulation_day(self) -> None:
         """
-        Move to next day in simulation
+        Move day counters to next simulation day, both
+            for integer simulation day and real date.
         """
 
         self.current_simulation_day += 1
@@ -1658,12 +1775,15 @@ class SubpopModel(ABC):
 
     def clear_history(self) -> None:
         """
-        Resets history_vals_list attribute of each Compartment,
-            EpiMetric, and DynamicVal to an empty list.
+        Resets history_vals_list attribute of each Interaction,
+            Compartment, EpiMetric, and DynamicVal to an empty list.
+            Clears current rates and current values of
+            TransitionVariable and TransitionVariableGroup instances.
         """
 
         # Schedules do not have history since they are deterministic
-        for svar in self.compartments.values() + \
+        for svar in self.interaction_terms.values() +\
+                    self.compartments.values() + \
                     self.epi_metrics.values() + \
                     self.dynamic_vals.values():
             svar.clear_history()
@@ -1676,7 +1796,20 @@ class SubpopModel(ABC):
             tvargroup.current_vals_list = []
 
     def find_name_by_compartment(self,
-                                 target_compartment: Compartment):
+                                 target_compartment: Compartment) -> str:
+        """
+        Given Compartment, returns name of that Compartment
+
+        Args:
+            target_compartment (Compartment):
+                Compartment object with a name to look up
+
+        Returns:
+            str:
+                Compartment name, given by the key to look
+                it up in the SubpopModel's compartments objdict
+        """
+
         for name, compartment in self.compartments.items():
             if compartment == target_compartment:
                 return name
