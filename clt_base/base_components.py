@@ -1448,7 +1448,7 @@ class SubpopModel(ABC):
     def compute_total_pop_age_risk(self) -> np.ndarray:
         """
         Returns:
-             np.ndarray:
+            np.ndarray:
                 A x L array, where A is the number of age groups
                 and L is the number of risk groups, corresponding to
                 total population for that age-risk group (summed

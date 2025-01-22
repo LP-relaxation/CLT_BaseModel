@@ -7,12 +7,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 import clt_base as clt
-import flu_model as flu
+import SIR_model as SIR
 
 import copy
 
 # Obtain path to folder with JSON input files
-base_path = Path(__file__).parent / "flu_demo_input_files"
+base_path = Path(__file__).parent / "SIR_demo_input_files"
 
 # Get filepaths for initial values of state variables, fixed parameters,
 #   and configuration
@@ -29,31 +29,18 @@ travel_proportions = pd.read_csv(base_path / "travel_proportions.csv")
 bit_generator = np.random.MT19937(88888)
 jumped_bit_generator = bit_generator.jumped(1)
 
-north = flu.FluSubpopModel(state_dict,
+north = SIR.SIRSubpopModel(state_dict,
                            params_dict,
                            config_dict,
                            np.random.Generator(bit_generator),
                            name="north")
 
-north.run_model_checks()
 north.display()
 
-south = flu.FluSubpopModel(state_dict,
-                           params_dict,
-                           config_dict,
-                           np.random.Generator(jumped_bit_generator),
-                           name="south")
+north.simulate_until_time_period(100)
 
-south.run_model_checks()
-south.display()
-
-flu_demo_model = flu.FluMetapopModel({"north": north, "south": south},
-                                     travel_proportions)
-
-flu_demo_model.simulate_until_time_period(100)
+clt.plot_subpop_total_infected_deaths(north)
 
 breakpoint()
 
-clt.plot_metapop_epi_metrics(flu_demo_model)
-clt.plot_metapop_total_infected_deaths(flu_demo_model)
-clt.plot_metapop_basic_compartment_history(flu_demo_model)
+
