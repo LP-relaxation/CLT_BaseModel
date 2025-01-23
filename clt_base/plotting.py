@@ -58,7 +58,7 @@ def plot_metapop_decorator(plot_func):
         fig, axes = plt.subplots(num_rows, num_cols, figsize=(5 * num_cols, 4 * num_rows))
         axes = axes.flatten()
 
-        plot_func(metapop_model=metapop_model, axe=axes)
+        plot_func(metapop_model=metapop_model, axes=axes)
 
         # Turn off any unused subplots
         for j in range(num_plots, len(axes)):

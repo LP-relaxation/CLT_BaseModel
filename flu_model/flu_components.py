@@ -25,8 +25,8 @@ class FluSubpopParams(clt.SubpopParams):
     Data container for pre-specified and fixed epidemiological
     parameters in FluModel flu model.
 
-    Each field of datatype np.ndarray must be A x L,
-    where A is the number of age groups and L is the number of
+    Each field of datatype np.ndarray must be |A| x |R|,
+    where |A| is the number of age groups and |R| is the number of
     risk groups. Note: this means all arrays should be 2D.
     See FluSubpopState docstring for important formatting note
     on 2D arrays.
@@ -47,30 +47,30 @@ class FluSubpopParams(clt.SubpopParams):
         humidity_impact (positive float):
             coefficient that determines how much absolute
             humidity affects beta_baseline.
-        immunity_hosp_increase_factor (positive float):
+        hosp_immune_gain (positive float):
             factor by which population-level immunity
             against hospitalization grows after each
             case that recovers.
-        immunity_inf_increase_factor (positive float):
+        inf_immune_gain (positive float):
             factor by which population-level immunity
             against infection grows after each case
                 that recovers.
-        immunity_saturation (np.ndarray of positive floats):
+        immune_saturation (np.ndarray of positive floats):
             constant(s) modeling saturation of antibody
             production of individuals.
-        waning_factor_hosp (positive float):
+        hosp_immune_wane (positive float):
             rate at which infection-induced immunity
             against hospitalization wanes.
-        waning_factor_inf (positive float):
+        inf_immune_wane (positive float):
             rate at which infection-induced immunity
             against infection wanes.
-        hosp_risk_reduction (positive float in [0,1]):
+        hosp_risk_reduce (positive float in [0,1]):
             reduction in hospitalization risk from
             infection-induced immunity.
-        inf_risk_reduction (positive float in [0,1]):
+        inf_risk_reduce (positive float in [0,1]):
             reduction in infection risk
             from infection-induced immunity.
-        death_risk_reduction (positive float in [0,1]):
+        death_risk_reduce (positive float in [0,1]):
             reduction in death risk from infection-induced immunity.
         R_to_S_rate (positive float):
             rate at which people in R move to S.
@@ -109,22 +109,22 @@ class FluSubpopParams(clt.SubpopParams):
         IA_relative_inf (positive float):
             relative infectiousness of asymptomatic to symptomatic
             people (IA to IS compartment).
-        viral_shedding_peak (positive float):
+        viral_shed_peak (positive float):
             the peak time of an individual's viral shedding.
-        viral_shedding_magnitude (positive float):
+        viral_shed_magnitude (positive float):
             magnitude of the viral shedding.
-        viral_shedding_duration (positive float):
+        viral_shed_duration (positive float):
             duration of the viral shedding,
-            must be larger than viral_shedding_peak
-        viral_shedding_feces_mass (positive float):
+            must be larger than viral_shed_peak
+        viral_shed_feces_mass (positive float):
             average mass of feces (gram)
         relative_suscept_by_age (np.ndarray of positive floats in [0,1]):
             relative susceptibility to infection by age group
         prop_time_away_by_age (np.ndarray of positive floats in [0,1]):
             total proportion of time spent away from home by age group
-        contact_multiplier_travel (positive float in [0,1]):
+        contact_mult_travel (positive float in [0,1]):
             multiplier to reduce contact rate of traveling individuals
-        contact_multiplier_symp (positive float in [0,1]):
+        contact_mult_symp (positive float in [0,1]):
             multiplier to reduce contact rate of symptomatic individuals
     """
 
@@ -133,14 +133,14 @@ class FluSubpopParams(clt.SubpopParams):
     beta_baseline: Optional[float] = None
     total_pop_age_risk: Optional[np.ndarray] = None
     humidity_impact: Optional[float] = None
-    immunity_hosp_increase_factor: Optional[float] = None
-    immunity_inf_increase_factor: Optional[float] = None
-    immunity_saturation: Optional[np.ndarray] = None
-    waning_factor_hosp: Optional[float] = None
-    waning_factor_inf: Optional[float] = None
-    hosp_risk_reduction: Optional[float] = None
-    inf_risk_reduction: Optional[float] = None
-    death_risk_reduction: Optional[float] = None
+    hosp_immune_gain: Optional[float] = None
+    inf_immune_gain: Optional[float] = None
+    immune_saturation: Optional[np.ndarray] = None
+    hosp_immune_wane: Optional[float] = None
+    inf_immune_wane: Optional[float] = None
+    hosp_risk_reduce: Optional[float] = None
+    inf_risk_reduce: Optional[float] = None
+    death_risk_reduce: Optional[float] = None
     R_to_S_rate: Optional[float] = None
     E_to_I_rate: Optional[float] = None
     IP_to_IS_rate: Optional[float] = None
@@ -154,14 +154,14 @@ class FluSubpopParams(clt.SubpopParams):
     H_to_D_adjusted_prop: Optional[np.ndarray] = None
     IP_relative_inf: Optional[float] = None
     IA_relative_inf: Optional[float] = None
-    viral_shedding_peak: Optional[float] = None  # viral shedding parameters
-    viral_shedding_magnitude: Optional[float] = None  # viral shedding parameters
-    viral_shedding_duration: Optional[float] = None  # viral shedding parameters
-    viral_shedding_feces_mass: Optional[float] = None  # viral shedding parameters
+    viral_shed_peak: Optional[float] = None  # viral shedding parameters
+    viral_shed_magnitude: Optional[float] = None  # viral shedding parameters
+    viral_shed_duration: Optional[float] = None  # viral shedding parameters
+    viral_shed_feces_mass: Optional[float] = None  # viral shedding parameters
     relative_suscept_by_age: Optional[np.ndarray] = None
     prop_time_away_by_age: Optional[np.ndarray] = None
-    contact_multiplier_travel: Optional[float] = None
-    contact_multiplier_symp: Optional[float] = None
+    contact_mult_travel: Optional[float] = None
+    contact_mult_symp: Optional[float] = None
 
 
 @dataclass
@@ -171,8 +171,8 @@ class FluSubpopState(clt.SubpopState):
     Compartment initial values and EpiMetric initial values
     in FluModel flu model.
 
-    Each field below should be A x L np.ndarray, where
-    A is the number of age groups and L is the number of risk groups.
+    Each field below should be |A| x |R| np.ndarray, where
+    |A| is the number of age groups and |R| is the number of risk groups.
     Note: this means all arrays should be 2D. Even if there is
     1 age group and 1 risk group (no group stratification),
     each array should be 1x1, which is two-dimensional.
@@ -217,11 +217,10 @@ class FluSubpopState(clt.SubpopState):
             used as seasonality parameter that influences
             transmission rate beta_baseline.
         flu_contact_matrix (np.ndarray of positive floats):
-            A x L x A x L array, where A is the number of age
-            groups and L is the number of risk groups --
-            element (a, l, a', l') corresponds to the number of
-            contacts that a person in age-risk group a,l
-            has with people in age-risk group a', l'.
+            |A| x |A| array, where |A| is the number of age
+            groups -- element (a, a') corresponds to the number 
+            of contacts that a person in age group a
+            has with people in age-risk group a'.
         beta_reduct (float in [0,1]):
             starting value of DynamicVal "beta_reduct" on
             starting day of simulation -- this DynamicVal
@@ -252,12 +251,33 @@ class FluSubpopState(clt.SubpopState):
 
 
 class SusceptibleToExposed(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "S" to "E" compartment. The functional form is the same across
+    subpopulations.
+
+    The rate depends on the corresponding subpopulation's
+    contact matrix, transmission rate beta, number
+    infected (symptomatic, asymptomatic, and pre-symptomatic),
+    and population-level immunity against infection,
+    among other parameters.
+
+    This is the most complicated transition variable in the
+    flu model. If using metapopulation model (travel model), then
+    the rate depends on an InfectionForce instance that is
+    a function of other subpopulations' states and parameters,
+    and travel between subpopulations.
+
+    If there is no metapopulation model, then there is no
+    InfectionForce InteractionTerm instance, and the rate
+    is much simpler.
+    """
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
 
-        # If there is no InfectionForce Interaction instance,
+        # If there is no InfectionForce InteractionTerm instance,
         #   then there is no travel model -- so, simulate
         #   this subpopulation entirely independently and
         #   use the simplified transition rate that does not
@@ -275,77 +295,191 @@ class SusceptibleToExposed(clt.TransitionVariable):
 
 
 class RecoveredToSusceptible(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "R" to "S" compartment. The functional form is the same across
+    subpopulations.
+    """
+
     def get_current_rate(self,
                          state: FluSubpopState,
-                         params: FluSubpopParams):
-        return np.full((params.num_age_groups, params.num_risk_groups), params.R_to_S_rate)
+                         params: FluSubpopParams) -> np.ndarray:
+
+        return np.full((params.num_age_groups, params.num_risk_groups),
+                       params.R_to_S_rate)
 
 
 class ExposedToAsymp(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "E" to "IA" compartment. The functional form is the same across
+    subpopulations.
+
+    Each ExposedToAsymp instance forms a TransitionVariableGroup with
+    a corresponding ExposedToPresymp instance (these two
+    transition variables are jointly distributed).
+    """
+
     def get_current_rate(self,
                          state: FluSubpopState,
-                         params: FluSubpopParams):
+                         params: FluSubpopParams) -> np.ndarray:
+
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.E_to_I_rate * params.E_to_IA_prop)
 
 
 class ExposedToPresymp(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "E" to "IP" compartment. The functional form is the same across
+    subpopulations.
+
+    Each ExposedToPresymp instance forms a TransitionVariableGroup with
+    a corresponding ExposedToAsymp instance (these two
+    transition variables are jointly distributed).
+    """
+
     def get_current_rate(self,
                          state: FluSubpopState,
-                         params: FluSubpopParams):
+                         params: FluSubpopParams) -> np.ndarray:
+
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.E_to_I_rate * (1 - params.E_to_IA_prop))
 
 
 class PresympToSymp(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "IP" to "IS" compartment. The functional form is the same across
+    subpopulations.
+    """
+
     def get_current_rate(self,
                          state: FluSubpopState,
-                         params: FluSubpopParams):
+                         params: FluSubpopParams) -> np.ndarray:
+
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.IP_to_IS_rate)
 
 
 class SympToRecovered(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "IS" to "R" compartment. The functional form is the same across
+    subpopulations.
+
+    Each SympToRecovered instance forms a TransitionVariableGroup with
+    a corresponding SympToHosp instance (these two
+    transition variables are jointly distributed).
+    """
+
     def get_current_rate(self,
                          state: FluSubpopState,
-                         params: FluSubpopParams):
+                         params: FluSubpopParams) -> np.ndarray:
+
         return np.full((params.num_age_groups, params.num_risk_groups),
                        (1 - params.IS_to_H_adjusted_prop) * params.IS_to_R_rate)
 
 
 class AsympToRecovered(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "IA" to "R" compartment. The functional form is the same across
+    subpopulations.
+    """
+
     def get_current_rate(self,
                          state: FluSubpopState,
-                         params: FluSubpopParams):
+                         params: FluSubpopParams) -> np.ndarray:
+
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.IA_to_R_rate)
 
 
 class HospToRecovered(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "H" to "R" compartment. The functional form is the same across
+    subpopulations.
+
+    Each HospToRecovered instance forms a TransitionVariableGroup with
+    a corresponding HospToDead instance (these two
+    transition variables are jointly distributed).
+    """
+
     def get_current_rate(self,
                          state: FluSubpopState,
-                         params: FluSubpopParams):
+                         params: FluSubpopParams) -> np.ndarray:
+
         return np.full((params.num_age_groups, params.num_risk_groups),
                        (1 - params.H_to_D_adjusted_prop) * params.H_to_R_rate)
 
 
 class SympToHosp(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "IS" to "H" compartment. The functional form is the same across
+    subpopulations.
+
+    Each SympToHosp instance forms a TransitionVariableGroup with
+    a corresponding SympToRecovered instance (these two
+    transition variables are jointly distributed).
+
+    The rate of SympToHosp decreases as population-level immunity
+    against hospitalization increases.
+    """
+
     def get_current_rate(self,
                          state: FluSubpopState,
-                         params: FluSubpopParams):
+                         params: FluSubpopParams) -> np.ndarray:
         return np.asarray(params.IS_to_H_rate * params.IS_to_H_adjusted_prop /
-                          (1 + params.hosp_risk_reduction * state.pop_immunity_hosp))
+                          (1 + params.hosp_risk_reduce * state.pop_immunity_hosp))
 
 
 class HospToDead(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "H" to "D" compartment. The functional form is the same across
+    subpopulations.
+
+    Each HospToDead instance forms a TransitionVariableGroup with
+    a corresponding HospToRecovered instance (these two
+    transition variables are jointly distributed).
+
+    The rate of HospToDead decreases as population-level immunity
+    against hospitalization increases.
+    """
+
     def get_current_rate(self,
                          state: FluSubpopState,
-                         params: FluSubpopParams):
+                         params: FluSubpopParams) -> np.ndarray:
         return np.asarray(params.H_to_D_adjusted_prop * params.H_to_D_rate /
-                          (1 + params.death_risk_reduction * state.pop_immunity_hosp))
+                          (1 + params.death_risk_reduce * state.pop_immunity_hosp))
 
 
 class PopulationImmunityHosp(clt.EpiMetric):
+    """
+    EpiMetric-derived class for population-level immunity
+    from hospitalization.
+    
+    Population-level immunity increases as people move
+    from "R" to "S" -- this is a design choice intended
+    to avoid "double-counting." People in "R" cannot be
+    infected at all. People who move from "R" to "S" 
+    are susceptible again, but these recently-recovered people 
+    should have partial immunity. To handle this phenomenon,
+    the population-level immunity epi metric increases as
+    people move from "R" to "S." 
+
+    Params:
+        R_to_S (RecoveredToSusceptible):
+            RecoveredToSusceptible TransitionVariable
+            in the SubpopModel -- it is an attribute
+            because the population-level immunity
+            increases as people move from "R" to "S".
+
+    See parent class docstring for other attributes.
+    """
 
     def __init__(self, init_val, R_to_S):
         super().__init__(init_val)
@@ -354,15 +488,16 @@ class PopulationImmunityHosp(clt.EpiMetric):
     def get_change_in_current_val(self,
                                   state: FluSubpopState,
                                   params: FluSubpopParams,
-                                  num_timesteps: int):
+                                  num_timesteps: int) -> np.ndarray:
+
         pop_immunity_hosp = state.pop_immunity_hosp
 
-        immunity_gain_numerator = params.immunity_hosp_increase_factor * self.R_to_S.current_val
+        immunity_gain_numerator = params.hosp_immune_gain * self.R_to_S.current_val
         immunity_gain_denominator = params.total_pop_age_risk * \
-                                    (1 + params.immunity_saturation * pop_immunity_hosp)
+                                    (1 + params.immune_saturation * pop_immunity_hosp)
 
         immunity_gain = immunity_gain_numerator / immunity_gain_denominator
-        immunity_loss = params.waning_factor_hosp * state.pop_immunity_hosp
+        immunity_loss = params.hosp_immune_wane * state.pop_immunity_hosp
 
         final_change = (immunity_gain - immunity_loss) / num_timesteps
 
@@ -370,6 +505,25 @@ class PopulationImmunityHosp(clt.EpiMetric):
 
 
 class PopulationImmunityInf(clt.EpiMetric):
+    """
+    EpiMetric-derived class for population-level immunity
+    from infection.
+
+    Analogous to PopulationImmunityHosp -- see that class's
+    docstring for more information. Update formula is the 
+    same except for inf_immune_gain and
+    inf_immune_wane. 
+
+    Params:
+        R_to_S (RecoveredToSusceptible):
+            RecoveredToSusceptible TransitionVariable
+            in the SubpopModel -- it is an attribute
+            because the population-level immunity
+            increases as people move from "R" to "S".
+
+    See parent class docstring for other attributes.
+    """
+    
     def __init__(self, init_val, R_to_S):
         super().__init__(init_val)
         self.R_to_S = R_to_S
@@ -380,12 +534,12 @@ class PopulationImmunityInf(clt.EpiMetric):
                                   num_timesteps: int):
         pop_immunity_inf = np.float64(state.pop_immunity_inf)
 
-        immunity_gain_numerator = params.immunity_inf_increase_factor * self.R_to_S.current_val
+        immunity_gain_numerator = params.inf_immune_gain * self.R_to_S.current_val
         immunity_gain_denominator = params.total_pop_age_risk * \
-                                    (1 + params.immunity_saturation * pop_immunity_inf)
+                                    (1 + params.immune_saturation * pop_immunity_inf)
 
         immunity_gain = immunity_gain_numerator / immunity_gain_denominator
-        immunity_loss = params.waning_factor_inf * state.pop_immunity_inf
+        immunity_loss = params.inf_immune_wane * state.pop_immunity_inf
 
         final_change = (immunity_gain - immunity_loss) / num_timesteps
 
@@ -401,10 +555,10 @@ class Wastewater(clt.EpiMetric):
         # preprocess
         self.flag_preprocessed = False
         self.viral_shedding = []
-        self.viral_shedding_duration = None
-        self.viral_shedding_magnitude = None
-        self.viral_shedding_peak = None
-        self.viral_shedding_feces_mass = None
+        self.viral_shed_duration = None
+        self.viral_shed_magnitude = None
+        self.viral_shed_peak = None
+        self.viral_shed_feces_mass = None
         self.S_to_E_len = 5000  # preset to match the simulation time horizon
         self.S_to_E_history = np.zeros(self.S_to_E_len)
         self.cur_time_stamp = -1
@@ -437,7 +591,7 @@ class Wastewater(clt.EpiMetric):
         cur_time_stamp = self.cur_time_stamp
 
         # discrete convolution
-        len_duration = self.viral_shedding_duration * self.num_timesteps
+        len_duration = self.viral_shed_duration * self.num_timesteps
 
         if self.cur_time_stamp >= len_duration - 1:
             current_val = self.S_to_E_history[
@@ -454,26 +608,26 @@ class Wastewater(clt.EpiMetric):
                    params: FluSubpopParams,
                    num_timesteps: int):
         # store the parameters locally
-        self.viral_shedding_duration = copy.deepcopy(params.viral_shedding_duration)
-        self.viral_shedding_magnitude = copy.deepcopy(params.viral_shedding_magnitude)
-        self.viral_shedding_peak = copy.deepcopy(params.viral_shedding_peak)
-        self.viral_shedding_feces_mass = copy.deepcopy(params.viral_shedding_feces_mass)
+        self.viral_shed_duration = copy.deepcopy(params.viral_shed_duration)
+        self.viral_shed_magnitude = copy.deepcopy(params.viral_shed_magnitude)
+        self.viral_shed_peak = copy.deepcopy(params.viral_shed_peak)
+        self.viral_shed_feces_mass = copy.deepcopy(params.viral_shed_feces_mass)
         self.num_timesteps = copy.deepcopy(num_timesteps)
         num_timesteps = np.float64(num_timesteps)
         self.viral_shedding = []
         # trapezoidal integral
-        for time_idx in range(int(params.viral_shedding_duration * self.num_timesteps)):
+        for time_idx in range(int(params.viral_shed_duration * self.num_timesteps)):
             cur_time_point = time_idx / num_timesteps
             next_time_point = (time_idx + 1) / num_timesteps
-            next_time_log_viral_shedding = params.viral_shedding_magnitude * next_time_point / \
-                                           (params.viral_shedding_peak ** 2 + next_time_point ** 2)
+            next_time_log_viral_shedding = params.viral_shed_magnitude * next_time_point / \
+                                           (params.viral_shed_peak ** 2 + next_time_point ** 2)
             if time_idx == 0:
-                interval_viral_shedding = params.viral_shedding_feces_mass * 0.5 * (
+                interval_viral_shedding = params.viral_shed_feces_mass * 0.5 * (
                         10 ** next_time_log_viral_shedding) / num_timesteps
             else:
-                cur_time_log_viral_shedding = params.viral_shedding_magnitude * cur_time_point / \
-                                              (params.viral_shedding_peak ** 2 + cur_time_point ** 2)
-                interval_viral_shedding = params.viral_shedding_feces_mass * 0.5 \
+                cur_time_log_viral_shedding = params.viral_shed_magnitude * cur_time_point / \
+                                              (params.viral_shed_peak ** 2 + cur_time_point ** 2)
+                interval_viral_shedding = params.viral_shed_feces_mass * 0.5 \
                                           * (
                                                   10 ** cur_time_log_viral_shedding + 10 ** next_time_log_viral_shedding) / num_timesteps
             self.viral_shedding.append(interval_viral_shedding)
@@ -497,10 +651,10 @@ class Wastewater(clt.EpiMetric):
         """
         self.flag_preprocessed = False
         self.viral_shedding = []
-        self.viral_shedding_duration = None
-        self.viral_shedding_magnitude = None
-        self.viral_shedding_peak = None
-        self.viral_shedding_feces_mass = None
+        self.viral_shed_duration = None
+        self.viral_shed_magnitude = None
+        self.viral_shed_peak = None
+        self.viral_shed_feces_mass = None
         self.S_to_E_len = 5000  # preset to match the simulation time horizon
         self.S_to_E_history = np.zeros(self.S_to_E_len)
         self.cur_time_stamp = -1
@@ -573,12 +727,20 @@ def absolute_humidity_func(current_date: datetime.date) -> float:
 
 
 class AbsoluteHumidity(clt.Schedule):
+    """
+    Schedule-derived class for absolute humidity.
+    Depends on real date (absolute humidity is higher in the summer
+    and lower in the winter in the US).
+    """
+
     def update_current_val(self, current_date: datetime.date) -> None:
         self.current_val = absolute_humidity_func(current_date)
 
 
 class FluContactMatrix(clt.Schedule):
     """
+    Flu contact matrix.
+
     Attributes:
         timeseries_df (pd.DataFrame):
             has a "date" column with strings in format "YYYY-MM-DD"
@@ -586,7 +748,7 @@ class FluContactMatrix(clt.Schedule):
             named "is_school_day" (bool) and "is_work_day" (bool)
             corresponding to type of day.
         total_contact_matrix (np.ndarray):
-            A x A np.ndarray, where A is the number of age groups
+            |A| x |A| np.ndarray, where |A| is the number of age groups
 
     See parent class docstring for other attributes.
     """
@@ -606,9 +768,6 @@ class FluContactMatrix(clt.Schedule):
 
     def update_current_val(self, current_date: datetime.date) -> None:
         """
-        Subpopclasses must provide a concrete implementation of
-        updating self.current_val in-place
-
         Args:
             current_date (datetime.date):
                 real-world date corresponding to
@@ -628,12 +787,20 @@ class FluContactMatrix(clt.Schedule):
 
 
 def compute_wtd_presymp_asymp(subpop_state: FluSubpopState,
-                              subpop_params: FluSubpopParams):
+                              subpop_params: FluSubpopParams) -> np.ndarray:
     """
     Returns weighted sum of IP and IA compartment for
         subpopulation with given state and parameters.
         IP and IA are weighted by their relative infectiousness
         respectively, and then summed over risk groups.
+
+    Returns:
+        np.ndarray:
+            |A| x 1 array -- where |A| is the number of age
+            groups -- the ith element corresponds to the
+            weighted sum of presymptomatic and asymptomatic
+            individuals, also summed across all risk groups,
+            for age group i.
     """
 
     # sum over risk groups
@@ -646,14 +813,37 @@ def compute_wtd_presymp_asymp(subpop_state: FluSubpopState,
 
 
 def compute_immunity_force(subpop_state: FluSubpopState,
-                           subpop_params: FluSubpopParams):
+                           subpop_params: FluSubpopParams) -> np.ndarray:
+    """
+    Computes a denominator that shows up repeatedly in
+    travel model calculations.
 
-    return 1 + (subpop_params.inf_risk_reduction *
+    Returns:
+        np.ndarray:
+            |A| x |R| array -- where |A| is the number of age groups
+            and |R| is the number of risk groups -- representing
+            the force of population-level immunity against infection
+            -- used in the denominator of many computations
+    """
+
+    return 1 + (subpop_params.inf_risk_reduce *
                 subpop_state.pop_immunity_inf)
 
 
 def compute_common_coeff_infection_force(subpop_state: FluSubpopState,
-                                         subpop_params: FluSubpopParams):
+                                         subpop_params: FluSubpopParams) -> np.ndarray:
+    """
+    Computes a coefficient that shows up repeatedly in
+    travel model calculations.
+
+    Returns:
+        np.ndarray:
+            |A| x |R| array -- where |A| is the number of age groups
+            and |R| is the number of risk groups -- representing
+            a kind of baseline transmission rate, adjusted for
+            population-level immunity -- used as the coefficient of
+            many computations
+    """
 
     beta = compute_beta_humidity_adjusted(subpop_state, subpop_params)
     relative_suscept_by_age = subpop_params.relative_suscept_by_age
@@ -663,14 +853,26 @@ def compute_common_coeff_infection_force(subpop_state: FluSubpopState,
 
 
 def compute_beta_humidity_adjusted(subpop_state: FluSubpopState,
-                                   subpop_params: FluSubpopParams):
-    # We subtract absolute_humidity because
-    # higher humidity means less transmission
+                                   subpop_params: FluSubpopParams) -> float:
+    """
+    Computes and returns humidity-adjusted beta.
+    """
+
+    # We subtract absolute_humidity because higher humidity means less transmission
     return (1 - subpop_state.absolute_humidity * subpop_params.humidity_impact) \
            * subpop_params.beta_baseline
 
 
-def compute_pop_sum_by_age(subpop_params: FluSubpopParams):
+def compute_pop_sum_by_age(subpop_params: FluSubpopParams) -> np.ndarray:
+    """
+    Returns:
+        np.ndarray:
+            |A| x 1 array -- where |A| is the number of age groups --
+            where ith element corresponds to total population
+            (across all compartments, including "D", and across all risk groups)
+            in age group i
+    """
+
     return np.sum(subpop_params.total_pop_age_risk, axis=1, keepdims=True)
 
 
@@ -738,7 +940,7 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
 
             pop_not_severe_by_age_cache[subpop_name] = \
                 (pop_by_age_cache[subpop_name] -
-                 subpop_model.params.contact_multiplier_symp *
+                 subpop_model.params.contact_mult_symp *
                  np.sum(subpop_state.IS, axis=1, keepdims=True) +
                  np.sum(subpop_state.H, axis=1, keepdims=True))
 
@@ -823,7 +1025,7 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
 
             else:
 
-                contact_multiplier_symp = subpop_params.contact_multiplier_symp
+                contact_mult_symp = subpop_params.contact_mult_symp
 
                 prop_residents_traveling_pairwise = \
                     self.prop_residents_traveling_pairwise(visitors_subpop_name,
@@ -838,7 +1040,7 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
 
                 wtd_infected_by_age = \
                     wtd_no_symp_by_age_cache[visitors_subpop_name] + \
-                    contact_multiplier_symp * np.sum(visitors_subpop_state.IS, axis=1, keepdims=True)
+                    contact_mult_symp * np.sum(visitors_subpop_state.IS, axis=1, keepdims=True)
 
                 wtd_infected_to_pop_sum_ratio = \
                     np.divide(wtd_infected_by_age,
@@ -905,7 +1107,7 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
 
         common_coeff = compute_common_coeff_infection_force(subpop_state, subpop_params)
 
-        contact_multiplier_travel = subpop_params.contact_multiplier_travel
+        contact_mult_travel = subpop_params.contact_mult_travel
 
         wtd_no_symp_by_age_cache = \
             self.create_wtd_no_symp_by_age_cache()
@@ -925,7 +1127,7 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
                                                    effective_pop_by_age_cache)
 
         return common_coeff * (inf_from_home_region_movement_prob +
-                               contact_multiplier_travel *
+                               contact_mult_travel *
                                (inf_from_visitors_prob + inf_from_residents_traveling_prob))
 
 
@@ -954,13 +1156,15 @@ class FluSubpopModel(clt.SubpopModel):
     instance with S-E-I-H-R-D compartments and pop_immunity_inf
     and pop_immunity_hosp epi metrics. 
     
-    The structure is as follows:
-        - S = R_to_S - S_to_E
-        - E = S_to_E - E_to_IP - E_to_IA
-        - I = new_infected - IS_to_R - IS_to_H
-        - H = IS_to_H - H_to_R - H_to_D
-        - R = IS_to_R + H_to_R - R_to_S
-        - D = H_to_D
+    The update structure is as follows:
+        - S <- S + R_to_S - S_to_E
+        - E <- E + S_to_E - E_to_IP - E_to_IA
+        - IA <- IA + E_to_IA - IA_to_R 
+        - IP <- IP + E_to_IP - IP_to_IS
+        - IS <- IS + IP_to_IS - IS_to_R - IS_to_H
+        - H <- H + IS_to_H - H_to_R - H_to_D
+        - R <- R + IS_to_R + H_to_R - R_to_S
+        - D <- D + H_to_D
 
     The following are TransitionVariable instances:
         - R_to_S is a RecoveredToSusceptible instance
@@ -1036,22 +1240,24 @@ class FluSubpopModel(clt.SubpopModel):
         super().__init__(state, params, config, RNG, name)
 
     def create_interaction_terms(self) -> sc.objdict:
+        """
+        If there is no associated MetapopModel, then
+        there is no travel model, so do not create InfectionForce
+        instance -- there are no interaction terms for this
+        SubpopModel.
+        """
 
         if self.metapop_model:
-
             interaction_terms = sc.objdict()
-
             interaction_terms["infection_force"] = InfectionForce(self.name)
-
             return interaction_terms
 
         else:
-
             return sc.objdict()
 
     def create_compartments(self) -> sc.objdict:
         """
-        Create Compartment instances S-E-I-H-R-D (6 compartments total),
+        Create Compartment instances S-E-IA-IP-IS-H-R-D (7 compartments total),
             save in sc.objdict, and return objdict
         """
 
@@ -1088,7 +1294,7 @@ class FluSubpopModel(clt.SubpopModel):
 
     def create_transition_variables(self) -> sc.objdict:
         """
-        Create all TransitionVariable instances (7 transition variables total),
+        Create all TransitionVariable instances,
             save in sc.objdict, and return objdict
         """
 
@@ -1098,6 +1304,7 @@ class FluSubpopModel(clt.SubpopModel):
         #   has been created -- so these variables do exist
         # TODO: there is potentially a better way to design this
         #   (in SubpopModel) to be more EXPLICIT -- think about this...
+
         transition_type = self.config.transition_type
         compartments = self.compartments
 
@@ -1193,6 +1400,19 @@ class FluSubpopModel(clt.SubpopModel):
         return epi_metrics
 
     def run_model_checks(self):
+        """
+        Run flu model checks.
+
+        Input checks:
+        - SubpopState and SubpopParams instances should have
+            fields with nonnegative values.
+        - Initial values of compartments should be nonnegative
+            integers.
+        - Population sum of compartments should match
+            total population computed at initialization
+            (user should not change initial values
+            after initialization).
+        """
 
         print(">>> Running flu model checks... \n")
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -1200,8 +1420,9 @@ class FluSubpopModel(clt.SubpopModel):
         error_counter = 0
 
         state = self.state
+        params = self.params
 
-        for name, val in vars(state).items():
+        for name, val in list(vars(state).items()) + list(vars(params).items()):
             if isinstance(val, np.ndarray):
                 flattened_array = val.flatten()
                 for val in flattened_array:
@@ -1221,7 +1442,10 @@ class FluSubpopModel(clt.SubpopModel):
             flattened_current_val = compartment.current_val.flatten()
             for val in flattened_current_val:
                 if val != int(val):
-                    print(f"STOP! INPUT ERROR: {name} should not have non-negative values.")
+                    print(f"STOP! INPUT ERROR: {name} should not have non-integer values.")
+                    error_counter += 1
+                if val < 0:
+                    print(f"STOP! INPUT ERROR: {name} should not have negative values.")
                     error_counter += 1
 
         if (compartment_population_sum != self.params.total_pop_age_risk).any():
@@ -1230,22 +1454,6 @@ class FluSubpopModel(clt.SubpopModel):
                   f"\"total_pop_age_risk\" in model's \"params\" attribute \n"
                   f"and check compartments in state variables' init vals JSON.")
             error_counter += 1
-
-        params = self.params
-
-        # TODO: this has identical logic as the loop over state -- pull out as
-        #   separate function
-        for name, val in vars(params).items():
-            if isinstance(val, np.ndarray):
-                flattened_array = val.flatten()
-                for val in flattened_array:
-                    if val < 0:
-                        print(f"STOP! INPUT ERROR: {name} should not have negative values.")
-                        error_counter += 1
-            elif isinstance(val, float):
-                if val < 0:
-                    print(f"STOP! INPUT ERROR: {name} should not be negative.")
-                    error_counter += 1
 
         if error_counter == 0:
             print("OKAY! Flu model has passed input checks: \n"
@@ -1262,6 +1470,7 @@ class FluMetapopModel(clt.MetapopModel):
                  subpop_models: sc.objdict,
                  travel_proportions: pd.DataFrame,
                  name: str = ""):
+
         super().__init__(subpop_models, travel_proportions, name)
 
     def assign_inter_subpop_repo(self, subpop_models, travel_proportions):

@@ -38,20 +38,20 @@ def approx_binomial_probability_from_rate(rate: np.ndarray,
     e^(-rate * time_interval_length), so the probability of any event
     in time_interval_length is 1 - e^(-rate * time_interval_length).
 
-    Rate must be A x L np.ndarray, where A is the number of age groups
-    and L is the number of risk groups. Rate is transformed to
-    A x L np.ndarray corresponding to probabilities.
+    Rate must be |A| x |R| np.ndarray, where |A| is the the number of age groups
+    and |R| is the number of risk groups. Rate is transformed to
+    |A| x |R| np.ndarray corresponding to probabilities.
 
     Parameters:
         rate (np.ndarray):
-            dimension A x L (number of age groups x number of risk groups),
+            dimension |A| x |R| (number of age groups x number of risk groups),
             rate parameters in a Poisson distribution.
         interval_length (positive int):
             length of time interval in simulation days.
 
     Returns:
         np.ndarray:
-            array of positive scalars, dimension A x L
+            array of positive scalars, dimension |A| x |R|
     """
 
     return 1 - np.exp(-rate * interval_length)
@@ -151,13 +151,13 @@ class TransitionVariableGroup:
         get_joint_realization (function):
             assigned at initialization, generates realizations according
             to probability distribution given by _transition_type attribute,
-            returns either (M x A x L) or ((M+1) x A x L) np.ndarray,
+            returns either (M x |A| x |R|) or ((M+1) x |A| x |R|) np.ndarray,
             where M is the length of transition_variables (i.e., number of
-            outflows from origin), A is number of age groups, L is number of
+            outflows from origin), |A| is the number of age groups, |R| is number of
             risk groups.
         current_vals_list (list):
             used to store results from get_joint_realization --
-            has either M or M+1 arrays of size A x L.
+            has either M or M+1 arrays of size |A| x |R|.
 
     See __init__ docstring for other attributes.
     """
@@ -618,8 +618,8 @@ class TransitionVariable(ABC):
         """
         Computes and returns current rate of transition variable,
         based on current state of the simulation and epidemiological parameters.
-        Output should be a numpy array of size A x L, where A is
-        number of age groups and L is number of risk groups.
+        Output should be a numpy array of size |A| x |R|, where |A| is the
+        number of age groups and |R| is number of risk groups.
 
         Args:
             state (SubpopState):
@@ -631,8 +631,8 @@ class TransitionVariable(ABC):
             np.ndarray:
                 holds age-risk transition rate,
                 must be same shape as origin.init_val,
-                i.e. be size A x L, where A is number of age groups
-                and L is number of risk groups.
+                i.e. be size |A| x |R|, where |A| is the number of age groups
+                and |R| is number of risk groups.
         """
         pass
 
@@ -717,8 +717,8 @@ class TransitionVariable(ABC):
         
         Returns:
             np.ndarray:
-                size A x L, where A is number of age groups and
-                L is number of risk groups.
+                size |A| x |R|, where |A| is the number of age groups and
+                |R| is number of risk groups.
         """
 
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
@@ -742,7 +742,7 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is number of age groups and L
+                size |A| x |R|, where |A| is the number of age groups and L
                 is number of risk groups.
         """
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
@@ -766,8 +766,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is number of age groups and
-                L is number of risk groups.
+                size |A| x |R|, where |A| is the number of age groups and
+                |R| is number of risk groups.
         """
         return RNG.poisson(self.base_count * self.current_rate / float(num_timesteps))
 
@@ -792,8 +792,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is number of age groups and
-                L is number of risk groups.
+                size |A| x |R|, where |A| is the number of age groups and
+                |R| is number of risk groups.
         """
 
         return np.asarray(self.base_count *
@@ -820,8 +820,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is number of age groups and
-                L is number of risk groups.
+                size |A| x |R|, where |A| is the number of age groups and
+                |R| is number of risk groups.
         """
 
         return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
@@ -844,8 +844,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is number of age groups and
-                L is number of risk groups.
+                size |A| x |R|, where |A| is the number of age groups and
+                |R| is number of risk groups.
         """
 
         return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
@@ -963,7 +963,7 @@ class EpiMetric(StateVariable, ABC):
         change_in_current_val : (np.ndarray):
             initialized to None, but during simulation holds change in
             current value of EpiMetric for age-risk groups
-            (size A x L, where A is number of risk groups and L is number
+            (size |A| x |R|, where |A| is the number of risk groups and |R| is number
             of age groups).
         history_vals_list (list[np.ndarray]):
             each element is the same size of current_val, holds
@@ -999,8 +999,8 @@ class EpiMetric(StateVariable, ABC):
         Computes and returns change in current value of dynamic val,
         based on current state of the simulation and epidemiological parameters.
         ***NOTE: OUTPUT SHOULD ALREADY BE SCALED BY NUM_TIMESTEPS.
-        Output should be a numpy array of size A x L, where A
-        is number of age groups and L is number of risk groups.
+        Output should be a numpy array of size |A| x |R|, where A
+        is number of age groups and |R| is number of risk groups.
 
         Args:
             state (SubpopState):
@@ -1014,8 +1014,8 @@ class EpiMetric(StateVariable, ABC):
 
         Returns:
             np.ndarray:
-                size A x L, where A is number of age groups and
-                L is number of risk groups.
+                size |A| x |R|, where |A| is the number of age groups and
+                |R| is number of risk groups.
         """
         pass
 
@@ -1449,8 +1449,8 @@ class SubpopModel(ABC):
         """
         Returns:
             np.ndarray:
-                A x L array, where A is the number of age groups
-                and L is the number of risk groups, corresponding to
+                |A| x |R| array, where |A| is the number of age groups
+                and |R| is the number of risk groups, corresponding to
                 total population for that age-risk group (summed
                 over all compartments in the subpop model).
         """
