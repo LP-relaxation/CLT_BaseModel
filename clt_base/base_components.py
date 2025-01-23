@@ -105,10 +105,77 @@ class InterSubpopRepo(ABC):
     """
     Holds collection of SubpopState instances, with
         actions to query and interact with them.
+
+    Attributes:
+        subpop_models (sc.objdict):
+            keys are unique names of subpopulation models,
+            values are their respective SubpopModel instances --
+            this dictionary contains all SubpopModel instances
+            that comprise a MetapopModel instance
+        travel_proportions (pd.DataFrame):
+            DataFrame with specific structure that identifies
+            traveling proportions. One column is named "subpop_name"
+            and has strings corresponding to SubpopModel names
+            (strings must match). For each string in "subpop_name" column,
+            there is another column with the same name as that string.
+            Other values in the DataFrame are floats in [0,1] corresponding
+            to proportion of people in subpop i who travel to subpop j. Subpop i
+            is given by row position in "subpop_name" column, and subpop j is
+            given by column position and corresponding name of that column.
+
+            Example valid DataFrame (corresponding to MetapopModel with
+            two SubpopModels, one named "north" and one named "south"):
+                subpop_name,north,south
+                "north",0.1,0.2
+                "south",0.8,0.1
     """
 
     subpop_models: Optional[sc.objdict] = None
     travel_proportions: Optional[pd.DataFrame] = None
+
+    def prop_residents_traveling_df(self,
+                                    subpop_name: str) -> pd.DataFrame:
+        """
+        Returns subset (row) of travel_proportions DataFrame where
+            "subpop_name" column equals input subpop_name string --
+            this gives the proportion of residents in that sub population
+            who travel to the sub population specified by the other
+            column names
+        """
+
+        travel_prop_df = self.travel_proportions
+        return travel_prop_df[travel_prop_df["subpop_name"] == subpop_name]
+
+    def prop_residents_traveling_pairwise(self,
+                                          origin_subpop_name: str,
+                                          dest_subpop_name: str) -> float:
+        """
+        Returns:
+             (float):
+                the proportion in [0,1] of residents in given origin subpopulation
+                who travel to the given destination subpopulation.
+        """
+
+        return float(self.prop_residents_traveling_df(origin_subpop_name)
+                     [dest_subpop_name])
+
+    def sum_prop_residents_traveling_out(self,
+                                         subpop_name: str) -> float:
+        """
+        Returns the sum of the proportion of residents in given subpopulation
+        who travel to a destination subpopulation, summed over all destinations
+        but excluding residents' within-subpopulation traveling.
+
+        Note that this value may be greater than 1.
+        """
+
+        filtered_travel_prop_df = \
+            self.prop_residents_traveling_df(subpop_name).drop(columns=subpop_name)
+        sum_prop_residents_traveling_out = \
+            float(filtered_travel_prop_df[filtered_travel_prop_df["subpop_name"] == subpop_name].sum(
+                axis=1, numeric_only=True))
+
+        return sum_prop_residents_traveling_out
 
 
 @dataclass
@@ -1256,11 +1323,11 @@ class MetapopModel(ABC):
                 traveling proportions. One column is named "subpop_name"
                 and has strings corresponding to SubpopModel names
                 (strings must match). For each string in "subpop_name" column,
-                there is another column with the same name. Other values in
-                DataFrame are floats in [0,1] corresponding to proportion of
-                people in subpop i who travel to subpop j. Subpop i is given
-                by row position in "subpop_name" column, and subpop j is given
-                by column position and corresponding name of that column.
+                there is another column with the same name as that string.
+                Other values in the DataFrame are floats in [0,1] corresponding
+                to proportion of people in subpop i who travel to subpop j. Subpop i
+                is given by row position in "subpop_name" column, and subpop j is
+                given by column position and corresponding name of that column.
 
                 Example valid DataFrame (corresponding to MetapopModel with
                 two SubpopModels, one named "north" and one named "south"):
@@ -1270,7 +1337,7 @@ class MetapopModel(ABC):
             name (str):
                 unique identifier for metapopulation model.
         """
-        
+
         self.subpop_models = sc.objdict(subpop_models)
 
         self.inter_subpop_repo = \

@@ -1,17 +1,11 @@
-import datetime
-import copy
-
 import numpy as np
-import pandas as pd
 import sciris as sc
 
 from dataclasses import dataclass
-from typing import Optional, Union
-from pathlib import Path
+from typing import Optional
 
 import clt_base as clt
 
-base_path = Path(__file__).parent.parent / "flu_demo_input_files"
 
 @dataclass
 class SIRSubpopParams(clt.SubpopParams):
@@ -91,7 +85,6 @@ class InfectedToRecovered(clt.TransitionVariable):
                          params: SIRSubpopParams) -> np.ndarray:
 
         return params.I_to_R_rate
-
 
 
 class SIRSubpopModel(clt.SubpopModel):
