@@ -38,5 +38,8 @@
 	"relative_suscept_by_age": [[0.8],[0.6]],
 	"prop_time_away_by_age": [[0.5],[0.3]],
 	"contact_mult_travel": 1.0,
-	"contact_mult_symp": 1.0
+	"contact_mult_symp": 1.0,
+	"total_contact_matrix": [[2.5, 0.5],[2, 1.5]],
+	"school_contact_matrix": [[0.5, 0.0], [0.05, 0.1]],
+	"work_contact_matrix": [[0.5, 0.5], [0.5, 0.5]]
 }

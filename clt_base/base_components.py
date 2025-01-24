@@ -1216,12 +1216,16 @@ class Schedule(StateVariable, ABC):
         self.timeseries_df = timeseries_df
 
     @abstractmethod
-    def update_current_val(self, current_date: datetime.date) -> None:
+    def update_current_val(self,
+                           params: SubpopParams,
+                           current_date: datetime.date) -> None:
         """
         Subpop classes must provide a concrete implementation of
         updating self.current_val in-place.
 
         Args:
+            params (SubpopParams):
+                fixed parameters of subpopulation model.
             current_date (date):
                 real-world date corresponding to
                 model's current simulation day.
@@ -1396,6 +1400,11 @@ class MetapopModel(ABC):
 
         for subpop_model in self.subpop_models.values():
             subpop_model.simulate_until_time_period(last_simulation_day)
+
+    def display(self):
+
+        for subpop_model in self.subpop_models.values():
+            subpop_model.display()
 
 
 class SubpopModel(ABC):
@@ -1689,7 +1698,8 @@ class SubpopModel(ABC):
 
         # Update schedules for current day
         for schedule in schedules.values():
-            schedule.update_current_val(current_real_date)
+            schedule.update_current_val(subpop_params,
+                                        current_real_date)
 
         self.state.sync_to_current_vals(self.schedules)
 

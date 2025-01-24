@@ -126,6 +126,25 @@ class FluSubpopParams(clt.SubpopParams):
             multiplier to reduce contact rate of traveling individuals
         contact_mult_symp (positive float in [0,1]):
             multiplier to reduce contact rate of symptomatic individuals
+        total_contact_matrix (np.ndarray of positive floats):
+            |A| x |A| contact matrix (where |A| is the number
+            of age groups), where element i,j is the average
+            contacts from age group j that an individual in
+            age group i has
+        school_contact_matrix (np.ndarray of positive floats):
+            |A| x |A| contact matrix (where |A| is the number
+            of age groups), where element i,j is the average
+            contacts from age group j that an individual in
+            age group i has at school -- this matrix plus the
+            work_contact_matrix must be less than the
+            total_contact_matrix, element-wise
+        work_contact_matrix (np.ndarray of positive floats):
+            |A| x |A| contact matrix (where |A| is the number
+            of age groups), where element i,j is the average
+            contacts from age group j that an individual in
+            age group i has at work -- this matrix plus the
+            work_contact_matrix must be less than the
+            total_contact_matrix, element-wise
     """
 
     num_age_groups: Optional[int] = None
@@ -162,6 +181,9 @@ class FluSubpopParams(clt.SubpopParams):
     prop_time_away_by_age: Optional[np.ndarray] = None
     contact_mult_travel: Optional[float] = None
     contact_mult_symp: Optional[float] = None
+    total_contact_matrix: Optional[np.ndarray] = None,
+    school_contact_matrix: Optional[np.ndarray] = None,
+    work_contact_matrix: Optional[np.ndarray] = None
 
 
 @dataclass
@@ -733,7 +755,9 @@ class AbsoluteHumidity(clt.Schedule):
     and lower in the winter in the US).
     """
 
-    def update_current_val(self, current_date: datetime.date) -> None:
+    def update_current_val(self,
+                           subpop_params: FluSubpopParams,
+                           current_date: datetime.date) -> None:
         self.current_val = absolute_humidity_func(current_date)
 
 
@@ -747,43 +771,32 @@ class FluContactMatrix(clt.Schedule):
             of consecutive calendar days, and other columns
             named "is_school_day" (bool) and "is_work_day" (bool)
             corresponding to type of day.
-        total_contact_matrix (np.ndarray):
-            |A| x |A| np.ndarray, where |A| is the number of age groups
 
     See parent class docstring for other attributes.
     """
 
     def __init__(self,
-                 init_val: Optional[Union[np.ndarray, float]] = None):
+                 init_val: Optional[Union[np.ndarray, float]] = None,
+                 calendar_df: pd.DataFrame = None):
+
         super().__init__(init_val)
 
-        df = pd.read_csv(base_path / "school_work_calendar.csv", index_col=0)
-        df["date"] = pd.to_datetime(df["date"]).dt.date
+        self.calendar_df = calendar_df
 
-        self.time_series_df = df
+    def update_current_val(self,
+                           subpop_params: FluSubpopParams,
+                           current_date: datetime.date) -> None:
 
-        self.total_contact_matrix = np.array([[2.5, 0.5], [2, 1.5]])
-        self.school_contact_matrix = np.array([[0.5, 0], [0.05, 0.1]])
-        self.work_contact_matrix = np.array([[0, 0], [0, 0.0]])
-
-    def update_current_val(self, current_date: datetime.date) -> None:
-        """
-        Args:
-            current_date (datetime.date):
-                real-world date corresponding to
-                model's current simulation day
-        """
-
-        df = self.time_series_df
+        df = self.calendar_df
 
         try:
             current_row = df[df["date"] == current_date].iloc[0]
         except IndexError:
-            print(f"Error: {current_date} is not in the Calendar's time_series_df.")
+            print(f"Error: {current_date} is not in the Calendar's calendar_df.")
 
-        self.current_val = self.total_contact_matrix - \
-                           (1 - current_row["is_school_day"]) * self.school_contact_matrix - \
-                           (1 - current_row["is_work_day"]) * self.work_contact_matrix
+        self.current_val = subpop_params.total_contact_matrix - \
+                           (1 - current_row["is_school_day"]) * subpop_params.school_contact_matrix - \
+                           (1 - current_row["is_work_day"]) * subpop_params.work_contact_matrix
 
 
 def compute_wtd_presymp_asymp(subpop_state: FluSubpopState,
@@ -1284,6 +1297,7 @@ class FluSubpopModel(clt.SubpopModel):
                  state_dict: dict,
                  params_dict: dict,
                  config_dict: dict,
+                 calendar_df: pd.DataFrame,
                  RNG: np.random.Generator,
                  name: str = "",
                  wastewater_enabled: bool = False):
@@ -1302,11 +1316,18 @@ class FluSubpopModel(clt.SubpopModel):
                 holds configuration values -- keys and values
                 respectively must match field names and format of
                 Config.
+            calendar_df (pd.DataFrame):
+                DataFrame with columns "date", "is_school_day", and
+                "is_work_day" -- "date" entries are either strings
+                format with "YYYY-MM-DD" or datetime.date objects,
+                and "is_school_day" and "is_work_day" entries are
+                Booleans indicating if that date is a school
+                day or work day
             RNG (np.random.Generator):
                 numpy random generator object used to obtain
                 random numbers.
             name (str):
-                name.
+                unique name of MetapopModel instance.
             wastewater_enabled (bool):
                 if True, includes "wastewater" EpiMetric. Otherwise,
                 excludes it.
@@ -1317,6 +1338,14 @@ class FluSubpopModel(clt.SubpopModel):
         # and sim state information
 
         self.wastewater_enabled = wastewater_enabled
+
+        if not all(isinstance(val, datetime.date) for val in calendar_df["date"]):
+            try:
+                calendar_df["date"] = pd.to_datetime(calendar_df["date"], format="%Y-%m-%d").dt.date
+            except ValueError:
+                print("Error: The date format should be YYYY-MM-DD.")
+
+        self.calendar_df = calendar_df
 
         state = clt.make_dataclass_from_dict(FluSubpopState, state_dict)
         params = clt.make_dataclass_from_dict(FluSubpopParams, params_dict)
@@ -1378,7 +1407,8 @@ class FluSubpopModel(clt.SubpopModel):
         schedules = sc.objdict()
 
         schedules["absolute_humidity"] = AbsoluteHumidity()
-        schedules["flu_contact_matrix"] = FluContactMatrix()
+        schedules["flu_contact_matrix"] = FluContactMatrix(init_val=None,
+                                                           calendar_df=self.calendar_df)
 
         return schedules
 
@@ -1489,7 +1519,8 @@ class FluSubpopModel(clt.SubpopModel):
 
         return epi_metrics
 
-    def run_model_checks(self):
+    def run_model_checks(self,
+                         include_printing=True):
         """
         Run flu model checks.
 
@@ -1504,8 +1535,9 @@ class FluSubpopModel(clt.SubpopModel):
             after initialization).
         """
 
-        print(">>> Running flu model checks... \n")
-        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        if include_printing:
+            print(">>> Running flu model checks... \n")
+            print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
         error_counter = 0
 
@@ -1517,11 +1549,13 @@ class FluSubpopModel(clt.SubpopModel):
                 flattened_array = val.flatten()
                 for val in flattened_array:
                     if val < 0:
-                        print(f"STOP! INPUT ERROR: {name} should not have negative values.")
+                        if include_printing:
+                            print(f"STOP! INPUT ERROR: {name} should not have negative values.")
                         error_counter += 1
             elif isinstance(val, float):
                 if val < 0:
-                    print(f"STOP! INPUT ERROR: {name} should not be negative.")
+                    if include_printing:
+                        print(f"STOP! INPUT ERROR: {name} should not be negative.")
                     error_counter += 1
 
         compartment_population_sum = np.zeros((self.params.num_age_groups,
@@ -1532,37 +1566,51 @@ class FluSubpopModel(clt.SubpopModel):
             flattened_current_val = compartment.current_val.flatten()
             for val in flattened_current_val:
                 if val != int(val):
-                    print(f"STOP! INPUT ERROR: {name} should not have non-integer values.")
+                    if include_printing:
+                        print(f"STOP! INPUT ERROR: {name} should not have non-integer values.")
                     error_counter += 1
                 if val < 0:
-                    print(f"STOP! INPUT ERROR: {name} should not have negative values.")
+                    if include_printing:
+                        print(f"STOP! INPUT ERROR: {name} should not have negative values.")
                     error_counter += 1
 
         if (compartment_population_sum != self.params.total_pop_age_risk).any():
-            print(f"STOP! INPUT ERROR: sum of population in compartments must \n"
+            if include_printing:
+                print(f"STOP! INPUT ERROR: sum of population in compartments must \n"
                   f"match specified total population value. Check \n"
                   f"\"total_pop_age_risk\" in model's \"params\" attribute \n"
                   f"and check compartments in state variables' init vals JSON.")
             error_counter += 1
 
         if error_counter == 0:
-            print("OKAY! Flu model has passed input checks: \n"
+            if include_printing:
+                print("OKAY! Flu model has passed input checks: \n"
                   "Compartment populations are nonnegative whole numbers \n"
                   "and add up to \"total_pop_age_risk\" in model's \n"
                   "\"params attribute.\" Fixed parameters are nonnegative.")
+            return True
+        else:
+            return False
 
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
 
 class FluMetapopModel(clt.MetapopModel):
+    """
+    MetapopModel-derived class specific to flu model.
+    Assigns an instance of FluInterSubpopRepo to model --
+    the repository holds all subpopulation models included
+    in the metapopulation model, and also a DataFrame with
+    travel proportions information.
+    """
 
-    def __init__(self,
-                 subpop_models: sc.objdict,
-                 travel_proportions: pd.DataFrame,
-                 name: str = ""):
-
-        super().__init__(subpop_models, travel_proportions, name)
-
-    def assign_inter_subpop_repo(self, subpop_models, travel_proportions):
+    def assign_inter_subpop_repo(self,
+                                 subpop_models: dict,
+                                 travel_proportions_df: pd.DataFrame):
         return FluInterSubpopRepo(subpop_models,
-                                  travel_proportions)
+                                  travel_proportions_df)
+
+    def run_model_checks(self):
+
+        for subpop_model in self.subpop_models.values():
+            subpop_model.run_model_checks()

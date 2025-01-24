@@ -13,6 +13,7 @@ import flu_model as flu
 import clt_base as clt
 
 import numpy as np
+import pandas as pd
 import copy
 import pytest
 
@@ -22,17 +23,21 @@ base_path = Path(__file__).parent / "flu_demo_input_files"
 
 config_filepath = base_path / "config.json"
 params_filepath = base_path / "common_params.json"
-state_vars_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
+compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
+calendar_filepath = base_path / "school_work_calendar.csv"
+travel_proportions_filepath = base_path / "travel_proportions.csv"
 
-state_dict = clt.load_json_new_dict(state_vars_init_vals_filepath)
+state_dict = clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
 params_dict = clt.load_json_new_dict(params_filepath)
 config_dict = clt.load_json_new_dict(config_filepath)
+calendar_df = pd.read_csv(calendar_filepath, index_col=0)
+travel_proportions_df = pd.read_csv(travel_proportions_filepath)
 
 flu_model = flu.FluSubpopModel(state_dict,
                                params_dict,
                                config_dict,
+                               calendar_df,
                                np.random.default_rng(88888))
-
 
 def create_models_all_transition_types_list(RNG_seed):
     models_list = []
@@ -49,6 +54,7 @@ def create_models_all_transition_types_list(RNG_seed):
             models_list.append(flu.FluSubpopModel(state_dict,
                                                   params_dict,
                                                   new_config_dict,
+                                                  calendar_df,
                                                   np.random.default_rng(RNG_seed)))
 
     return models_list
@@ -99,11 +105,13 @@ def test_model_constructor_no_unintended_sharing():
     first_model = flu.FluSubpopModel(state_dict,
                                      params_dict,
                                      config_dict,
+                                     calendar_df,
                                      np.random.default_rng(1))
 
     second_model = flu.FluSubpopModel(state_dict,
                                       params_dict,
                                       config_dict,
+                                      calendar_df,
                                       np.random.default_rng(1))
 
     first_model.simulate_until_time_period(100)
@@ -141,6 +149,7 @@ def test_model_constructor_reproducible_results():
     first_model = flu.FluSubpopModel(state_dict,
                                      params_dict,
                                      config_dict,
+                                     calendar_df,
                                      np.random.default_rng(1))
 
     first_model.simulate_until_time_period(100)
@@ -154,6 +163,7 @@ def test_model_constructor_reproducible_results():
     second_model = flu.FluSubpopModel(state_dict,
                                       params_dict,
                                       config_dict,
+                                      calendar_df,
                                       np.random.default_rng(1))
     second_model.simulate_until_time_period(100)
 
@@ -184,6 +194,7 @@ def test_num_timesteps():
     few_timesteps_model = flu.FluSubpopModel(state_dict,
                                              params_dict,
                                              config_dict,
+                                             calendar_df,
                                              np.random.default_rng(starting_random_seed))
 
     few_timesteps_model.prepare_daily_state()
@@ -196,6 +207,7 @@ def test_num_timesteps():
     many_timesteps_model = flu.FluSubpopModel(state_dict,
                                               params_dict,
                                               config_dict,
+                                              calendar_df,
                                               np.random.default_rng(starting_random_seed))
 
     many_timesteps_model.prepare_daily_state()
