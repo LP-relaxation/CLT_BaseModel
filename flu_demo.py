@@ -25,7 +25,10 @@ calendar_filepath = base_path / "school_work_calendar.csv"
 travel_proportions_filepath = base_path / "travel_proportions.csv"
 
 # Read in files as dictionaries and dataframes
-state_dict = clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
+# Note that we can also create these dictionaries directly
+#   rather than reading from a predefined input data file
+compartments_epi_metrics_dict = \
+    clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
 params_dict = clt.load_json_new_dict(params_filepath)
 config_dict = clt.load_json_new_dict(config_filepath)
 
@@ -41,19 +44,38 @@ jumped_bit_generator = bit_generator.jumped(1)
 # In this case, these two (toy) subpopulations have the
 #   same demographics, initial compartment and epi metric values,
 #   fixed parameters, and school-work calendar.
-north = flu.FluSubpopModel(state_dict,
+# If we wanted the "north" subpopulation and "south"
+#   subpopulation to have different aforementioned values,
+#   we could read in two separate sets of files -- one
+#   for each subpopulation
+north = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            params_dict,
                            config_dict,
                            calendar_df,
                            np.random.Generator(bit_generator),
                            name="north")
 
-south = flu.FluSubpopModel(state_dict,
+south = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            params_dict,
                            config_dict,
                            calendar_df,
                            np.random.Generator(jumped_bit_generator),
                            name="south")
+
+# The structure of the code allows us to access
+#   the current state and fixed parameters of each
+#   subpopulation model.
+# For example, here we print out the fixed parameter
+#   value for beta_baseline for the "south" subpopulation
+print(south.params.beta_baseline)
+# 1
+
+# We can also manually change a fixed parameter value
+#   after we have created a SubpopModel -- like so...
+# Note that this is quite a large and unrealistic value of
+#   beta_baseline, but we'll use this to create
+#   a dramatic difference between the two subpopulations
+south.params.beta_baseline = 10
 
 # Combine two subpopulations into one metapopulation model (travel model)
 flu_demo_model = flu.FluMetapopModel({"north": north, "south": south},
@@ -64,10 +86,49 @@ flu_demo_model = flu.FluMetapopModel({"north": north, "south": south},
 flu_demo_model.display()
 flu_demo_model.run_model_checks()
 
-# Simulate for 100 days
+# Simulate for 50 days
+flu_demo_model.simulate_until_time_period(50)
+
+# Get the current real date of the simulation and the
+#   current simulation day
+print(flu_demo_model.current_simulation_day)
+print(flu_demo_model.current_real_date)
+
+# Simulate for another 50 days, from where we last left off
 flu_demo_model.simulate_until_time_period(100)
 
-# Generate different types of plots for flu model
-clt.plot_metapop_epi_metrics(flu_demo_model)
-clt.plot_metapop_total_infected_deaths(flu_demo_model)
-clt.plot_metapop_basic_compartment_history(flu_demo_model)
+# We can "unpack" our flu model and access the current state
+#   of each subpopulation -- here's an example with the "north"
+#   subpopulation -- this is the state after we have simulated
+#   our 100 days
+print(flu_demo_model.subpop_models.north.state)
+
+# Remember that we can easily access the objects that
+#   make up our subpopulation model -- here's an
+#   example of accessing the "north" subpopulation's
+#   compartments
+# See API references for more attribute access syntax
+print(flu_demo_model.subpop_models.north.compartments)
+
+# Generate simple compartment history plot for flu model
+clt.plot_metapop_basic_compartment_history(flu_demo_model, "basic_compartment_history.png")
+
+# Reset the simulation
+# Note -- does NOT reset the RNG! Only clears each object's
+#   history, resets the simulation day/date to the starting
+#   day/date, and returns state variables to their initial values.
+flu_demo_model.reset_simulation()
+
+# Set school and work contact matrices to zero matrices for both
+#   subpopulations and demonstrate that this removes the calendar-induced
+#   periodicity
+num_age_groups = flu_demo_model.subpop_models.north.params.num_age_groups
+
+for subpop_model in flu_demo_model.subpop_models.values():
+    subpop_model.params.school_contact_matrix = np.zeros((num_age_groups, num_age_groups))
+    subpop_model.params.work_contact_matrix = np.zeros((num_age_groups, num_age_groups))
+
+flu_demo_model.simulate_until_time_period(100)
+
+clt.plot_metapop_basic_compartment_history(flu_demo_model,
+                                           "basic_compartment_history_no_periodicity.png")

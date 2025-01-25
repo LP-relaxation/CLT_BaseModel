@@ -3,8 +3,13 @@ from .utils import np, sc, copy, ABC, abstractmethod, dataclass, \
 from collections import defaultdict
 
 
+class MetapopModelError(Exception):
+    """Custom exceptions for metapopuplation simulation model errors."""
+    pass
+
+
 class SubpopModelError(Exception):
-    """Custom exceptions for simulation model errors."""
+    """Custom exceptions for subpopulation simulation model errors."""
     pass
 
 
@@ -1406,6 +1411,58 @@ class MetapopModel(ABC):
         for subpop_model in self.subpop_models.values():
             subpop_model.display()
 
+    def reset_simulation(self):
+
+        for subpop_model in self.subpop_models.values():
+            subpop_model.reset_simulation()
+
+    @property
+    def current_simulation_day(self) -> int:
+        """
+        Returns:
+             (int):
+                Current simulation day. The current simulation day of the
+                MetapopModel should be the same as each individual SubpopModel
+                in the MetapopModel. Otherwise, an error is raised.
+        """
+
+        current_simulation_days_list = []
+
+        for subpop_model in self.subpop_models.values():
+            current_simulation_days_list.append(subpop_model.current_simulation_day)
+
+        if len(set(current_simulation_days_list)) > 1:
+            raise MetapopModelError("Subpopulation models are on different simulation days "
+                                    "and are out-of-sync. This may be caused by simulating "
+                                    "a subpopulation model independently from the "
+                                    "metapopulation model. Fix error and try again.")
+        else:
+            return current_simulation_days_list[0]
+
+    @property
+    def current_real_date(self) -> datetime.date:
+        """
+        Returns:
+             (datetime.date):
+                Current real date corresponding to current simulation day.
+                The current real date of the MetapopModel should be the same as
+                each individual SubpopModel in the MetapopModel.
+                Otherwise, an error is raised.
+        """
+
+        current_real_dates_list = []
+
+        for subpop_model in self.subpop_models.values():
+            current_real_dates_list.append(subpop_model.current_real_date)
+
+        if len(set(current_real_dates_list)) > 1:
+            raise MetapopModelError("Subpopulation models are on different real dates "
+                                    "and are out-of-sync. This may be caused by simulating "
+                                    "a subpopulation model independently from the "
+                                    "metapopulation model. Fix error and try again.")
+        else:
+            return current_real_dates_list[0]
+
 
 class SubpopModel(ABC):
     """
@@ -1712,7 +1769,8 @@ class SubpopModel(ABC):
 
         # Update interaction terms for current day
         for iterm in interaction_terms.values():
-            iterm.update_current_val(self.metapop_model.inter_subpop_repo, subpop_params)
+            iterm.update_current_val(self.metapop_model.inter_subpop_repo,
+                                     subpop_params)
 
         # Sync Subpop simulation state
         self.state.sync_to_current_vals(self.interaction_terms)
