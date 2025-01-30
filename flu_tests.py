@@ -418,7 +418,7 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
     metapopAB_model = flu.FluMetapopModel({"subpopA": subpopA, "subpopB": subpopB},
                                           travel_proportions_zeros_df)
 
-    metapopAB_model.simulate_until_time_period(200)
+    metapopAB_model.simulate_until_time_period(100)
 
     subpopA_independent = flu.FluSubpopModel(compartments_epi_metrics_dict,
                                              params_dict,

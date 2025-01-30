@@ -1516,14 +1516,14 @@ class FluSubpopModel(clt.SubpopModel):
         Run flu model checks.
 
         Input checks:
-        - SubpopState and SubpopParams instances should have
-            fields with nonnegative values.
-        - Initial values of compartments should be nonnegative
-            integers.
-        - Population sum of compartments should match
-            total population computed at initialization
-            (user should not change initial values
-            after initialization).
+            - SubpopState and SubpopParams instances should have
+                fields with nonnegative values.
+            - Initial values of compartments should be nonnegative
+                integers.
+            - Population sum of compartments should match
+                total population computed at initialization
+                (user should not change initial values
+                after initialization).
         """
 
         if include_printing:
