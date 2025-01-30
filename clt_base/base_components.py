@@ -931,11 +931,42 @@ class StateVariable:
     """
     Parent class of Interaction, Compartment, EpiMetric, DynamicVal, and Schedule
     classes. All subclasses have the common attributes "init_val" and "current_val."
+
+    Attributes:
+        init_val (np.ndarray):
+            holds initial value of StateVariable for age-risk groups.
+        current_val (np.ndarray):
+            same size as init_val, holds current value of StateVariable
+            for age-risk groups.
+        history_vals_list (list[np.ndarray]):
+            each element is the same size of current_val, holds
+            history of compartment states for age-risk groups --
+            element t corresponds to previous current_val value at
+            end of simulation day t.
     """
 
-    def __init__(self, init_val):
+    def __init__(self, init_val=None):
         self.init_val = init_val
         self.current_val = copy.deepcopy(init_val)
+        self.history_vals_list = []
+
+    def save_history(self) -> None:
+        """
+        Saves current value to history by appending current_val attribute
+            to history_vals_list in place
+
+        Deep copying is CRUCIAL because current_val is a mutable
+            np.ndarray -- without deep copying, history_vals_list would
+            have the same value for all elements
+        """
+        self.history_vals_list.append(copy.deepcopy(self.current_val))
+
+    def clear_history(self) -> None:
+        """
+        Resets history_vals_list attribute to empty list.
+        """
+
+        self.history_vals_list = []
 
 
 class Compartment(StateVariable):
@@ -946,9 +977,6 @@ class Compartment(StateVariable):
     Inherits attributes from StateVariable.
 
     Attributes:
-        current_val (np.ndarray):
-            same size as init_val, holds current value of Compartment
-            for age-risk groups.
         current_inflow (np.ndarray):
             same size as current_val, used to sum up all
             transition variable realizations incoming to this compartment
@@ -957,11 +985,6 @@ class Compartment(StateVariable):
             same size of current_val, used to sum up all
             transition variable realizations outgoing from this compartment
             for age-risk groups.
-        history_vals_list (list[np.ndarray]):
-            each element is the same size of current_val, holds
-            history of compartment states for age-risk groups --
-            element t corresponds to previous current_val value at
-            end of simulation day t.
     """
 
     def __init__(self,
@@ -970,8 +993,6 @@ class Compartment(StateVariable):
 
         self.current_inflow = np.zeros(np.shape(init_val))
         self.current_outflow = np.zeros(np.shape(init_val))
-
-        self.history_vals_list = []
 
     def update_current_val(self) -> None:
         """
@@ -993,25 +1014,6 @@ class Compartment(StateVariable):
         Resets current_outflow attribute to np.ndarray of zeros.
         """
         self.current_outflow = np.zeros(np.shape(self.current_outflow))
-
-    def save_history(self) -> None:
-        """
-        Saves current value to history by appending current_val attribute
-            to history_vals_list in place
-
-        NOTE:
-            deep copying is CRUCIAL because current_val is a mutable
-            np.ndarray -- without deep copying, history_vals_list would
-            have the same value for all elements
-        """
-        self.history_vals_list.append(copy.deepcopy(self.current_val))
-
-    def clear_history(self) -> None:
-        """
-        Resets history_vals_list attribute to empty list.
-        """
-
-        self.history_vals_list = []
 
 
 class EpiMetric(StateVariable, ABC):
@@ -1037,11 +1039,6 @@ class EpiMetric(StateVariable, ABC):
             current value of EpiMetric for age-risk groups
             (size |A| x |R|, where |A| is the number of risk groups and |R| is number
             of age groups).
-        history_vals_list (list[np.ndarray]):
-            each element is the same size of current_val, holds
-            history of transition variable realizations for age-risk
-            groups -- element t corresponds to previous current_val value
-            at end of simulation day t.
 
     See __init__ docstring for other attributes.
     """
@@ -1060,7 +1057,6 @@ class EpiMetric(StateVariable, ABC):
         super().__init__(init_val)
 
         self.change_in_current_val = None
-        self.history_vals_list = []
 
     @abstractmethod
     def get_change_in_current_val(self,
@@ -1099,24 +1095,6 @@ class EpiMetric(StateVariable, ABC):
 
         self.current_val += self.change_in_current_val
 
-    def save_history(self) -> None:
-        """
-        Saves current value to history by appending current_val attribute
-            to history_vals_list in place
-
-        Deep copying is CRUCIAL because current_val is a mutable
-            np.ndarray -- without deep copying, history_vals_list would
-            have the same value for all elements
-        """
-        self.history_vals_list.append(copy.deepcopy(self.current_val))
-
-    def clear_history(self) -> None:
-        """
-        Resets history_vals_list attribute to empty list.
-        """
-
-        self.history_vals_list = []
-
 
 class DynamicVal(StateVariable, ABC):
     """
@@ -1132,13 +1110,6 @@ class DynamicVal(StateVariable, ABC):
     infected people.
 
     Inherits attributes from StateVariable.
-
-    Attributes:
-        history_vals_list (list[np.ndarrays]):
-            each element is the same size of current_val, holds
-            history of transition variable realizations for age-risk
-            groups -- element t corresponds to previous current_val value
-            at end of simulation day t.
 
     See __init__ docstring for other attributes.
     """
@@ -1161,7 +1132,6 @@ class DynamicVal(StateVariable, ABC):
 
         super().__init__(init_val)
         self.is_enabled = is_enabled
-        self.history_vals_list = []
 
     @abstractmethod
     def update_current_val(self,
@@ -1175,20 +1145,6 @@ class DynamicVal(StateVariable, ABC):
             params (SubpopParams):
                 holds values of epidemiological parameters.
         """
-
-    def save_history(self) -> None:
-        """
-        Saves current value to history by appending current_val attribute
-            to history_vals_list in place
-
-        Deep copying is CRUCIAL because current_val is a mutable
-            np.ndarray -- without deep copying, history_vals_list would
-            have the same value for all elements
-        """
-        self.history_vals_list.append(copy.deepcopy(self.current_val))
-
-    def clear_history(self) -> None:
-        self.history_vals_list = []
 
 
 @dataclass
@@ -1254,18 +1210,8 @@ class InteractionTerm(StateVariable, ABC):
 
     Inherits attributes from StateVariable.
 
-    Params:
-        history_vals_list (list[np.ndarray]):
-        each element is the same size of current_val, holds
-        history of interaction term realizations for age-risk
-        groups -- element t corresponds to previous current_val value
-        at end of simulation day t.
-
     See __init__ docstring for other attributes.
     """
-
-    def __init__(self):
-        self.history_vals_list = []
 
     @abstractmethod
     def update_current_val(self,
@@ -1284,24 +1230,6 @@ class InteractionTerm(StateVariable, ABC):
         """
 
         pass
-
-    def save_history(self) -> None:
-        """
-        Saves current value to history by appending current_val attribute
-            to history_vals_list in place
-
-        Deep copying is CRUCIAL because current_val is a mutable
-            np.ndarray -- without deep copying, history_vals_list would
-            have the same value for all elements
-        """
-        self.history_vals_list.append(copy.deepcopy(self.current_val))
-
-    def clear_history(self) -> None:
-        """
-        Resets history_vals_list attribute to empty list.
-        """
-
-        self.history_vals_list = []
 
 
 class MetapopModel(ABC):
@@ -1917,10 +1845,7 @@ class SubpopModel(ABC):
         """
 
         # Schedules do not have history since they are deterministic
-        for svar in self.interaction_terms.values() +\
-                    self.compartments.values() + \
-                    self.epi_metrics.values() + \
-                    self.dynamic_vals.values():
+        for svar in self.all_state_variables.values():
             svar.clear_history()
 
         for tvar in self.transition_variables.values():

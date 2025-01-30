@@ -90,7 +90,7 @@ class InfectedToRecovered(clt.TransitionVariable):
 class SIRSubpopModel(clt.SubpopModel):
 
     def __init__(self,
-                 state_dict: dict,
+                 compartments_epi_metrics_dict: dict,
                  params_dict: dict,
                  config_dict: dict,
                  RNG: np.random.Generator,
@@ -98,7 +98,7 @@ class SIRSubpopModel(clt.SubpopModel):
                  wastewater_enabled: bool = False):
         """
         Args:
-            state_dict (dict):
+            compartments_epi_metrics_dict (dict):
                 holds current simulation state information,
                 such as current values of epidemiological compartments
                 and epi metrics -- keys and values respectively
@@ -127,7 +127,7 @@ class SIRSubpopModel(clt.SubpopModel):
 
         self.wastewater_enabled = wastewater_enabled
 
-        state = clt.make_dataclass_from_dict(SIRSubpopState, state_dict)
+        state = clt.make_dataclass_from_dict(SIRSubpopState, compartments_epi_metrics_dict)
         params = clt.make_dataclass_from_dict(SIRSubpopParams, params_dict)
         config = clt.make_dataclass_from_dict(clt.Config, config_dict)
 

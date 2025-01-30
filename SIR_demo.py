@@ -20,7 +20,7 @@ compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metr
 params_filepath = base_path / "common_params.json"
 config_filepath = base_path / "config.json"
 
-state_dict = clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
+compartments_epi_metrics_dict = clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
 params_dict = clt.load_json_new_dict(params_filepath)
 config_dict = clt.load_json_new_dict(config_filepath)
 
@@ -29,7 +29,7 @@ travel_proportions = pd.read_csv(base_path / "travel_proportions.csv")
 bit_generator = np.random.MT19937(88888)
 jumped_bit_generator = bit_generator.jumped(1)
 
-north = SIR.SIRSubpopModel(state_dict,
+north = SIR.SIRSubpopModel(compartments_epi_metrics_dict,
                            params_dict,
                            config_dict,
                            np.random.Generator(bit_generator),

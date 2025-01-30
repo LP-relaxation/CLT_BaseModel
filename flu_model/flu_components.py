@@ -326,7 +326,6 @@ class RecoveredToSusceptible(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.R_to_S_rate)
 
@@ -345,7 +344,6 @@ class ExposedToAsymp(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.E_to_I_rate * params.E_to_IA_prop)
 
@@ -364,7 +362,6 @@ class ExposedToPresymp(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.E_to_I_rate * (1 - params.E_to_IA_prop))
 
@@ -379,7 +376,6 @@ class PresympToSymp(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.IP_to_IS_rate)
 
@@ -398,7 +394,6 @@ class SympToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         return np.full((params.num_age_groups, params.num_risk_groups),
                        (1 - params.IS_to_H_adjusted_prop) * params.IS_to_R_rate)
 
@@ -413,7 +408,6 @@ class AsympToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.IA_to_R_rate)
 
@@ -432,7 +426,6 @@ class HospToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         return np.full((params.num_age_groups, params.num_risk_groups),
                        (1 - params.H_to_D_adjusted_prop) * params.H_to_R_rate)
 
@@ -511,7 +504,6 @@ class PopulationImmunityHosp(clt.EpiMetric):
                                   state: FluSubpopState,
                                   params: FluSubpopParams,
                                   num_timesteps: int) -> np.ndarray:
-
         pop_immunity_hosp = state.pop_immunity_hosp
 
         immunity_gain_numerator = params.hosp_immune_gain * self.R_to_S.current_val
@@ -545,7 +537,7 @@ class PopulationImmunityInf(clt.EpiMetric):
 
     See parent class docstring for other attributes.
     """
-    
+
     def __init__(self, init_val, R_to_S):
         super().__init__(init_val)
         self.R_to_S = R_to_S
@@ -1227,7 +1219,6 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
 
 
 class InfectionForce(clt.InteractionTerm):
-
     """
     InteractionTerm-derived class for modeling S_to_E transition rate
         for a given subpopulation, which depends on the
@@ -1294,7 +1285,7 @@ class FluSubpopModel(clt.SubpopModel):
     """
 
     def __init__(self,
-                 state_dict: dict,
+                 compartments_epi_metrics_dict: dict,
                  params_dict: dict,
                  config_dict: dict,
                  calendar_df: pd.DataFrame,
@@ -1303,7 +1294,7 @@ class FluSubpopModel(clt.SubpopModel):
                  wastewater_enabled: bool = False):
         """
         Args:
-            state_dict (dict):
+            compartments_epi_metrics_dict (dict):
                 holds current simulation state information,
                 such as current values of epidemiological compartments
                 and epi metrics -- keys and values respectively
@@ -1347,7 +1338,7 @@ class FluSubpopModel(clt.SubpopModel):
 
         self.calendar_df = calendar_df
 
-        state = clt.make_dataclass_from_dict(FluSubpopState, state_dict)
+        state = clt.make_dataclass_from_dict(FluSubpopState, compartments_epi_metrics_dict)
         params = clt.make_dataclass_from_dict(FluSubpopParams, params_dict)
         config = clt.make_dataclass_from_dict(clt.Config, config_dict)
 
@@ -1536,7 +1527,7 @@ class FluSubpopModel(clt.SubpopModel):
         """
 
         if include_printing:
-            print(">>> Running flu model checks... \n")
+            print(">>> Running FluSubpopModel checks... \n")
             print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
         error_counter = 0
@@ -1577,22 +1568,22 @@ class FluSubpopModel(clt.SubpopModel):
         if (compartment_population_sum != self.params.total_pop_age_risk).any():
             if include_printing:
                 print(f"STOP! INPUT ERROR: sum of population in compartments must \n"
-                  f"match specified total population value. Check \n"
-                  f"\"total_pop_age_risk\" in model's \"params\" attribute \n"
-                  f"and check compartments in state variables' init vals JSON.")
+                      f"match specified total population value. Check \n"
+                      f"\"total_pop_age_risk\" in model's \"params\" attribute \n"
+                      f"and check compartments in state variables' init vals JSON.")
             error_counter += 1
 
         if error_counter == 0:
             if include_printing:
-                print("OKAY! Flu model has passed input checks: \n"
-                  "Compartment populations are nonnegative whole numbers \n"
-                  "and add up to \"total_pop_age_risk\" in model's \n"
-                  "\"params attribute.\" Fixed parameters are nonnegative.")
+                print("OKAY! FluSubpopModel instance has passed input checks: \n"
+                      "Compartment populations are nonnegative whole numbers \n"
+                      "and add up to \"total_pop_age_risk\" in model's \n"
+                      "\"params attribute.\" Fixed parameters are nonnegative.")
             return True
         else:
+            if include_printing:
+                print(f"Need to fix {error_counter} errors before simulating model.")
             return False
-
-        print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
 
 class FluMetapopModel(clt.MetapopModel):
@@ -1610,7 +1601,75 @@ class FluMetapopModel(clt.MetapopModel):
         return FluInterSubpopRepo(subpop_models,
                                   travel_proportions_df)
 
+    def check_travel_proportions_df(self,
+                                    include_printing=True):
+        """
+        Checks to make sure travel_proportions_df (located on
+        InterSubpopRepo instance) has correct format on MetapopModel.
+
+        Validates that the dataframe has a column named "subpop_name",
+        the values in that column are unique strings that match
+        the names of the associated SubpopModel instances,
+        and those unique strings are also the remaining column names.
+        Also makes sure that numerical values are between [0,1].
+        """
+
+        df = self.inter_subpop_repo.travel_proportions
+
+        if include_printing:
+            print(">>> Running travel proportions checks... \n")
+            print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+
+        error_counter = 0
+
+        # Check if "subpop_name" column exists
+        if "subpop_name" not in df.columns:
+            error_counter += 1
+            if include_printing:
+                print("DataFrame must contain a column named \"subpop_name\".")
+
+        # Extract unique subpop_name values
+        # Ensure uniqueness
+        # Ensure they match the unique string IDs of each associated
+        #   SubpopModel instance
+        subpop_values = df["subpop_name"].unique()
+        if len(subpop_values) != len(df["subpop_name"]):
+            error_counter += 1
+            if include_printing:
+                print("\"subpop_name\" values must be unique.")
+        if set(subpop_values) != set(self.subpop_models.keys()):
+            error_counter += 1
+            if include_printing:
+                print("Each value in \"subpop_name\" column must match a "
+                      "name of an associated SubpopModel instance.")
+
+        # Ensure subpop_name values match the other column names
+        if set(subpop_values) != set(df.columns) - {"subpop_name"}:
+            error_counter += 1
+            if include_printing:
+                print("The values in \"subpop_name\" must match the other column names.")
+
+        # Check if other values are between 0 and 1
+        numerical_columns = df.columns.difference(["subpop_name"])
+        if not df[numerical_columns].applymap(lambda x: 0 <= x <= 1).all().all():
+            error_counter += 1
+            if include_printing:
+                print("All numerical values must be between 0 and 1 "
+                      "because they represent proportions.")
+
+        if error_counter == 0:
+            if include_printing:
+                print("OKAY! Travel proportions input into FluMetapopModel is "
+                      "correctly formatted.")
+            return True
+        else:
+            if include_printing:
+                print(f"Need to fix {error_counter} errors before simulating model.")
+            return False
+
     def run_model_checks(self):
+
+        self.check_travel_proportions_df()
 
         for subpop_model in self.subpop_models.values():
             subpop_model.run_model_checks()
