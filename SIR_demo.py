@@ -24,8 +24,6 @@ compartments_epi_metrics_dict = clt.load_json_new_dict(compartments_epi_metrics_
 params_dict = clt.load_json_new_dict(params_filepath)
 config_dict = clt.load_json_new_dict(config_filepath)
 
-travel_proportions = pd.read_csv(base_path / "travel_proportions.csv")
-
 bit_generator = np.random.MT19937(88888)
 jumped_bit_generator = bit_generator.jumped(1)
 

@@ -181,8 +181,8 @@ class FluSubpopParams(clt.SubpopParams):
     prop_time_away_by_age: Optional[np.ndarray] = None
     contact_mult_travel: Optional[float] = None
     contact_mult_symp: Optional[float] = None
-    total_contact_matrix: Optional[np.ndarray] = None,
-    school_contact_matrix: Optional[np.ndarray] = None,
+    total_contact_matrix: Optional[np.ndarray] = None
+    school_contact_matrix: Optional[np.ndarray] = None
     work_contact_matrix: Optional[np.ndarray] = None
 
 
@@ -249,7 +249,7 @@ class FluSubpopState(clt.SubpopState):
             emulates a simple staged-alert policy
         wastewater (np.ndarray of positive floats):
             wastewater viral load
-        infection_force (np.ndarray of positive floats):
+        force_of_infection (np.ndarray of positive floats):
             total force of infection from movement within
             home location, travel to other locations,
             and visitors from other locations
@@ -269,7 +269,7 @@ class FluSubpopState(clt.SubpopState):
     flu_contact_matrix: Optional[np.ndarray] = None
     beta_reduct: Optional[float] = 0.0
     wastewater: Optional[np.ndarray] = None  # wastewater viral load
-    infection_force: Optional[np.ndarray] = None
+    force_of_infection: Optional[np.ndarray] = None
 
 
 class SusceptibleToExposed(clt.TransitionVariable):
@@ -286,12 +286,12 @@ class SusceptibleToExposed(clt.TransitionVariable):
 
     This is the most complicated transition variable in the
     flu model. If using metapopulation model (travel model), then
-    the rate depends on an InfectionForce instance that is
+    the rate depends on an ForceOfInfection instance that is
     a function of other subpopulations' states and parameters,
     and travel between subpopulations.
 
     If there is no metapopulation model, then there is no
-    InfectionForce InteractionTerm instance, and the rate
+    ForceOfInfection InteractionTerm instance, and the rate
     is much simpler.
     """
 
@@ -299,18 +299,18 @@ class SusceptibleToExposed(clt.TransitionVariable):
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
 
-        # If there is no InfectionForce InteractionTerm instance,
+        # If there is no ForceOfInfection InteractionTerm instance,
         #   then there is no travel model -- so, simulate
         #   this subpopulation entirely independently and
         #   use the simplified transition rate that does not
         #   depend on travel dynamics
 
-        if state.infection_force is not None:
-            return state.infection_force
+        if state.force_of_infection is not None:
+            return state.force_of_infection
         else:
             wtd_presymp_asymp = compute_wtd_presymp_asymp(state, params)
 
-            return compute_common_coeff_infection_force(state, params) * \
+            return compute_common_coeff_force_of_infection(state, params) * \
                    np.matmul(state.flu_contact_matrix,
                              np.divide(state.IS + wtd_presymp_asymp,
                                        compute_pop_by_age(params)))
@@ -835,8 +835,8 @@ def compute_immunity_force(subpop_state: FluSubpopState,
                 subpop_state.pop_immunity_inf)
 
 
-def compute_common_coeff_infection_force(subpop_state: FluSubpopState,
-                                         subpop_params: FluSubpopParams) -> np.ndarray:
+def compute_common_coeff_force_of_infection(subpop_state: FluSubpopState,
+                                            subpop_params: FluSubpopParams) -> np.ndarray:
     """
     Computes a coefficient that shows up repeatedly in
     travel model calculations.
@@ -881,15 +881,127 @@ def compute_pop_by_age(subpop_params: FluSubpopParams) -> np.ndarray:
     return np.sum(subpop_params.total_pop_age_risk, axis=1, keepdims=True)
 
 
-@dataclass
 class FluInterSubpopRepo(clt.InterSubpopRepo):
     """
     Holds collection of SubpopState instances, with
         actions to query and interact with them.
 
+    Attributes:
+        subpop_models (dict):
+            dictionary where keys are SubpopModel names and values are the
+            SubpopModel instances -- whole dictionary contains all SubpopModel
+            instances that comprise the associated MetapopModel
+        subpop_names_mapping (dict):
+            keys are names of SubpopModel instances and values are integers
+            0, 1, ..., |L|-1, where |L| is the nubmer of subpopulations
+            (associated SubpopModel instances). Provides a mapping between
+            the name of the subpopulation and the row/column position in
+            travel_proportions_array (and other associated indices used for
+            intermediate computation on this class).
+        travel_proportions_array (np.ndarray):
+            |L| x |L| array, where |L| is the number of subpopulations
+            (associated SubpopModel instances). Element i,j corresponds to
+            proportion of subpopulation i that travels to subpopulation j
+            (elements must be in [0,1]). The mapping of subpopulations is given by
+            subpop_names_mapping.
+        sum_prop_residents_traveling_out_array (np.ndarray):
+            |L| x 1 array, where |L| is the number of subpopulations (associated
+            SubpopModel instances). Element l is the  sum of the proportion of
+            residents in given subpopulation who travel to a destination subpopulation,
+            summed over all destinations but excluding residents' within-subpopulation
+            traveling. Note that this value may be greater than 1.
+        force_of_infection_array (np.ndarray):
+            |L| x |A| x |R| array, where |L| is the number of subpopulations 
+            (associated SubpopModel instances), |A| is the number of age groups, 
+            and |R| is the number of risk groups. Element l,a,r corresponds to the
+            total infection rate to residents of subpopulation l. The mapping of indices
+            to the subpopulation is given by the ordering of subpop names in the "subpop_name" 
+            column of the travel_proportions dataframe -- so that the l,a,r element
+            in force_of_infection_array corresponds to the subpopulation whose name is ith 
+            in the "subpop_name" column of  travel_proportions.
+
     See parent class InterSubpopRepo's docstring for
         attributes and additional methods.
     """
+
+    def __init__(self,
+                 subpop_models: dict,
+                 subpop_names_mapping: dict,
+                 travel_proportions_array: np.ndarray):
+
+        super().__init__(subpop_models)
+
+        self.subpop_names_mapping = subpop_names_mapping
+        self.travel_proportions_array = travel_proportions_array
+
+        self.sum_prop_residents_traveling_out_array = \
+            self.compute_sum_prop_residents_traveling_out()
+
+        #   This attribute will be set to an array using method compute_shared_quantities()
+        #   during the associated MetapopModel's simulate_until_time_period() method.
+        self.force_of_infection_array = None
+
+    def compute_shared_quantities(self):
+        """
+        Updates force_of_infection_array attribute in-place.
+        """
+
+        force_of_infection_array = []
+
+        wtd_no_symp_by_age_cache = self.create_wtd_no_symp_by_age_cache()
+        effective_pop_by_age_cache = self.create_pop_by_age_cache()
+
+        # Extract subpop names in correct order corresponding to their mapping
+        subpop_names_ordered = sorted(self.subpop_names_mapping, key=self.subpop_names_mapping.get)
+
+        for subpop_name in subpop_names_ordered:
+            force_of_infection = \
+                self.inf_from_home_region_movement(subpop_name,
+                                                   wtd_no_symp_by_age_cache,
+                                                   effective_pop_by_age_cache) + \
+                self.inf_from_visitors(subpop_name,
+                                       wtd_no_symp_by_age_cache,
+                                       effective_pop_by_age_cache) + \
+                self.inf_from_residents_traveling(subpop_name,
+                                                  wtd_no_symp_by_age_cache,
+                                                  effective_pop_by_age_cache)
+
+            force_of_infection_array.append(force_of_infection)
+
+        self.force_of_infection_array = np.asarray(force_of_infection_array)
+
+    def prop_residents_traveling_pairwise(self,
+                                          origin_subpop_name: str,
+                                          dest_subpop_name: str) -> float:
+        """
+        Returns:
+             (float):
+                the proportion in [0,1] of residents in given origin subpopulation
+                who travel to the given destination subpopulation.
+        """
+
+        subpop_names_mapping = self.subpop_names_mapping
+
+        return self.travel_proportions_array[subpop_names_mapping[origin_subpop_name],
+                                             subpop_names_mapping[dest_subpop_name]]
+
+    def compute_sum_prop_residents_traveling_out(self) -> np.ndarray:
+        """
+        Returns |L| x 1 array, where |L| is the number of subpopulations,
+        corresponding to the sum of the proportion of residents in given subpopulation
+        who travel to a destination subpopulation, summed over all destinations
+        but excluding residents' within-subpopulation traveling.
+
+        Note that each element's value may be greater than 1!
+        """
+
+        travel_proportions_array = self.travel_proportions_array
+
+        # For each subpopulation (row index), sum the travel proportions
+        #   in that row but subtract the diagonal element (because
+        #   we are excluding residents who travel within their home subpopulation).
+        return np.sum(travel_proportions_array, axis=1, keepdims=True) - \
+               np.diag(travel_proportions_array).reshape(-1, 1)
 
     def create_wtd_no_symp_by_age_cache(self) -> dict:
         """
@@ -999,6 +1111,8 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
 
         effective_pop_by_age_cache = {}
 
+        subpop_names_mapping = self.subpop_names_mapping
+
         for subpop_model in self.subpop_models.values():
             subpop_name = subpop_model.name
             subpop_params = subpop_model.params
@@ -1007,15 +1121,15 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
                 pop_by_age_cache[subpop_name] + \
                 subpop_params.prop_time_away_by_age * \
                 (self.sum_wtd_visitors_by_age(subpop_name, pop_healthy_by_age) -
-                 self.sum_prop_residents_traveling_out(subpop_name) *
+                 self.sum_prop_residents_traveling_out_array[subpop_names_mapping[subpop_name]] *
                  pop_healthy_by_age[subpop_name])
 
         return effective_pop_by_age_cache
 
-    def inf_from_home_region_movement_prob(self,
-                                           subpop_name: str,
-                                           wtd_no_symp_by_age_cache: dict,
-                                           effective_pop_by_age_cache: dict) -> np.ndarray:
+    def inf_from_home_region_movement(self,
+                                      subpop_name: str,
+                                      wtd_no_symp_by_age_cache: dict,
+                                      effective_pop_by_age_cache: dict) -> np.ndarray:
         """
         Returns |A| x 1 array corresponding to infection rate due to
         residents in given subpopulation traveling within their own
@@ -1028,9 +1142,11 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
         subpop_model = self.subpop_models[subpop_name]
         subpop_state = subpop_model.state
         subpop_params = subpop_model.params
+        subpop_names_mapping = self.subpop_names_mapping
 
         prop_time_away_by_age = subpop_params.prop_time_away_by_age
-        sum_prop_residents_traveling_out = self.sum_prop_residents_traveling_out(subpop_name)
+        sum_prop_residents_traveling_out = \
+            self.sum_prop_residents_traveling_out_array[subpop_names_mapping[subpop_name]]
 
         contact_matrix = subpop_state.flu_contact_matrix
         wtd_infected_by_age = \
@@ -1040,15 +1156,17 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
         wtd_infected_to_pop_ratio = np.divide(wtd_infected_by_age,
                                               effective_pop_by_age_cache[subpop_name])
 
-        return (1 - prop_time_away_by_age * sum_prop_residents_traveling_out) * \
+        common_coeff = compute_common_coeff_force_of_infection(subpop_state, subpop_params)
+
+        return common_coeff * (1 - prop_time_away_by_age * sum_prop_residents_traveling_out) * \
                np.matmul(contact_matrix, wtd_infected_to_pop_ratio)
 
-    def inf_from_visitors_prob(self,
-                               subpop_name: str,
-                               wtd_no_symp_by_age_cache: dict,
-                               effective_pop_by_age_cache: dict) -> np.ndarray:
+    def inf_from_visitors(self,
+                          subpop_name: str,
+                          wtd_no_symp_by_age_cache: dict,
+                          effective_pop_by_age_cache: dict) -> np.ndarray:
         """
-        Returns |A| x 1 array corresponding to infection rate to given
+        Returns |L| x |A| x 1 array corresponding to infection rate to given
         subpopulation, due to outside visitors from other subpopulations,
         where |A| is the number of age groups.
         """
@@ -1069,12 +1187,11 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
         for visitors_subpop_name in all_subpop_models_names:
 
             # Do not include residential travel within same subpopulation
-            #   -- this is handled with inf_from_home_region_movement_prob
+            #   -- this is handled with inf_from_home_region_movement
             if visitors_subpop_name == subpop_name:
                 continue
 
             else:
-
                 # Math reminder -- the weighted sum of infected people is for
                 #   other subpopulations, but the other indices/values are for
                 #   the input subpopulation.
@@ -1105,12 +1222,15 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
                     np.matmul(contact_matrix,
                               prop_time_away_by_age * wtd_infected_to_pop_ratio))
 
-        return np.sum(inf_from_visitors_pairwise, axis=1)
+        common_coeff = compute_common_coeff_force_of_infection(subpop_state, subpop_params)
 
-    def inf_from_residents_traveling_prob(self,
-                                          subpop_name: str,
-                                          wtd_no_symp_by_age_cache: dict,
-                                          effective_pop_by_age_cache: dict) -> np.ndarray:
+        return np.sum(common_coeff * subpop_params.contact_mult_travel *
+                      np.asarray(inf_from_visitors_pairwise), axis=0)
+
+    def inf_from_residents_traveling(self,
+                                     subpop_name: str,
+                                     wtd_no_symp_by_age_cache: dict,
+                                     effective_pop_by_age_cache: dict) -> np.ndarray:
         """
         Returns |A| x 1 array corresponding to infection rate to given
         subpopulation, due to residents getting infected while visiting
@@ -1142,9 +1262,9 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
                 #   -- because we are dealing with residents that get
                 #   infected in OTHER subpopulations
 
-                prop_residents_traveling_pairwise = \
-                    float(self.prop_residents_traveling_df(subpop_name)
-                          [dest_subpop_name])
+                prop_residents_traveling_pairwise = self.prop_residents_traveling_pairwise(
+                    subpop_name, dest_subpop_name
+                )
 
                 prop_time_away_by_age = subpop_params.prop_time_away_by_age
 
@@ -1170,55 +1290,13 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
                     np.matmul(contact_matrix,
                               prop_time_away_by_age))
 
-        return np.sum(inf_from_residents_traveling_pairwise, axis=1)
+        common_coeff = compute_common_coeff_force_of_infection(subpop_state, subpop_params)
 
-    def inf_total_rate(self,
-                       subpop_name: str) -> np.ndarray:
-        """
-        Returns |A| x 1 array corresponding to TOTAL infection rate
-        to given subpopulation, where |A| is the number of age groups.
-
-        Residents can get infected one of three ways:
-        - from another resident in their own subpopulation
-            (see inf_from_home_region_movement_prob function)
-        - from outside visitors from another subpopulation
-            (see inf_from_visitors_prob)
-        - from visiting another subpopulation and getting
-            infected by a member of that subpopulation
-            (see inf_from_residents_traveling_prob)
-        """
-
-        subpop_model = self.subpop_models[subpop_name]
-        subpop_state = subpop_model.state
-        subpop_params = subpop_model.params
-
-        common_coeff = compute_common_coeff_infection_force(subpop_state, subpop_params)
-
-        contact_mult_travel = subpop_params.contact_mult_travel
-
-        wtd_no_symp_by_age_cache = \
-            self.create_wtd_no_symp_by_age_cache()
-
-        effective_pop_by_age_cache = self.create_effective_pop_by_age_cache()
-
-        inf_from_home_region_movement_prob = \
-            self.inf_from_home_region_movement_prob(subpop_name,
-                                                    wtd_no_symp_by_age_cache,
-                                                    effective_pop_by_age_cache)
-        inf_from_visitors_prob = self.inf_from_visitors_prob(subpop_name,
-                                                             wtd_no_symp_by_age_cache,
-                                                             effective_pop_by_age_cache)
-        inf_from_residents_traveling_prob = \
-            self.inf_from_residents_traveling_prob(subpop_name,
-                                                   wtd_no_symp_by_age_cache,
-                                                   effective_pop_by_age_cache)
-
-        return common_coeff * (inf_from_home_region_movement_prob +
-                               contact_mult_travel *
-                               (inf_from_visitors_prob + inf_from_residents_traveling_prob))
+        return np.sum(common_coeff * subpop_params.contact_mult_travel *
+                      inf_from_residents_traveling_pairwise, axis=0)
 
 
-class InfectionForce(clt.InteractionTerm):
+class ForceOfInfection(clt.InteractionTerm):
     """
     InteractionTerm-derived class for modeling S_to_E transition rate
         for a given subpopulation, which depends on the
@@ -1236,8 +1314,10 @@ class InfectionForce(clt.InteractionTerm):
                            inter_subpop_repo: FluInterSubpopRepo,
                            subpop_params: FluSubpopParams) -> None:
         subpop_name = self.subpop_name
+        subpop_names_mapping = inter_subpop_repo.subpop_names_mapping
+
         self.current_val = \
-            inter_subpop_repo.inf_total_rate(subpop_name)
+            inter_subpop_repo.force_of_infection_array[subpop_names_mapping[subpop_name]]
 
 
 class FluSubpopModel(clt.SubpopModel):
@@ -1352,14 +1432,14 @@ class FluSubpopModel(clt.SubpopModel):
     def create_interaction_terms(self) -> sc.objdict:
         """
         If there is no associated MetapopModel, then
-        there is no travel model, so do not create InfectionForce
+        there is no travel model, so do not create ForceOfInfection
         instance -- there are no interaction terms for this
         SubpopModel.
         """
 
         if self.metapop_model:
             interaction_terms = sc.objdict()
-            interaction_terms["infection_force"] = InfectionForce(self.name)
+            interaction_terms["force_of_infection"] = ForceOfInfection(self.name)
             return interaction_terms
 
         else:
@@ -1595,26 +1675,19 @@ class FluMetapopModel(clt.MetapopModel):
     travel proportions information.
     """
 
-    def assign_inter_subpop_repo(self,
-                                 subpop_models: dict,
-                                 travel_proportions_df: pd.DataFrame):
-        return FluInterSubpopRepo(subpop_models,
-                                  travel_proportions_df)
-
-    def check_travel_proportions_df(self,
-                                    include_printing=True):
+    def check_travel_proportions(self,
+                                 include_printing=True):
         """
-        Checks to make sure travel_proportions_df (located on
-        InterSubpopRepo instance) has correct format on MetapopModel.
+        Checks to make sure travel_proportions_mapping and
+        travel_proportions_array (located on InterSubpopRepo instance)
+        have correct format on MetapopModel.
 
-        Validates that the dataframe has a column named "subpop_name",
-        the values in that column are unique strings that match
-        the names of the associated SubpopModel instances,
-        and those unique strings are also the remaining column names.
-        Also makes sure that numerical values are between [0,1].
+        Validates that subpop_names_mapping is a dictionary
+        whose keys are names of associated SubpopModel instances and
+        whose length matches both the number of rows and columns of
+        travel_proportions_array (is a square matrix). Makes sure that
+        numerical values in travel_proportions_array are between [0,1].
         """
-
-        df = self.inter_subpop_repo.travel_proportions
 
         if include_printing:
             print(">>> Running travel proportions checks... \n")
@@ -1622,36 +1695,27 @@ class FluMetapopModel(clt.MetapopModel):
 
         error_counter = 0
 
-        # Check if "subpop_name" column exists
-        if "subpop_name" not in df.columns:
-            error_counter += 1
-            if include_printing:
-                print("DataFrame must contain a column named \"subpop_name\".")
-
         # Extract unique subpop_name values
         # Ensure uniqueness
         # Ensure they match the unique string IDs of each associated
         #   SubpopModel instance
-        subpop_values = df["subpop_name"].unique()
-        if len(subpop_values) != len(df["subpop_name"]):
+        subpop_names = self.inter_subpop_repo.subpop_names_mapping
+        num_subpop_names = len(subpop_names)
+        travel_proportions_array = self.inter_subpop_repo.travel_proportions_array
+        if np.size(travel_proportions_array) != \
+                (num_subpop_names, num_subpop_names):
             error_counter += 1
             if include_printing:
-                print("\"subpop_name\" values must be unique.")
-        if set(subpop_values) != set(self.subpop_models.keys()):
+                print("Length of subpop_names_mapping dictionary must equal "
+                      "number of rows and number of columns of travel_proportions_array.")
+        if set(subpop_names) != set(self.subpop_models.keys()):
             error_counter += 1
             if include_printing:
-                print("Each value in \"subpop_name\" column must match a "
+                print("Each key in subpop_names_mapping must match a "
                       "name of an associated SubpopModel instance.")
 
-        # Ensure subpop_name values match the other column names
-        if set(subpop_values) != set(df.columns) - {"subpop_name"}:
-            error_counter += 1
-            if include_printing:
-                print("The values in \"subpop_name\" must match the other column names.")
-
         # Check if other values are between 0 and 1
-        numerical_columns = df.columns.difference(["subpop_name"])
-        if not df[numerical_columns].applymap(lambda x: 0 <= x <= 1).all().all():
+        if not ((travel_proportions_array >= 0).all() and (travel_proportions_array <= 1).all()):
             error_counter += 1
             if include_printing:
                 print("All numerical values must be between 0 and 1 "
@@ -1669,7 +1733,7 @@ class FluMetapopModel(clt.MetapopModel):
 
     def run_model_checks(self):
 
-        self.check_travel_proportions_df()
+        self.check_travel_proportions()
 
         for subpop_model in self.subpop_models.values():
             subpop_model.run_model_checks()

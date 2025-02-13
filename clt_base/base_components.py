@@ -105,7 +105,6 @@ class SubpopParams(ABC):
     pass
 
 
-@dataclass
 class InterSubpopRepo(ABC):
     """
     Holds collection of SubpopState instances, with
@@ -117,70 +116,32 @@ class InterSubpopRepo(ABC):
             values are their respective SubpopModel instances --
             this dictionary contains all SubpopModel instances
             that comprise a MetapopModel instance
-        travel_proportions (pd.DataFrame):
-            DataFrame with specific structure that identifies
-            traveling proportions. One column is named "subpop_name"
-            and has strings corresponding to SubpopModel names
-            (strings must match). For each string in "subpop_name" column,
-            there is another column with the same name as that string.
-            Other values in the DataFrame are floats in [0,1] corresponding
-            to proportion of people in subpop i who travel to subpop j. Subpop i
-            is given by row position in "subpop_name" column, and subpop j is
-            given by column position and corresponding name of that column.
-
-            Example valid DataFrame (corresponding to MetapopModel with
-            two SubpopModels, one named "north" and one named "south"):
-                subpop_name,north,south
-                "north",0.1,0.2
-                "south",0.8,0.1
     """
 
-    subpop_models: Optional[sc.objdict] = None
-    travel_proportions: Optional[pd.DataFrame] = None
+    def __init__(self,
+                 subpop_models: Optional[dict] = None):
+        self.subpop_models = sc.objdict(subpop_models)
 
-    def prop_residents_traveling_df(self,
-                                    subpop_name: str) -> pd.DataFrame:
+    @abstractmethod
+    def compute_shared_quantities(self):
         """
-        Returns subset (row) of travel_proportions DataFrame where
-            "subpop_name" column equals input subpop_name string --
-            this gives the proportion of residents in that sub population
-            who travel to the sub population specified by the other
-            column names
-        """
+        Subclasses must provide concrete implementation. This method
+        is called by the MetapopModel instance at the beginning of
+        each simulation day, before each SubpopModel simulates that day.
 
-        travel_prop_df = self.travel_proportions
-        return travel_prop_df[travel_prop_df["subpop_name"] == subpop_name]
-
-    def prop_residents_traveling_pairwise(self,
-                                          origin_subpop_name: str,
-                                          dest_subpop_name: str) -> float:
-        """
-        Returns:
-             (float):
-                the proportion in [0,1] of residents in given origin subpopulation
-                who travel to the given destination subpopulation.
+        Note: often, InteractionTerms across SubpopModels share similar
+        terms in their computation. This compute_shared_quantities()
+        method computes such similar terms up front to reduce redundant
+        computation.
         """
 
-        return float(self.prop_residents_traveling_df(origin_subpop_name)
-                     [dest_subpop_name])
+        pass
 
-    def sum_prop_residents_traveling_out(self,
-                                         subpop_name: str) -> float:
-        """
-        Returns the sum of the proportion of residents in given subpopulation
-        who travel to a destination subpopulation, summed over all destinations
-        but excluding residents' within-subpopulation traveling.
-
-        Note that this value may be greater than 1.
-        """
-
-        filtered_travel_prop_df = \
-            self.prop_residents_traveling_df(subpop_name).drop(columns=subpop_name)
-        sum_prop_residents_traveling_out = \
-            float(filtered_travel_prop_df[filtered_travel_prop_df["subpop_name"] == subpop_name].sum(
-                axis=1, numeric_only=True))
-
-        return sum_prop_residents_traveling_out
+    def update_all_interaction_terms(self):
+        for subpop_model in self.subpop_models.values():
+            for iterm in subpop_model.interaction_terms.values():
+                iterm.update_current_val(self,
+                                         subpop_model.params)
 
 
 @dataclass
@@ -929,7 +890,7 @@ class TransitionVariable(ABC):
 
 class StateVariable:
     """
-    Parent class of Interaction, Compartment, EpiMetric, DynamicVal, and Schedule
+    Parent class of InteractionTerm, Compartment, EpiMetric, DynamicVal, and Schedule
     classes. All subclasses have the common attributes "init_val" and "current_val."
 
     Attributes:
@@ -1247,56 +1208,30 @@ class MetapopModel(ABC):
     """
 
     def __init__(self,
-                 subpop_models: dict,
-                 travel_proportions: pd.DataFrame,
+                 inter_subpop_repo,
                  name: str = ""):
         """
         Params:
             subpop_models (dict):
                 dictionary of SubpopModel instances -- keys are
                 unique names, values are the instances
-            travel_proportions (pd.DataFrame):
-                DataFrame with specific structure that identifies
-                traveling proportions. One column is named "subpop_name"
-                and has strings corresponding to SubpopModel names
-                (strings must match). For each string in "subpop_name" column,
-                there is another column with the same name as that string.
-                Other values in the DataFrame are floats in [0,1] corresponding
-                to proportion of people in subpop i who travel to subpop j. Subpop i
-                is given by row position in "subpop_name" column, and subpop j is
-                given by column position and corresponding name of that column.
-
-                Example valid DataFrame (corresponding to MetapopModel with
-                two SubpopModels, one named "north" and one named "south"):
-                    subpop_name,north,south
-                    "north",0.1,0.2
-                    "south",0.8,0.1
+            inter_subpop_repo (InterSubpopRepo):
+                manages collection of subpop models with
+                methods for querying information.
             name (str):
                 unique identifier for metapopulation model.
         """
 
-        self.subpop_models = sc.objdict(subpop_models)
+        self.subpop_models = inter_subpop_repo.subpop_models
 
-        self.inter_subpop_repo = \
-            self.assign_inter_subpop_repo(subpop_models,
-                                          travel_proportions)
+        self.inter_subpop_repo = inter_subpop_repo
         
         self.name = name
         
-        for model in subpop_models.values():
+        for model in self.subpop_models.values():
             model.metapop_model = self
             model.interaction_terms = model.create_interaction_terms()
             model.state.interaction_terms = model.interaction_terms
-
-    @abstractmethod
-    def assign_inter_subpop_repo(self,
-                                 subpop_models: sc.objdict,
-                                 travel_proportions: pd.DataFrame) -> InterSubpopRepo:
-        """
-        Concrete implementations must return an InterSubpopRepo instance,
-            which gets assigned to the inter_subpop_repo attribute.
-        """
-        pass
 
     def extract_states_dict_from_models_dict(self,
                                              models_dict: sc.objdict) -> sc.objdict:
@@ -1314,16 +1249,27 @@ class MetapopModel(ABC):
 
         return states_dict
 
-    def simulate_until_time_period(self, last_simulation_day) -> None:
+    def simulate_until_time_period(self,
+                                   last_simulation_day: int) -> None:
         """
-        Advance simulation model time until last_simulation_day.
+        Advance simulation model time until last_simulation_day in
+        MetapopModel.
+        
+        NOT just the same as looping through each SubpopModel's 
+        "simulate_until_time_period" function. On the MetapopModel,
+        because SubpopModel instances are linked with InteractionTerms
+        and are not independent of each other, this MetapopModel's 
+        "simulate_until_time_period" function has additional functionality. 
 
-        Advance time by iterating over each subpopulation for
-        each simulation day, which are simulated by iterating
-        through discretized timesteps.
-
-        Save daily simulation data as history on each Compartment
-        instance.
+        Note: the update order at the beginning of each day is very important!
+        - First, each SubpopModel updates its daily state (computing schedules
+            and dynamic values)
+        - Second, the MetapopModel's InterSubpopRepo computes any shared
+            terms used across subpopulations (to reduce computational overhead),
+            and then updates each SubpopModel's associated InteractionTerm
+            instances.
+        - Third, each SubpopModel simulates discretized timesteps (sampling
+            transition variables, updating epi metrics, and updating compartments)
 
         Args:
             last_simulation_day (positive int):
@@ -1331,8 +1277,29 @@ class MetapopModel(ABC):
                 simulate up to but not including last_simulation_day).
         """
 
-        for subpop_model in self.subpop_models.values():
-            subpop_model.simulate_until_time_period(last_simulation_day)
+        if self.current_simulation_day > last_simulation_day:
+            raise MetapopModelError(f"Current day counter ({self.current_simulation_day}) "
+                                   f"exceeds last simulation day ({last_simulation_day}).")
+
+        while self.current_simulation_day < last_simulation_day:
+
+            for subpop_model in self.subpop_models.values():
+                subpop_model.prepare_daily_state()
+
+            self.inter_subpop_repo.compute_shared_quantities()
+            self.inter_subpop_repo.update_all_interaction_terms()
+
+            for subpop_model in self.subpop_models.values():
+
+                save_daily_history = subpop_model.config.save_daily_history
+                timesteps_per_day = subpop_model.config.timesteps_per_day
+
+                subpop_model.simulate_timesteps(timesteps_per_day)
+
+                if save_daily_history:
+                    subpop_model.save_daily_history()
+
+                subpop_model.increment_simulation_day()
 
     def display(self):
 
@@ -1412,18 +1379,20 @@ class SubpopModel(ABC):
     The "flow" and "physics" information are stored on the objects.
 
     Attributes:
+        interaction_terms (sc.objdict):
+            objdict of all the subpop model's InteractionTerm instances.
         compartments (sc.objdict):
-            objdict of all the model's Compartment instances.
+            objdict of all the subpop model's Compartment instances.
         transition_variables (sc.objdict):
-            objdict of all the model's TransitionVariable instances.
+            objdict of all the subpop model's TransitionVariable instances.
         transition_variable_groups (sc.objdict):
-            objdict of all the model's TransitionVariableGroup instances.
+            objdict of all the subpop model's TransitionVariableGroup instances.
         epi_metrics (sc.objdict):
-            objdict of all the model's EpiMetric instances.
+            objdict of all the subpop model's EpiMetric instances.
         dynamic_vals (sc.objdict):
-            objdict of all the model's DynamicVal instances.
+            objdict of all the subpop model's DynamicVal instances.
         schedules (sc.objdict):
-            objdict of all the model's Schedule instances.
+            objdict of all the subpop model's Schedule instances.
         current_simulation_day (int):
             tracks current simulation day -- incremented by +1
             when config.timesteps_per_day discretized timesteps
@@ -1673,35 +1642,28 @@ class SubpopModel(ABC):
 
         # Important note: this order of updating is important,
         #   because schedules do not depend on other state variables,
-        #   but dynamic vals may depend on schedules, and
-        #   interaction terms may depend on both schedules
-        #   and dynamic vals.
+        #   but dynamic vals may depend on schedules
+        # Interaction terms may depend on both schedules
+        #   and dynamic vals (but interaction terms are updated by
+        #   the InterSubpopRepo, not on individual SubpopModel
+        #   instances).
 
         schedules = self.schedules
         dynamic_vals = self.dynamic_vals
-        interaction_terms = self.interaction_terms
 
         # Update schedules for current day
         for schedule in schedules.values():
             schedule.update_current_val(subpop_params,
                                         current_real_date)
 
-        self.state.sync_to_current_vals(self.schedules)
+        self.state.sync_to_current_vals(schedules)
 
         # Update dynamic values for current day
         for dval in dynamic_vals.values():
             if dval.is_enabled:
                 dval.update_current_val(subpop_state, subpop_params)
 
-        self.state.sync_to_current_vals(self.dynamic_vals)
-
-        # Update interaction terms for current day
-        for iterm in interaction_terms.values():
-            iterm.update_current_val(self.metapop_model.inter_subpop_repo,
-                                     subpop_params)
-
-        # Sync Subpop simulation state
-        self.state.sync_to_current_vals(self.interaction_terms)
+        self.state.sync_to_current_vals(dynamic_vals)
 
     def update_epi_metrics(self) -> None:
         """
@@ -1838,7 +1800,7 @@ class SubpopModel(ABC):
 
     def clear_history(self) -> None:
         """
-        Resets history_vals_list attribute of each Interaction,
+        Resets history_vals_list attribute of each InteractionTerm,
             Compartment, EpiMetric, and DynamicVal to an empty list.
             Clears current rates and current values of
             TransitionVariable and TransitionVariableGroup instances.

@@ -1,0 +1,5 @@
+{
+  "subpop_names_mapping": {"north":  0, "south":  1},
+  "travel_proportions_array": [[0.4,0.05],
+                            [0.01,0.4]]
+}

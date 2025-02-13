@@ -34,13 +34,13 @@ config_filepath = base_path / "config.json"
 params_filepath = base_path / "common_params.json"
 compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
 calendar_filepath = base_path / "school_work_calendar.csv"
-travel_proportions_filepath = base_path / "travel_proportions.csv"
+travel_proportions_filepath = base_path / "travel_proportions.json"
 
 compartments_epi_metrics_dict = clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
 params_dict = clt.load_json_new_dict(params_filepath)
 config_dict = clt.load_json_new_dict(config_filepath)
 calendar_df = pd.read_csv(calendar_filepath, index_col=0)
-travel_proportions_df = pd.read_csv(travel_proportions_filepath)
+travel_proportions = clt.load_json_new_dict(travel_proportions_filepath)
 
 bit_generator = np.random.MT19937(88888)
 jumped_bit_generator = bit_generator.jumped(1)
@@ -56,7 +56,6 @@ starting_random_seed = 123456789123456789
 
 def check_state_variables_same_history(subpop_model_A: clt.SubpopModel,
                                        subpop_model_B: clt.SubpopModel):
-
     for name in subpop_model_A.all_state_variables.keys():
         assert np.array_equal(np.array(subpop_model_A.all_state_variables[name].history_vals_list),
                               np.array(subpop_model_B.all_state_variables[name].history_vals_list))
@@ -231,10 +230,10 @@ def test_subpop_no_transmission_when_beta_zero():
     """
 
     subpop_model = flu.FluSubpopModel(compartments_epi_metrics_dict,
-                                     params_dict,
-                                     config_dict,
-                                     calendar_df,
-                                     np.random.default_rng(1))
+                                      params_dict,
+                                      config_dict,
+                                      calendar_df,
+                                      np.random.default_rng(1))
 
     subpop_model.reset_simulation()
     subpop_model.params.beta_baseline = 0
@@ -408,15 +407,14 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
                                  params_dict,
                                  config_dict_1_timestep,
                                  calendar_df,
-                                 np.random.default_rng(starting_random_seed**2),
+                                 np.random.default_rng(starting_random_seed ** 2),
                                  name="subpopB")
 
-    travel_proportions_zeros_df = pd.DataFrame({"subpop_name": ["subpopA", "subpopB"],
-                                                "subpopA": [None, 0.0],
-                                                "subpopB": [0.0, None]})
+    AB_inter_subpop_repo = flu.FluInterSubpopRepo({"subpopA": subpopA, "subpopB": subpopB},
+                                                  {"subpopA": 0, "subpopB": 1},
+                                                  travel_proportions["travel_proportions_array"])
 
-    metapopAB_model = flu.FluMetapopModel({"subpopA": subpopA, "subpopB": subpopB},
-                                          travel_proportions_zeros_df)
+    metapopAB_model = flu.FluMetapopModel(AB_inter_subpop_repo)
 
     metapopAB_model.simulate_until_time_period(100)
 
@@ -431,7 +429,7 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
                                              params_dict,
                                              config_dict_1_timestep,
                                              calendar_df,
-                                             np.random.default_rng(starting_random_seed**2),
+                                             np.random.default_rng(starting_random_seed ** 2),
                                              name="subpopB")
 
     subpopA_independent.simulate_until_time_period(100)

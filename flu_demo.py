@@ -22,7 +22,7 @@ config_filepath = base_path / "config.json"
 
 # Get filepaths for school-work calendar CSV and travel proportions CSV
 calendar_filepath = base_path / "school_work_calendar.csv"
-travel_proportions_filepath = base_path / "travel_proportions.csv"
+travel_proportions_filepath = base_path / "travel_proportions.json"
 
 # Read in files as dictionaries and dataframes
 # Note that we can also create these dictionaries directly
@@ -33,7 +33,7 @@ params_dict = clt.load_json_new_dict(params_filepath)
 config_dict = clt.load_json_new_dict(config_filepath)
 
 calendar_df = pd.read_csv(calendar_filepath, index_col=0)
-travel_proportions_df = pd.read_csv(travel_proportions_filepath)
+travel_proportions = clt.load_json_new_dict(travel_proportions_filepath)
 
 # Create two independent bit generators
 bit_generator = np.random.MT19937(88888)
@@ -77,9 +77,12 @@ print(south.params.beta_baseline)
 #   a dramatic difference between the two subpopulations
 south.params.beta_baseline = 10
 
+flu_inter_subpop_repo = flu.FluInterSubpopRepo({"north": north, "south": south},
+                                               travel_proportions["subpop_names_mapping"],
+                                               travel_proportions["travel_proportions_array"])
+
 # Combine two subpopulations into one metapopulation model (travel model)
-flu_demo_model = flu.FluMetapopModel({"north": north, "south": south},
-                                     travel_proportions_df)
+flu_demo_model = flu.FluMetapopModel(flu_inter_subpop_repo)
 
 # Display written forms of both subpopulation models
 # Check that model inputs are properly formatted and sensible
