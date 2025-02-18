@@ -1,6 +1,10 @@
 # Simple demo with flu model with "toy" (not fitted or realistic) parameters
 # Wastewater addition from Sonny is still in progress
 
+###########################################################
+######################## IMPORTS ##########################
+###########################################################
+
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -11,18 +15,22 @@ import clt_base as clt
 # Import flu model module, which contains customized subclasses
 import flu_model as flu
 
+###########################################################
+################# READ INPUT FILES ########################
+###########################################################
+
 # Obtain path to folder with JSON input files
 base_path = Path(__file__).parent / "flu_demo_input_files"
 
 # Get filepaths for initial values of compartments and epi metrics, fixed parameters,
-#   and configuration
+#   configuration, and travel proportions
 compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
 params_filepath = base_path / "common_params.json"
 config_filepath = base_path / "config.json"
-
-# Get filepaths for school-work calendar CSV and travel proportions CSV
-calendar_filepath = base_path / "school_work_calendar.csv"
 travel_proportions_filepath = base_path / "travel_proportions.json"
+
+# Get filepaths for school-work calendar CSV
+calendar_filepath = base_path / "school_work_calendar.csv"
 
 # Read in files as dictionaries and dataframes
 # Note that we can also create these dictionaries directly
@@ -38,6 +46,10 @@ travel_proportions = clt.load_json_new_dict(travel_proportions_filepath)
 # Create two independent bit generators
 bit_generator = np.random.MT19937(88888)
 jumped_bit_generator = bit_generator.jumped(1)
+
+###########################################################
+############# CREATE SUBPOPULATION MODELS #################
+###########################################################
 
 # Create two subpopulation models, one for the north
 #   side of the city and one for the south side of the city
@@ -77,6 +89,12 @@ print(south.params.beta_baseline)
 #   a dramatic difference between the two subpopulations
 south.params.beta_baseline = 10
 
+###########################################################
+############# CREATE METAPOPULATION MODEL #################
+###########################################################
+
+# Create FluInterSubpopRepo instance that manages the subpopulation models
+#   and the travel dynamics that link them together
 flu_inter_subpop_repo = flu.FluInterSubpopRepo({"north": north, "south": south},
                                                travel_proportions["subpop_names_mapping"],
                                                travel_proportions["travel_proportions_array"])
@@ -89,8 +107,12 @@ flu_demo_model = flu.FluMetapopModel(flu_inter_subpop_repo)
 flu_demo_model.display()
 flu_demo_model.run_model_checks()
 
+###########################################################
+################# SIMULATE & ANALYZE ######################
+###########################################################
+
 # Simulate for 50 days
-flu_demo_model.simulate_until_time_period(50)
+flu_demo_model.simulate_until_day(50)
 
 # Get the current real date of the simulation and the
 #   current simulation day
@@ -98,7 +120,7 @@ print(flu_demo_model.current_simulation_day)
 print(flu_demo_model.current_real_date)
 
 # Simulate for another 50 days, from where we last left off
-flu_demo_model.simulate_until_time_period(100)
+flu_demo_model.simulate_until_day(100)
 
 # We can "unpack" our flu model and access the current state
 #   of each subpopulation -- here's an example with the "north"
@@ -116,6 +138,10 @@ print(flu_demo_model.subpop_models.north.compartments)
 # Generate simple compartment history plot for flu model
 clt.plot_metapop_basic_compartment_history(flu_demo_model, "basic_compartment_history.png")
 
+###########################################################
+######## MAKE MODIFICATIONS, SIMULATE & ANALYZE ###########
+###########################################################
+
 # Reset the simulation
 # Note -- does NOT reset the RNG! Only clears each object's
 #   history, resets the simulation day/date to the starting
@@ -131,7 +157,7 @@ for subpop_model in flu_demo_model.subpop_models.values():
     subpop_model.params.school_contact_matrix = np.zeros((num_age_groups, num_age_groups))
     subpop_model.params.work_contact_matrix = np.zeros((num_age_groups, num_age_groups))
 
-flu_demo_model.simulate_until_time_period(100)
+flu_demo_model.simulate_until_day(100)
 
 clt.plot_metapop_basic_compartment_history(flu_demo_model,
                                            "basic_compartment_history_no_periodicity.png")

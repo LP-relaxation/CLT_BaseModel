@@ -174,7 +174,7 @@ def test_subpop_constructor_no_unintended_sharing():
                                       calendar_df,
                                       np.random.default_rng(1))
 
-    first_model.simulate_until_time_period(100)
+    first_model.simulate_until_day(100)
 
     # The initial state of the second model should still be the same
     #   initial state -- it should not have been affected by simulating
@@ -212,14 +212,14 @@ def test_subpop_constructor_reproducible_results():
                                      calendar_df,
                                      np.random.default_rng(1))
 
-    first_model.simulate_until_time_period(100)
+    first_model.simulate_until_day(100)
 
     second_model = flu.FluSubpopModel(compartments_epi_metrics_dict,
                                       params_dict,
                                       config_dict,
                                       calendar_df,
                                       np.random.default_rng(1))
-    second_model.simulate_until_time_period(100)
+    second_model.simulate_until_day(100)
 
     check_state_variables_same_history(first_model, second_model)
 
@@ -237,7 +237,7 @@ def test_subpop_no_transmission_when_beta_zero():
 
     subpop_model.reset_simulation()
     subpop_model.params.beta_baseline = 0
-    subpop_model.simulate_until_time_period(300)
+    subpop_model.simulate_until_day(300)
 
     S_history = subpop_model.compartments["S"].history_vals_list
 
@@ -253,7 +253,7 @@ def test_subpop_dead_compartment_monotonic(subpop_model):
 
     subpop_model.reset_simulation()
     subpop_model.params.beta = 2
-    subpop_model.simulate_until_time_period(300)
+    subpop_model.simulate_until_day(300)
 
     D_history = subpop_model.compartments["D"].history_vals_list
 
@@ -271,7 +271,7 @@ def test_subpop_population_is_constant(subpop_model):
     subpop_model.params.beta = 0.25
 
     for day in range(300):
-        subpop_model.simulate_until_time_period(day)
+        subpop_model.simulate_until_day(day)
 
         current_sum_all_compartments = 0
         for compartment in subpop_model.compartments.values():
@@ -290,7 +290,7 @@ def test_subpop_reset_reproducible_results(subpop_model: flu.FluSubpopModel):
 
     subpop_model.reset_simulation()
     subpop_model.modify_random_seed(starting_random_seed)
-    subpop_model.simulate_until_time_period(100)
+    subpop_model.simulate_until_day(100)
 
     original_model_history_dict = {}
 
@@ -302,7 +302,7 @@ def test_subpop_reset_reproducible_results(subpop_model: flu.FluSubpopModel):
 
     subpop_model.reset_simulation()
     subpop_model.modify_random_seed(starting_random_seed)
-    subpop_model.simulate_until_time_period(100)
+    subpop_model.simulate_until_day(100)
 
     for name, compartment in subpop_model.compartments.items():
         reset_model_history_dict[name] = \
@@ -323,7 +323,7 @@ def test_compartments_integer_population(subpop_model: flu.FluSubpopModel):
     subpop_model.modify_random_seed(starting_random_seed)
 
     for day in [1, 10, 100]:
-        subpop_model.simulate_until_time_period(day)
+        subpop_model.simulate_until_day(day)
 
         for compartment in subpop_model.compartments.values():
             assert (compartment.current_val ==
@@ -356,7 +356,7 @@ def test_transition_format(subpop_model: flu.FluSubpopModel):
     subpop_model.modify_random_seed(starting_random_seed)
 
     for day in [1, 10, 100]:
-        subpop_model.simulate_until_time_period(day)
+        subpop_model.simulate_until_day(day)
 
         for tvar in subpop_model.transition_variables.values():
             assert np.shape(tvar.current_rate) == (A, L)
@@ -416,7 +416,7 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
 
     metapopAB_model = flu.FluMetapopModel(AB_inter_subpop_repo)
 
-    metapopAB_model.simulate_until_time_period(100)
+    metapopAB_model.simulate_until_day(100)
 
     subpopA_independent = flu.FluSubpopModel(compartments_epi_metrics_dict,
                                              params_dict,
@@ -432,8 +432,8 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
                                              np.random.default_rng(starting_random_seed ** 2),
                                              name="subpopB")
 
-    subpopA_independent.simulate_until_time_period(100)
-    subpopB_independent.simulate_until_time_period(100)
+    subpopA_independent.simulate_until_day(100)
+    subpopB_independent.simulate_until_day(100)
 
     check_state_variables_same_history(subpopA, subpopA_independent)
     check_state_variables_same_history(subpopB, subpopB_independent)
@@ -451,10 +451,10 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
     subpopA_independent.params.prop_time_away_by_age = np.zeros((num_age_groups, num_risk_groups))
     subpopB_independent.params.prop_time_away_by_age = np.zeros((num_age_groups, num_risk_groups))
 
-    metapopAB_model.simulate_until_time_period(100)
+    metapopAB_model.simulate_until_day(100)
 
-    subpopA_independent.simulate_until_time_period(100)
-    subpopB_independent.simulate_until_time_period(100)
+    subpopA_independent.simulate_until_day(100)
+    subpopB_independent.simulate_until_day(100)
 
     check_state_variables_same_history(subpopA, subpopA_independent)
     check_state_variables_same_history(subpopB, subpopB_independent)
@@ -470,7 +470,7 @@ def test_wastewater_when_beta_zero(model):
     if model.wastewater_enabled:
         model.reset_simulation()
         model.params.beta_baseline = 0
-        model.simulate_until_time_period(300)
+        model.simulate_until_day(300)
 
         ww_history = model.epi_metrics["wastewater"].history_vals_list
         tol = 1e-6

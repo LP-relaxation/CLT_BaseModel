@@ -35,7 +35,7 @@ north = SIR.SIRSubpopModel(compartments_epi_metrics_dict,
 
 north.display()
 
-north.simulate_until_time_period(100)
+north.simulate_until_day(100)
 
 clt.plot_subpop_total_infected_deaths(north)
 

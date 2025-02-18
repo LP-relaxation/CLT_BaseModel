@@ -938,7 +938,7 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
             self.compute_sum_prop_residents_traveling_out()
 
         #   This attribute will be set to an array using method compute_shared_quantities()
-        #   during the associated MetapopModel's simulate_until_time_period() method.
+        #   during the associated MetapopModel's simulate_until_day() method.
         self.force_of_infection_array = None
 
     def compute_shared_quantities(self):

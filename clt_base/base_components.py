@@ -4,7 +4,7 @@ from collections import defaultdict
 
 
 class MetapopModelError(Exception):
-    """Custom exceptions for metapopuplation simulation model errors."""
+    """Custom exceptions for metapopulation simulation model errors."""
     pass
 
 
@@ -142,6 +142,7 @@ class InterSubpopRepo(ABC):
             for iterm in subpop_model.interaction_terms.values():
                 iterm.update_current_val(self,
                                          subpop_model.params)
+            subpop_model.state.sync_to_current_vals(subpop_model.interaction_terms)
 
 
 @dataclass
@@ -1249,17 +1250,17 @@ class MetapopModel(ABC):
 
         return states_dict
 
-    def simulate_until_time_period(self,
-                                   last_simulation_day: int) -> None:
+    def simulate_until_day(self,
+                           last_simulation_day: int) -> None:
         """
         Advance simulation model time until last_simulation_day in
         MetapopModel.
         
         NOT just the same as looping through each SubpopModel's 
-        "simulate_until_time_period" function. On the MetapopModel,
+        "simulate_until_day" function. On the MetapopModel,
         because SubpopModel instances are linked with InteractionTerms
         and are not independent of each other, this MetapopModel's 
-        "simulate_until_time_period" function has additional functionality. 
+        "simulate_until_day" function has additional functionality. 
 
         Note: the update order at the beginning of each day is very important!
         - First, each SubpopModel updates its daily state (computing schedules
@@ -1560,7 +1561,7 @@ class SubpopModel(ABC):
         self._bit_generator = np.random.MT19937(seed=new_seed_number)
         self.RNG = np.random.Generator(self._bit_generator)
 
-    def simulate_until_time_period(self,
+    def simulate_until_day(self,
                                    last_simulation_day: int) -> None:
         """
         Advance simulation model time until last_simulation_day.
@@ -1600,7 +1601,7 @@ class SubpopModel(ABC):
     def simulate_timesteps(self,
                            num_timesteps: int) -> None:
         """
-        Subroutine for simulate_until_time_period.
+        Subroutine for simulate_until_day.
 
         Iterates through discretized timesteps to simulate next
         simulation day. Granularity of discretization is given by
@@ -1771,7 +1772,7 @@ class SubpopModel(ABC):
     def reset_simulation(self) -> None:
         """
         Reset simulation in-place. Subsequent method calls of
-        simulate_until_time_period start from day 0, with original
+        simulate_until_day start from day 0, with original
         day 0 state.
 
         Returns current_simulation_day to 0.
