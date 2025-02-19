@@ -2,18 +2,30 @@ from .utils import np, sc, Optional, List, sqlite3, functools, os, pd
 from .base_components import SubpopModel, MetapopModel
 
 
-# Connect to the SQLite database (creates database file if it doesn't exist)
-# Create a cursor object to execute SQL commands
-# Create a table (if it doesn't exist already)
-# Commit changes and close the connection
-
-
 class ExperimentError(Exception):
     """Custom exceptions for experiment errors."""
     pass
 
 
 class Results:
+    """
+    Container for Experiment results -- each Experiment
+    instance has a Results instance as an attribute.
+    Each Results instance initializes a new SQL database
+    to hold results and a pandas DataFrame to hold results
+    (this DataFrame is stored on the Results instance).
+
+    Attributes:
+        name (str):
+            name uniquely identifying Results instance.
+        column_names (tuple[str,...]):
+            tuple of strings corresponding to column names
+            of associated SQL table and pandas DataFrame.
+        df (pd.DataFrame):
+            DataFrame holding simulation results from each
+            simulation replication -- columns are same as
+            column_names attribute.
+    """
 
     def __init__(self,
                  name: str):
@@ -21,8 +33,12 @@ class Results:
         self.column_names = ("subpop_name", "state_var_name",
                              "age_group", "risk_group",
                              "rep", "timepoint")
-        self.df = pd.DataFrame()
+        self.df = pd.DataFrame(columns=self.column_names)
 
+        # Connect to the SQLite database and create database
+        # Create a cursor object to execute SQL commands
+        # Initialize a table with columns given by column_names
+        # Commit changes and close the connection
         if os.path.exists(name + ".db"):
             raise ExperimentError("Database already exists! To avoid accidental "
                                   "overwriting, Results instances create new databases. "
@@ -57,8 +73,15 @@ class Experiment:
         """
         Params:
             name (str):
+                name uniquely identifying Results instance.
             metapop_model (MetapopModel):
-            state_variables_to_record (List[str]):
+                MetapopModel instance on which to run multiple
+                replications.
+            state_variables_to_record (list[str]):
+                list or list-like of strings corresponding to
+                state variables to record -- each string must match
+                a state variable name on each SubpopModel in
+                the MetapopModel.
         """
 
         self.name = name
@@ -78,16 +101,24 @@ class Experiment:
 
     def run(self,
             num_reps: int,
-            last_simulation_day: int,
+            simulation_end_day: int,
             days_between_save_history: int = 1,
             output_csv_filename: str = None):
 
         """
         Params:
-            num_reps (int):
-            last_simulation_day (int):
-            days_between_save_history (int):
+            num_reps (positive int):
+                number of independent simulation replications
+                to run in an experiment.
+            simulation_end_day (positive int):
+                stop simulation at simulation_end_day (i.e. exclusive,
+                simulate up to but not including simulation_end_day).
+            days_between_save_history (positive int):
+                indicates how often to save simulation results --
+                the
             output_csv_filename (str):
+                if specified, must be valid filename with suffix ".csv" --
+                experiment results are saved to this CSV file
         """
 
         metapop_model = self.metapop_model
@@ -107,36 +138,60 @@ class Experiment:
         conn = sqlite3.connect(self.name + ".db")
         cursor = conn.cursor()
 
+        # Loop through replications
         for rep in range(num_reps):
 
+            # Reset MetapopModel between replications
             metapop_model.reset_simulation()
 
+            # Reset current_simulation_day counter
+            # Loop through days until simulation_end_day
             current_simulation_day = metapop_model.current_simulation_day
 
-            while current_simulation_day < last_simulation_day:
+            while current_simulation_day < simulation_end_day:
 
                 metapop_model.simulate_until_day(min(current_simulation_day + days_between_save_history,
-                                                     last_simulation_day))
+                                                     simulation_end_day))
 
                 current_simulation_day = metapop_model.current_simulation_day
 
+                # Loop through each SubpopModel instance in MetapopModel
                 for subpop_name, subpop_model in subpop_models.items():
 
                     A = subpop_model.params.num_age_groups
                     R = subpop_model.params.num_risk_groups
 
+                    # Each state variable's current_val is an A x R numpy array
+                    # We need to "unpack" this into an (AxR, 1) numpy array
+                    #   and similarly convert all other information (subpop_name,
+                    #   state_var_name, etc...) to (AxR, 1) numpy arrays, respectively
+                    # Then we add all this to the SQL table as a batch of AxR ROWS
                     for svar_name in state_variables_to_record:
                         current_val = subpop_model.all_state_variables[svar_name].current_val
-                        current_val = current_val.reshape(-1, 1)
+
+                        # numpy's default is row-major / C-style order
+                        # This means the elements are unpacked ROW BY ROW
+                        current_val_reshaped = current_val.reshape(-1, 1)
+
+                        # (AxR, 1) column vector of row indices, indicating the original row in current_val
+                        #   before reshaping
+                        # Each integer in np.arange(A) repeated R times
+                        age_group_indices = np.repeat(np.arange(A), R).reshape(-1, 1)
+
+                        # (AxR, 1) column vector of column indices, indicating the original column
+                        #   each element belonged to in current_val before reshaping
+                        # Repeat np.arange(R) A times
+                        risk_group_indices = np.tile(np.arange(R), A).reshape(-1, 1)
 
                         # (subpop_name, state_var_name, age_group, risk_group, rep, timepoint)
-                        data = np.column_stack((np.full((A * R, 1), subpop_name),
-                                                np.full((A * R, 1), svar_name),
-                                                np.tile(np.arange(A), (R, 1)).reshape(A * R, 1),
-                                                np.tile(np.arange(A), R).reshape(-1, 1),
-                                                np.full((A * R, 1), rep),
-                                                np.full((A * R, 1), current_simulation_day),
-                                                current_val)).tolist()
+                        data = np.column_stack(
+                            (np.full((A * R, 1), subpop_name),
+                             np.full((A * R, 1), svar_name),
+                             age_group_indices,
+                             risk_group_indices,
+                             np.full((A * R, 1), rep),
+                             np.full((A * R, 1), current_simulation_day),
+                             current_val_reshaped)).tolist()
 
                         cursor.executemany("INSERT INTO results VALUES (?, ?, ?, ?, ?, ?, ?)", data)
 
@@ -148,7 +203,6 @@ class Experiment:
             chunks.append(chunk)
 
         df = pd.concat(chunks, ignore_index=True)
-
         results.df = df
 
         if output_csv_filename:
@@ -203,7 +257,7 @@ class Experiment:
 
     def run_random_inputs(self,
                           num_reps: int,
-                          last_simulation_day: int,
+                          simulation_end_day: int,
                           state_variables_to_record: List[str],
                           random_inputs_RNG: np.random.Generator,
                           days_between_save_history: int = 1):
@@ -211,7 +265,7 @@ class Experiment:
 
         Params:
             num_reps (int):
-            last_simulation_day (int):
+            simulation_end_day (int):
             state_variables_to_record (List[str]):
             random_inputs_RNG (np.random.Generator):
             days_between_save_history (int):
@@ -220,7 +274,7 @@ class Experiment:
         pass
 
     def run_sequence_inputs(self,
-                            last_simulation_day: int,
+                            simulation_end_day: int,
                             num_reps):
         pass
 

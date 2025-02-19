@@ -1251,9 +1251,9 @@ class MetapopModel(ABC):
         return states_dict
 
     def simulate_until_day(self,
-                           last_simulation_day: int) -> None:
+                           simulation_end_day: int) -> None:
         """
-        Advance simulation model time until last_simulation_day in
+        Advance simulation model time until simulation_end_day in
         MetapopModel.
         
         NOT just the same as looping through each SubpopModel's 
@@ -1273,16 +1273,16 @@ class MetapopModel(ABC):
             transition variables, updating epi metrics, and updating compartments)
 
         Args:
-            last_simulation_day (positive int):
-                stop simulation at last_simulation_day (i.e. exclusive,
-                simulate up to but not including last_simulation_day).
+            simulation_end_day (positive int):
+                stop simulation at simulation_end_day (i.e. exclusive,
+                simulate up to but not including simulation_end_day).
         """
 
-        if self.current_simulation_day > last_simulation_day:
+        if self.current_simulation_day > simulation_end_day:
             raise MetapopModelError(f"Current day counter ({self.current_simulation_day}) "
-                                   f"exceeds last simulation day ({last_simulation_day}).")
+                                   f"exceeds last simulation day ({simulation_end_day}).")
 
-        while self.current_simulation_day < last_simulation_day:
+        while self.current_simulation_day < simulation_end_day:
 
             for subpop_model in self.subpop_models.values():
                 subpop_model.prepare_daily_state()
@@ -1562,9 +1562,9 @@ class SubpopModel(ABC):
         self.RNG = np.random.Generator(self._bit_generator)
 
     def simulate_until_day(self,
-                                   last_simulation_day: int) -> None:
+                           simulation_end_day: int) -> None:
         """
-        Advance simulation model time until last_simulation_day.
+        Advance simulation model time until simulation_end_day.
 
         Advance time by iterating through simulation days,
         which are simulated by iterating through discretized
@@ -1574,20 +1574,20 @@ class SubpopModel(ABC):
         instance.
 
         Args:
-            last_simulation_day (positive int):
-                stop simulation at last_simulation_day (i.e. exclusive,
-                simulate up to but not including last_simulation_day).
+            simulation_end_day (positive int):
+                stop simulation at simulation_end_day (i.e. exclusive,
+                simulate up to but not including simulation_end_day).
         """
 
-        if self.current_simulation_day > last_simulation_day:
+        if self.current_simulation_day > simulation_end_day:
             raise SubpopModelError(f"Current day counter ({self.current_simulation_day}) "
-                                   f"exceeds last simulation day ({last_simulation_day}).")
+                                   f"exceeds last simulation day ({simulation_end_day}).")
 
         save_daily_history = self.config.save_daily_history
         timesteps_per_day = self.config.timesteps_per_day
 
-        # last_simulation_day is exclusive endpoint
-        while self.current_simulation_day < last_simulation_day:
+        # simulation_end_day is exclusive endpoint
+        while self.current_simulation_day < simulation_end_day:
 
             self.prepare_daily_state()
 
