@@ -6,7 +6,7 @@ import pandas as pd
 import sciris as sc
 
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 from pathlib import Path
 
 import clt_base as clt
@@ -768,7 +768,7 @@ class FluContactMatrix(clt.Schedule):
     """
 
     def __init__(self,
-                 init_val: Optional[Union[np.ndarray, float]] = None,
+                 init_val: Optional[np.ndarray | float] = None,
                  calendar_df: pd.DataFrame = None):
 
         super().__init__(init_val)

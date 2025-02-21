@@ -1,5 +1,5 @@
 from .utils import np, sc, copy, ABC, abstractmethod, dataclass, \
-    Optional, Union, Enum, datetime, pd
+    Optional, Enum, datetime, pd
 from collections import defaultdict
 
 
@@ -1088,12 +1088,12 @@ class DynamicVal(StateVariable, ABC):
     """
 
     def __init__(self,
-                 init_val: Optional[Union[np.ndarray, float]] = None,
+                 init_val: Optional[np.ndarray | float] = None,
                  is_enabled: Optional[bool] = False):
         """
 
         Args:
-            init_val (Optional[Union[np.ndarray, float]]):
+            init_val (Optional[np.ndarray | float]):
                 starting value(s) at the beginning of the simulation
             is_enabled (Optional[bool]):
                 if False, this dynamic value does not get updated
@@ -1134,11 +1134,11 @@ class Schedule(StateVariable, ABC):
     """
 
     def __init__(self,
-                 init_val: Optional[Union[np.ndarray, float]] = None,
+                 init_val: Optional[np.ndarray | float] = None,
                  timeseries_df: Optional[dict] = None):
         """
         Args:
-            init_val (Optional[Union[np.ndarray, float]]):
+            init_val (Optional[np.ndarray | float]):
                 starting value(s) at the beginning of the simulation
             timeseries_df (Optional[pd.DataFrame] = None):
                 has a "date" column with strings in format "YYYY-MM-DD"
