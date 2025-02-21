@@ -322,7 +322,8 @@ class TransitionVariableGroup:
 
         Parameters:
             RNG (np.random.Generator object):
-                used to generate random variables and control reproducibility.
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
             num_timesteps (int):
                 number of timesteps per day -- used to determine time interval
                 length for discretization.
@@ -339,7 +340,8 @@ class TransitionVariableGroup:
 
         Parameters:
             RNG (np.random.Generator object):
-                used to generate random variables and control reproducibility.
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
             num_timesteps (int):
                 number of timesteps per day -- used to determine time interval
                 length for discretization.
@@ -382,7 +384,8 @@ class TransitionVariableGroup:
 
         Parameters:
             RNG (np.random.Generator object):
-                used to generate random variables and control reproducibility.
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
             num_timesteps (int):
                 number of timesteps per day -- used to determine time interval
                 length for discretization.
@@ -433,7 +436,8 @@ class TransitionVariableGroup:
 
         Parameters:
             RNG (np.random.Generator object):
-                used to generate random variables and control reproducibility.
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
             num_timesteps (int):
                 number of timesteps per day -- used to determine time interval
                 length for discretization.
@@ -723,7 +727,8 @@ class TransitionVariable(ABC):
 
         Parameters:
             RNG (np.random.Generator object):
-                used to generate random variables and control reproducibility.
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
             num_timesteps (int):
                 number of timesteps per day -- used to determine time interval
                 length for discretization.
@@ -744,7 +749,8 @@ class TransitionVariable(ABC):
 
         Parameters:
             RNG (np.random.Generator object):
-                used to generate random variables and control reproducibility.
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
             num_timesteps (int):
                 number of timesteps per day -- used to determine time interval
                 length for discretization.
@@ -769,7 +775,8 @@ class TransitionVariable(ABC):
 
         Parameters:
             RNG (np.random.Generator object):
-                used to generate random variables and control reproducibility.
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
             num_timesteps (int):
                 number of timesteps per day -- used to determine time interval
                 length for discretization.
@@ -793,7 +800,8 @@ class TransitionVariable(ABC):
 
         Parameters:
             RNG (np.random.Generator object):
-                used to generate random variables and control reproducibility.
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
             num_timesteps (int):
                 number of timesteps per day -- used to determine time interval
                 length for discretization.
@@ -1028,7 +1036,10 @@ class EpiMetric(StateVariable, ABC):
         """
         Computes and returns change in current value of dynamic val,
         based on current state of the simulation and epidemiological parameters.
-        ***NOTE: OUTPUT SHOULD ALREADY BE SCALED BY NUM_TIMESTEPS.
+
+        NOTE:
+            OUTPUT SHOULD ALREADY BE SCALED BY NUM_TIMESTEPS.
+
         Output should be a numpy array of size |A| x |R|, where A
         is number of age groups and |R| is number of risk groups.
 
@@ -1425,7 +1436,7 @@ class SubpopModel(ABC):
             config (Config):
                 data container for the model's simulation configuration values.
             RNG (np.random.Generator):
-                 used to generate random variables and control
+                 used to generate stochastic transitions in the model and control
                  reproducibility.
             name (str):
                 unique identifier of SubpopModel

@@ -190,7 +190,8 @@ def plot_subpop_basic_compartment_history(subpop_model: SubpopModel,
 
     for name, compartment in subpop_model.compartments.items():
         # Compute summed history values for each age-risk group
-        history_vals_list = [np.sum(age_risk_group_entry) for age_risk_group_entry in compartment.history_vals_list]
+        history_vals_list = [np.sum(age_risk_group_entry) for
+                             age_risk_group_entry in compartment.history_vals_list]
 
         # Plot data with a label
         ax.plot(history_vals_list, label=name, alpha=0.6)

@@ -8,7 +8,7 @@ import json
 import copy
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 from typing import Optional, Union, Type, List
 from enum import Enum
