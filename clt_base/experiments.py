@@ -10,16 +10,16 @@ class ExperimentError(Exception):
 def check_is_subset_list(listA: list,
                          listB: list) -> bool:
     """
-    Returns True if listA is a subset of listB,
-    and False otherwise.
-
     Params:
         listA (list):
-            list-like of elements to check if
-            subset of listB.
+            list-like of elements to check if subset of listB.
         listB (list):
             list-like of elements.
+
+    Returns:
+        True if listA is a subset of listB, and False otherwise.
     """
+
     return all(item in listB for item in listA)
 
 
@@ -27,12 +27,13 @@ def format_current_val_for_sql(subpop_model: SubpopModel,
                                state_var_name: str,
                                rep: int) -> list:
     """
-    Processes current_val of given subpop_model's StateVariable with state_var_name.
-    Current_val is an |A| x |R| numpy array (for age-risk) and
-    "unpacks" it into an (|A| x |R|, 1) numpy array (a column vector).
-    Converts metadata (subpop_name, state_var_name, rep, and current_simulation_day)
-    into list of |A| x |R| rows, where each row has 7 elements, for consistent
-    row formatting for batch SQL insertion.
+    Processes current_val of given subpop_model's `StateVariable`
+    specified by `state_var_name`. Current_val is an |A| x |R|
+    numpy array (for age-risk) -- this function "unpacks" it into an
+    (|A| x |R|, 1) numpy array (a column vector). Converts metadata
+    (subpop_name, state_var_name, `rep`, and current_simulation_day)
+    into list of |A| x |R| rows, where each row has 7 elements, for
+    consistent row formatting for batch SQL insertion.
 
     Params:
         subpop_model (SubpopModel):
@@ -86,10 +87,9 @@ def get_sql_table_as_df(conn: sqlite3.Connection,
                         sql_query_params: tuple[str] = None,
                         chunk_size: int = int(1e4)) -> pd.DataFrame:
     """
-    Returns pandas DataFrame with information from
-    SQL table with table_name from database given
-    by Connection. Reads in SQL rows in batches of size
-    chunk_size to avoid memory issues for very large
+    Returns a pandas DataFrame containing data from specified SQL table,
+    retrieved using the provided database connection. Reads in SQL rows
+    in batches of size `chunk_size` to avoid memory issues for very large
     tables.
 
     Params:
@@ -102,17 +102,30 @@ def get_sql_table_as_df(conn: sqlite3.Connection,
             SQL query -- used to avoid SQL injections.
         chunk_size (positive int):
             number of rows to read in at a time.
-    :return:
+
+    Returns:
+        DataFrame containing data from specified SQL table,
+        or empty DataFrame if table does not exist.
     """
 
     chunks = []
-    for chunk in pd.read_sql_query(sql_query,
-                                   conn,
-                                   chunksize=chunk_size,
-                                   params=sql_query_params):
-        chunks.append(chunk)
 
-    df = pd.concat(chunks, ignore_index=True)
+    try:
+        for chunk in pd.read_sql_query(sql_query,
+                                       conn,
+                                       chunksize=chunk_size,
+                                       params=sql_query_params):
+            chunks.append(chunk)
+            df = pd.concat(chunks, ignore_index=True)
+
+    # Handle exception gracefully -- print a warning and
+    #   return an empty DataFrame if table given by sql_query
+    #   does not exist
+    except sqlite3.OperationalError as e:
+        if "no such table" in str(e).lower():
+            print(f"Warning: table does not exist for query: {sql_query}. "
+                  f"Returning empty DataFrame.")
+            df = pd.DataFrame()
 
     return df
 
@@ -120,7 +133,7 @@ def get_sql_table_as_df(conn: sqlite3.Connection,
 class Experiment:
     """
     Class to manage running multiple simulation replications
-    on a SubpopModel or MetapopModel instance and query its results.
+    on a `SubpopModel` or `MetapopModel` instance and query its results.
 
     Also allows running a batch of simulation replications on a
     deterministic sequence of values for a given input
@@ -135,29 +148,29 @@ class Experiment:
         the current functionality does not support sampling individual
         age-risk elements separately. Instead, a single scalar value
         is sampled at a time for the entire input.
-        See sample_random_inputs method for more details.
+        See `self.sample_random_inputs` method for more details.
 
     Params:
         experiment_subpop_models (tuple):
-            tuple of SubpopModel instances associated with the Experiment.
-            If the Experiment is for a MetapopModel, then
-            this tuple contains all the associated SubpopModel instances
-            that comprise that MetapopModel. If the Experiment is for
-            a SubpopModel only, then this tuple contains only that
-            particular SubpopModel.
+            tuple of `SubpopModel` instances associated with the `Experiment`.
+            If the `Experiment` is for a `MetapopModel`, then this tuple
+            contains all the associated `SubpopModel` instances
+            that comprise that `MetapopModel.` If the `Experiment` is for
+            a `SubpopModel` only, then this tuple contains only that
+            particular `SubpopModel`.
         inputs_realizations (dict):
             dictionary of dictionaries that stores user-specified deterministic
             sequences for inputs or realizations of random input sampling --
-            keys are SubpopModel names, values are dictionaries.
+            keys are `SubpopModel` names, values are dictionaries.
             These second-layer dictionaries' keys are strings corresponding
-            to input names (they must match names in each SubpopModel's
-            SubpopParams to be valid) and values are list-like, where the ith
+            to input names (they must match names in each `SubpopModel`'s
+            `SubpopParams` to be valid) and values are list-like, where the ith
             element corresponds to the ith random sample for that input.
         results_df (pd.DataFrame):
             DataFrame holding simulation results from each
-            simulation replication
+            `simulation` replication
 
-    See __init__ docstring for other attributes.
+    See `__init__` docstring for other attributes.
     """
 
     def __init__(self,
@@ -188,6 +201,11 @@ class Experiment:
         self.state_variables_to_record = state_variables_to_record
         self.database_filename = database_filename
 
+        # Create experiment_subpop_models tuple
+        # If model is MetapopModel instance, then this tuple is a list
+        #   of all associated SubpopModel instances
+        # If model is a SubpopModel instance, then this tuple
+        #   only contains that SubpopModel.
         if isinstance(model, MetapopModel):
             experiment_subpop_models = tuple(model.subpop_models.values())
         elif isinstance(model, SubpopModel):
@@ -205,11 +223,6 @@ class Experiment:
         #   sampled inputs' realizations are stored in this dictionary
         self.inputs_realizations = {}
 
-        error_message_state_variables_to_record = \
-            f"\"state_variables_to_record\" list is not a subset " \
-            "of the state variables on SubpopModel \"{subpop_name}\" -- " \
-            "modify \"state_variables_to_record\" and re-initialize experiment."
-
         for subpop_model in self.experiment_subpop_models:
             self.inputs_realizations[subpop_model.name] = {}
 
@@ -218,18 +231,22 @@ class Experiment:
             #   on each SubpopModel
             if not check_is_subset_list(state_variables_to_record,
                                         subpop_model.all_state_variables.keys()):
-                raise ExperimentError(error_message_state_variables_to_record)
+                raise ExperimentError(
+                    f"\"state_variables_to_record\" list is not a subset "
+                    "of the state variables on SubpopModel \"{subpop_name}\" -- "
+                    "modify \"state_variables_to_record\" and re-initialize experiment.")
 
-    def run_with_static_inputs(self,
-                               reps: int,
-                               end_day: int,
-                               days_per_save: int = 1,
-                               results_filename: str = None):
+    def run_static_inputs(self,
+                          num_reps: int,
+                          simulation_end_day: int,
+                          days_between_save_history: int = 1,
+                          results_filename: str = None):
         """
-        Runs the associated SubpopModel or MetapopModel for a
-        given number of independent replications until simulation_end_day.
-        User can specify how often to save the history and a CSV file
-        in which to store this history.
+        Runs the associated `SubpopModel` or `MetapopModel` for a
+        given number of independent replications until `simulation_end_day`.
+        Parameter values and initial values are the same across
+        simulation replications. User can specify how often to save the
+        history and a CSV file in which to store this history.
 
         Params:
             num_reps (positive int):
@@ -247,93 +264,33 @@ class Experiment:
 
         self.create_results_sql_table()
 
-        self.simulate_reps_and_save_results(reps,
-                                            end_day,
-                                            days_per_save,
-                                            True,
-                                            results_filename)
+        self.simulate_reps_and_save_results(reps=num_reps,
+                                            end_day=simulation_end_day,
+                                            days_per_save=days_between_save_history,
+                                            inputs_are_static=True,
+                                            filename=results_filename)
 
-    def get_state_var_df(self,
-                         state_var_name: str,
-                         subpop_name: str = None,
-                         age_group: int = None,
-                         risk_group: int = None,
-                         results_filename: str = None):
+    def run_random_inputs(self,
+                          num_reps: int,
+                          simulation_end_day: int,
+                          random_inputs_RNG: np.random.Generator,
+                          random_inputs_spec: dict,
+                          days_between_save_history: int = 1,
+                          results_filename: str = None,
+                          inputs_filename_suffix: str = None):
         """
-        Get pandas DataFrame of recorded values of StateVariable given by state_var_name,
-        in the SubpopModel given by subpop_name, for the age-risk group given by
-        age_group and risk_group. If subpop_name is not specified, then values
-        are summed across all associated subpopulations. Similarly, if age_group
-        (or risk_group) is not specified, then values are summed across all age groups
-        (or risk groups).
+        Runs the associated `SubpopModel` or `MetapopModel` for a
+        given number of independent replications until `simulation_end_day`,
+        where certain parameter values or initial values are
+        independently randomly sampled for each replication.
+        Random sampling details (which inputs to sample and what
+        Uniform distribution lower and upper bounds to use for each input)
+        are specified in `random_inputs_spec`, and random sampling of inputs
+        uses `random_inputs_RNG`. User can specify how often to save the
+        history and a CSV file in which to store this history.
+        User can also specify a filename suffix to name CSV files
+        in which to store realizations of inputs.
 
-        Args:
-            state_var_name (str):
-                Name of the StateVariable to retrieve.
-            subpop_name (Optional[str]):
-                The name of the SubpopModel for filtering. If None, values are
-                summed across all SubpopModel instances.
-            age_group (Optional[int]):
-                The age group to select. If None, values are summed across
-                all age groups.
-            risk_group (Optional[int]):
-                The risk group to select. If None, values are summed across
-                all risk groups.
-            results_filename (Optional[str]):
-                If provided, saves the resulting DataFrame as a CSV.
-
-        Returns:
-            (pd.DataFrame):
-                A pandas DataFrame where rows represent the replication and columns indicate the
-                simulation day (timepoint) of recording. DataFrame values are the StateVariable's
-                current_val or the sum of the StateVariable's current_val across subpopulations,
-                age groups, or risk groups (the combination of what is summed over is
-                specified by the user -- details are in the part of this docstring describing
-                this function's parameters).
-        """
-
-        conn = sqlite3.connect(self.database_filename)
-
-        df = get_sql_table_as_df(conn,
-                                 "SELECT * FROM results WHERE state_var_name = ?",
-                                 chunk_size=int(1e4),
-                                 sql_query_params=(state_var_name,))
-
-        conn.close()
-
-        # Define filter conditions
-        filters = {
-            "subpop_name": subpop_name,
-            "age_group": age_group,
-            "risk_group": risk_group
-        }
-
-        # Build a list of conditions, ignoring None or empty values
-        conditions = [(df[col] == value) for col, value in filters.items() if value]
-
-        # If no conditions exist, return the original DataFrame
-        df_filtered = df if not conditions else df[np.logical_and.reduce(conditions)]
-
-        df_final = \
-            df_filtered.groupby(["rep",
-                                 "timepoint"]).sum(numeric_only=True)["value"].reset_index().pivot(index="rep",
-                                                                                                   columns="timepoint",
-                                                                                                   values="value")
-
-        if results_filename:
-            df_final.to_csv(results_filename)
-
-        return df_final
-
-    def run_with_random_inputs(self,
-                               reps: int,
-                               end_day: int,
-                               random_inputs_RNG: np.random.Generator,
-                               random_inputs_spec: dict,
-                               days_per_save: int = 1,
-                               results_filename: str = None,
-                               inputs_filename: str = None):
-        """
         Params:
             num_reps (positive int):
                 number of independent simulation replications
@@ -350,7 +307,8 @@ class Experiment:
                 random inputs' specification -- stores details
                 for random input sampling -- keys are strings
                 corresponding to input names (they must match
-                names in each SubpopModel's SubpopParams to be valid)
+                names in each `SubpopModel`'s `SubpopParams` or associated
+                `EpiMetric` or `Compartment` instances to be valid)
                 and values are 2-tuples of nonnegative floats corresponding
                 to lower and upper bounds for sampling that input from a
                 uniform distribution.
@@ -359,90 +317,98 @@ class Experiment:
             results_filename (str):
                 if specified, must be valid filename with suffix ".csv" --
                 experiment results are saved to this CSV file
-            inputs_filename (str):
+            inputs_filename_suffix (str):
                 if specified, must be a valid filename with suffix ".csv" --
-                one inputs CSV is generated for each SubpopModel with the
+                one inputs CSV is generated for each `SubpopModel` with the
                 filename "{name}_{inputs_filename}" where name is the name
-                of the SubpopModel -- saves the values of each parameter that
+                of the `SubpopModel` -- saves the values of each parameter that
                 varies between replications
         """
 
-        self.sample_random_inputs(reps,
+        self.sample_random_inputs(num_reps,
                                   random_inputs_RNG,
                                   random_inputs_spec)
 
         self.create_results_sql_table()
         self.create_inputs_realizations_sql_tables()
 
-        self.simulate_reps_and_save_results(reps,
-                                            end_day,
-                                            days_per_save,
-                                            False,
-                                            results_filename)
+        self.simulate_reps_and_save_results(reps=num_reps,
+                                            end_day=simulation_end_day,
+                                            days_per_save=days_between_save_history,
+                                            inputs_are_static=False,
+                                            filename=results_filename)
 
-        if inputs_filename:
-            self.write_inputs_csvs(inputs_filename)
+        if inputs_filename_suffix:
+            self.write_inputs_csvs(inputs_filename_suffix)
 
-    def run_with_sequences_inputs(self,
-                                  reps: int,
-                                  end_day: int,
-                                  sequences_inputs_spec: dict,
-                                  days_per_save: int = 1,
-                                  results_filename: str = None,
-                                  inputs_filename: str = None):
+    def run_sequences_of_inputs(self,
+                                num_reps: int,
+                                simulation_end_day: int,
+                                sequences_of_inputs: dict,
+                                days_between_save_history: int = 1,
+                                results_filename: str = None,
+                                inputs_filename_suffix: str = None):
         """
+        Runs the associated `SubpopModel` or `MetapopModel` for a
+        given number of independent replications until `simulation_end_day`,
+        where certain parameter values or initial values deterministically
+        change between replications, according to `sequences_of_inputs`.
+        User can specify how often to save the history and a CSV file
+        in which to store this history. User can also specify a filename
+        suffix to name CSV files in which to store sequences of inputs.
+
         Params:
             num_reps (positive int):
                 number of independent simulation replications
                 to run in an experiment.
             simulation_end_day (positive int):
-                stop simulation at simulation_end_day (i.e. exclusive,
-                simulate up to but not including simulation_end_day).
-            sequences_inputs_spec (dict):
+                stop simulation at `simulation_end_day` (i.e. exclusive,
+                simulate up to but not including `simulation_end_day`).
+            sequences_of_inputs (dict):
                 dictionary of dictionaries that stores user-specified deterministic
                 sequences for inputs -- must follow specific structure.
-                Keys are SubpopModel names, values are dictionaries.
+                Keys are `SubpopModel` names, values are dictionaries.
                 These second-layer dictionaries' keys are strings corresponding
-                to input names (they must match names in each SubpopModel's
-                SubpopParams to be valid) and values are list-like, where the ith
+                to input names (they must match names in each `SubpopModel`'s
+                `SubpopParams` to be valid) and values are list-like, where the ith
                 element corresponds to the ith random sample for that input.
             days_between_save_history (positive int):
                 indicates how often to save simulation results.
             results_filename (str):
                 if specified, must be valid filename with suffix ".csv" --
                 experiment results are saved to this CSV file
-            inputs_filename (str):
+            inputs_filename_suffix (str):
                 if specified, must be a valid filename with suffix ".csv" --
-                one inputs CSV is generated for each SubpopModel with the
+                one inputs CSV is generated for each `SubpopModel` with the
                 filename "{name}_{inputs_filename}" where name is the name
-                of the SubpopModel -- saves the values of each parameter that
+                of the `SubpopModel` -- saves the values of each parameter that
                 varies between replications
         """
 
-        self.inputs_realizations = sequences_inputs_spec
+        self.inputs_realizations = sequences_of_inputs
 
         self.create_results_sql_table()
         self.create_inputs_realizations_sql_tables()
 
-        self.simulate_reps_and_save_results(reps,
-                                            end_day,
-                                            days_per_save,
-                                            False,
-                                            results_filename)
+        self.simulate_reps_and_save_results(reps=num_reps,
+                                            end_day=simulation_end_day,
+                                            days_per_save=days_between_save_history,
+                                            inputs_are_static=False,
+                                            filename=results_filename)
 
-        if inputs_filename:
-            self.write_inputs_csvs(inputs_filename)
+        if inputs_filename_suffix:
+            self.write_inputs_csvs(inputs_filename_suffix)
 
     def sample_random_inputs(self,
                              total_reps: int,
-                             random_inputs_RNG: np.random.Generator,
-                             random_inputs_spec: dict):
+                             RNG: np.random.Generator,
+                             spec: dict):
         """
         Randomly and independently samples inputs specified by keys of
-        random_inputs_spec according to uniform distribution with lower
-        and upper bounds specified by values of random_inputs_spec.
-        Stores random realizations in inputs_realizations attribute.
-        Uses random_inputs_RNG to sample inputs.
+        `spec` according to uniform distribution with lower
+        and upper bounds specified by values of `spec`.
+        Stores random realizations in `self.inputs_realizations` attribute.
+        Uses `RNG` to sample inputs.
 
         Params:
             total_reps (positive int):
@@ -450,16 +416,17 @@ class Experiment:
                 to run in an experiment -- corresponds to number of
                 Uniform random variables to draw for each
                 state variable.
-            random_inputs_RNG (np.random.Generator):
+            RNG (np.random.Generator):
                 random number generator used to sample random
                 inputs -- for reproducibility, it is recommended to
                 use a distinct RNG for sampling random inputs different
                 from the RNG for simulating the experiment/model.
-            random_inputs_spec (dict):
+            spec (dict):
                 random inputs' specification -- stores details
                 for random input sampling -- keys are strings
                 corresponding to input names (they must match
-                names in each SubpopModel's SubpopParams to be valid)
+                names in each `SubpopModel`'s `SubpopParams` or associated
+                `EpiMetric` or `Compartment` instances to be valid)
                 and values are 2-tuples of nonnegative floats corresponding
                 to lower and upper bounds for sampling that input from a
                 uniform distribution.
@@ -474,13 +441,13 @@ class Experiment:
 
             If a user wants to sample some age-risk elements separately,
             they should create new inputs for these elements. "Inputs"
-            refers to both parameters (in SubpopParams) and initial values
-            of Compartment and EpiMetric instances. For example, if the model
-            has a parameter "H_to_R_rate" that is 2x1 (2 age groups, 1 risk group)
+            refers to both parameters (in `SubpopParams`) and initial values
+            of `Compartment` and `EpiMetric` instances. For example, if the model
+            has a parameter `H_to_R_rate` that is 2x1 (2 age groups, 1 risk group)
             and the user wants to sample each element separately, they should create
-            two parameters: "H_to_R_rate_age_group_1" and "H_to_R_rate_age_group_2."
-            These should be added to the relevant SubpopParams instance and
-            input dictionary/file used to create the SubpopParams instance.
+            two parameters: `H_to_R_rate_age_group_1` and `H_to_R_rate_age_group_2.`
+            These should be added to the relevant `SubpopParams` instance and
+            input dictionary/file used to create the `SubpopParams` instance.
             The user can then specify both parameters to be randomly sampled
             and specify the lower and upper bounds accordingly.
 
@@ -502,44 +469,156 @@ class Experiment:
             epi_metrics_names_list = list(subpop_model.epi_metrics.keys())
             params_names_list = [field.name for field in fields(subpop_model.params)]
 
-            if not check_is_subset_list(random_inputs_spec[subpop_name],
+            if not check_is_subset_list(spec[subpop_name],
                                         compartments_names_list + epi_metrics_names_list + params_names_list):
                 raise (f"\"random_inputs_spec[\"{subpop_name}\"]\" keys are not a subset "
                        "of the state variables and parameters on SubpopModel \"{subpop_name}\" -- "
                        "modify \"random_inputs_spec\" and re-initialize experiment.")
 
-            for state_var_name, bounds in random_inputs_spec[subpop_name].items():
+            for state_var_name, bounds in spec[subpop_name].items():
                 lower_bd = bounds[0]
                 upper_bd = bounds[1]
                 inputs_realizations[subpop_name][state_var_name] = \
-                    random_inputs_RNG.uniform(low=lower_bd,
-                                              high=upper_bd,
-                                              size=total_reps)
+                    RNG.uniform(low=lower_bd,
+                                high=upper_bd,
+                                size=total_reps)
+
+    def get_state_var_df(self,
+                         state_var_name: str,
+                         subpop_name: str = None,
+                         age_group: int = None,
+                         risk_group: int = None,
+                         results_filename: str = None) -> pd.DataFrame:
+        """
+        Get pandas DataFrame of recorded values of `StateVariable` given by
+        `state_var_name`, in the `SubpopModel` given by `subpop_name`,
+        for the age-risk group given by `age_group` and `risk_group`.
+        If `subpop_name` is not specified, then values are summed across all
+        associated subpopulations. Similarly, if `age_group` (or `risk_group`)
+        is not specified, then values are summed across all age groups
+        (or risk groups).
+
+        Args:
+            state_var_name (str):
+                Name of the `StateVariable` to retrieve.
+            subpop_name (Optional[str]):
+                The name of the `SubpopModel` for filtering. If None, values are
+                summed across all `SubpopModel` instances.
+            age_group (Optional[int]):
+                The age group to select. If None, values are summed across
+                all age groups.
+            risk_group (Optional[int]):
+                The risk group to select. If None, values are summed across
+                all risk groups.
+            results_filename (Optional[str]):
+                If provided, saves the resulting DataFrame as a CSV.
+
+        Returns:
+            A pandas DataFrame where rows represent the replication and columns indicate the
+            simulation day (timepoint) of recording. DataFrame values are the `StateVariable`'s
+            current_val or the sum of the `StateVariable`'s current_val across subpopulations,
+            age groups, or risk groups (the combination of what is summed over is
+            specified by the user -- details are in the part of this docstring describing
+            this function's parameters).
+        """
+
+        conn = sqlite3.connect(self.database_filename)
+
+        # Query all results table entries where state_var_name matches
+        # This will return results across all subpopulations, age groups,
+        #   and risk groups
+        df = get_sql_table_as_df(conn,
+                                 "SELECT * FROM results WHERE state_var_name = ?",
+                                 chunk_size=int(1e4),
+                                 sql_query_params=(state_var_name,))
+
+        conn.close()
+
+        # Define filter conditions
+        filters = {
+            "subpop_name": subpop_name,
+            "age_group": age_group,
+            "risk_group": risk_group
+        }
+
+        # Filter DataFrame based on user-specified conditions
+        #   (for example, if user specifies subpop_name, return subset of
+        #   DataFrame where subpop_name matches)
+        conditions = [(df[col] == value) for col, value in filters.items() if value]
+        df_filtered = df if not conditions else df[np.logical_and.reduce(conditions)]
+
+        # Group DataFrame based on unique combinations of "rep" and "timepoint" columns
+        # Then sum (numeric values only), return the "value" column, and reset the index
+        #   so that "rep" and "timepoint" become regular columns and are not the index
+        df_aggregated = \
+            df_filtered.groupby(["rep",
+                                 "timepoint"]).sum(numeric_only=True)["value"].reset_index()
+
+
+        # Use pivot() function to reshape the DataFrame for its final form
+        # The "timepoint" values are spread across new columns
+        #   (creating a column for each unique timepoint).
+        # The "value" column populates the corresponding cells.
+        df_final = df_aggregated.pivot(index="rep",
+                                       columns="timepoint",
+                                       values="value")
+
+        if results_filename:
+            df_final.to_csv(results_filename)
+
+        return df_final
 
     def log_current_vals_to_sql(self,
                                 rep_counter: int,
                                 experiment_cursor: sqlite3.Cursor) -> None:
+        """
+        For each subpopulation and state variable to record
+        associated with this `Experiment`, save current values to
+        "results" table in SQL database specified by `experiment_cursor`.
+
+        Params:
+            rep_counter (int):
+                Current replication ID.
+            experiment_cursor (sqlite3.Cursor):
+                Cursor object connected to the database
+                where results should be inserted.
+        """
 
         for subpop_model in self.experiment_subpop_models:
             for state_var_name in self.state_variables_to_record:
                 data = format_current_val_for_sql(subpop_model,
                                                   state_var_name,
                                                   rep_counter)
-
-                experiment_cursor.executemany("INSERT INTO results VALUES (?, ?, ?, ?, ?, ?, ?)", data)
+                experiment_cursor.executemany(
+                    "INSERT INTO results VALUES (?, ?, ?, ?, ?, ?, ?)", data)
 
     def log_inputs_to_sql(self,
                           experiment_cursor: sqlite3.Cursor):
+        """
+        For each subpopulation, add a new table to SQL
+        database specified by `experiment_cursor`. Each table
+        contains information on inputs that vary across
+        replications (either due to random sampling or
+        user-specified deterministic sequence). Each table
+        contains inputs information from `Experiment` attribute
+        `self.inputs_realizations` for a given subpopulation.
+
+        Params:
+            experiment_cursor (sqlite3.Cursor):
+                Cursor object connected to the database
+                where results should be inserted.
+        """
 
         for subpop_model in self.experiment_subpop_models:
-            table_name = f'"{subpop_model.name}_INPUTS"'
+            table_name = f'"{subpop_model.name}_inputs"'
 
             # Get the column names (dynamically, based on table)
             experiment_cursor.execute(f"PRAGMA table_info({table_name})")
 
+            # Extract column names from the table info
+            # But exclude the column name "rep"
             columns_info = experiment_cursor.fetchall()
-            column_names = [col[1] for col in columns_info if
-                            col[1] != "rep"]  # Extract column names from the table info
+            column_names = [col[1] for col in columns_info if col[1] != "rep"]
 
             # Create a placeholder string for the dynamic query
             placeholders = ", ".join(["?" for _ in column_names])  # Number of placeholders matches number of columns
@@ -547,16 +626,32 @@ class Experiment:
             # Create the dynamic INSERT statement
             sql_statement = f"INSERT INTO {table_name} ({', '.join(column_names)}) VALUES ({placeholders})"
 
+            # Create list of lists -- each nested list contains a sequence of values
+            #   for that particular input
             subpop_inputs_realizations = self.inputs_realizations[subpop_model.name]
-
             inputs_vals_over_reps_list = [subpop_inputs_realizations[input_name] for input_name in column_names]
 
-            data = np.column_stack(inputs_vals_over_reps_list).tolist()
-
-            experiment_cursor.executemany(sql_statement, data)
+            experiment_cursor.executemany(sql_statement, inputs_vals_over_reps_list)
 
     def apply_inputs_to_model(self,
                               rep_counter: int):
+        """
+        Changes inputs (parameters or initial values) for a given
+        replication according to `self.inputs_realizations` attribute.
+
+        Specifically, for each subpopulation, this function retrieves
+        the corresponding values from `self.inputs_realizations` and applies them to either:
+        (a) the subpopulation's `StateVariable`, if the input corresponds to a state variable,
+        or (b) the subpopulation's `params` attribute, if the input corresponds to a model
+        parameter. If the parameter or state variable is multidimensional
+        (e.g., varies across age or risk groups), it is assigned a numpy array of
+        the appropriate shape with the replicated input value.
+
+        Params:
+            rep_counter (int):
+                Replication ID, used to retrieve the correct
+                realizations of inputs for the current run.
+        """
 
         for subpop_model in self.experiment_subpop_models:
 
@@ -581,6 +676,25 @@ class Experiment:
                                        days_per_save: int,
                                        inputs_are_static: bool,
                                        filename: str = None):
+        """
+        Helper function that executes main loop over
+        replications in `Experiment` and saves results.
+
+        Params:
+            reps (int):
+                number of independent simulation replications
+                to run in an experiment.
+            end_day (int):
+                stop simulation at end_day (i.e. exclusive,
+                simulate up to but not including end_day).
+            days_per_save (int):
+                indicates how often to save simulation results.
+            inputs_are_static (bool):
+                indicates if inputs are same across replications.
+            filename (str):
+                if specified, must be valid filename with suffix ".csv" --
+                experiment results are saved to this CSV file.
+        """
 
         # Override each subpop config's save_daily_history attribute --
         #   set it to False -- because we will manually save history
@@ -591,18 +705,23 @@ class Experiment:
 
         model = self.model
 
+        # Connect to SQL database
         conn = sqlite3.connect(self.database_filename)
         cursor = conn.cursor()
 
         # Loop through replications
         for rep in range(reps):
 
+            # Reset model and clear its history
             model.reset_simulation()
 
+            # Apply new values of inputs, if some
+            #   inputs change between replications
             if not inputs_are_static:
                 self.apply_inputs_to_model(rep)
                 self.log_inputs_to_sql(cursor)
 
+            # Simulate model and save results every `days_per_save` days
             while model.current_simulation_day < end_day:
                 model.simulate_until_day(min(model.current_simulation_day + days_per_save,
                                              end_day))
@@ -614,10 +733,17 @@ class Experiment:
         if filename:
             self.results_df.to_csv(filename)
 
+        # Commit changes to database and close
         conn.commit()
         conn.close()
 
     def create_results_sql_table(self):
+        """
+        Create SQL database and save to `self.database_filename`.
+        Create table named `results` with columns `subpop_name`,
+        `state_var_name`, `age_group`, `risk_group`, `rep`, `timepoint`,
+        and `value` to store results from each replication of experiment.
+        """
 
         # Make sure user is not overwriting database
         if os.path.exists(self.database_filename):
@@ -647,12 +773,17 @@ class Experiment:
         conn.close()
 
     def create_inputs_realizations_sql_tables(self):
+        """
+        Create tables in SQL database given by `self.database_filename`
+        to store realizations of inputs that change across
+        replications. There is one table per associated subpopulation.
+        """
 
         conn = sqlite3.connect(self.database_filename)
         cursor = conn.cursor()
 
         for subpop_name in self.inputs_realizations.keys():
-            table_name = f'"{subpop_name}_INPUTS"'
+            table_name = f'"{subpop_name}_inputs"'
 
             column_names = self.inputs_realizations[subpop_name].keys()
 
@@ -660,6 +791,8 @@ class Experiment:
             column_definitions = ", ".join([f'"{col}" FLOAT' for col in column_names])
 
             # SQL statement to create table
+            # Each table has a column called "rep" which is the primary
+            #   key and automatically increments every time a row is added
             sql_statement = f"""
             CREATE TABLE IF NOT EXISTS {table_name} (
                 rep INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -673,7 +806,16 @@ class Experiment:
         conn.close()
 
     def write_inputs_csvs(self,
-                          common_filename_suffix):
+                          suffix: str):
+        """
+        For each subpopulation, writes a CSV (with a filename
+        based on provided suffix) containing values of inputs
+        across replications.
+
+        Params:
+            suffix (str):
+                Common suffix used to generate CSV filenames.
+        """
 
         for subpop_model in self.experiment_subpop_models:
             conn = sqlite3.connect(self.database_filename)
@@ -682,4 +824,4 @@ class Experiment:
 
             subpop_inputs_df = get_sql_table_as_df(conn, f"SELECT * FROM {table_name}", chunk_size=int(1e4))
 
-            subpop_inputs_df.to_csv(f"{subpop_model.name}_{common_filename_suffix}")
+            subpop_inputs_df.to_csv(f"{subpop_model.name}_{suffix}")
