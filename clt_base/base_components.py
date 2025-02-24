@@ -35,17 +35,17 @@ def approx_binomial_probability_from_rate(rate: np.ndarray,
                                           interval_length: int) -> np.ndarray:
     """
     Converts a rate (events per time) to the probability of any event
-    occurring in the next time interval of length interval_length,
+    occurring in the next time interval of length `interval_length`,
     assuming the number of events occurring in time interval
     follows a Poisson distribution with given rate parameter.
 
-    The probability of 0 events in time_interval_length is
-    e^(-rate * time_interval_length), so the probability of any event
-    in time_interval_length is 1 - e^(-rate * time_interval_length).
+    The probability of 0 events in `interval_length` is
+    e^(-`rate` * `interval_length`), so the probability of any event
+    in `interval_length` is 1 - e^(-`rate` * `interval_length`).
 
-    Rate must be |A| x |R| np.ndarray, where |A| is the the number of age groups
-    and |R| is the number of risk groups. Rate is transformed to
-    |A| x |R| np.ndarray corresponding to probabilities.
+    Rate must be |A| x |R| `np.ndarray`, where |A| is the number of
+    age groups and |R| is the number of risk groups. Rate is transformed to
+    |A| x |R| `np.ndarray` corresponding to probabilities.
 
     Parameters:
         rate (np.ndarray):
@@ -70,17 +70,17 @@ class Config:
     Attributes:
         timesteps_per_day (int):
             number of discretized timesteps within a simulation
-            day -- more timesteps_per_day mean smaller discretization
+            day -- more `timesteps_per_day` mean smaller discretization
             time intervals, which may cause the model to run slower.
         transition_type (str):
-            valid value must be from TransitionTypes,
-            specifying the probability distribution of transitions between
+            valid value must be from `TransitionTypes`, specifying
+            the probability distribution of transitions between
             compartments.
         start_real_date (datetime.date):
             actual date that aligns with the beginning of the simulation.
         save_daily_history (bool):
-            True if each StateVariable saves state to history after each simulation
-            day -- set to False if want speedier performance.
+            set to `True` to save `StateVariable` state to history after each
+            simulation day -- set to `False` if want speedier performance.
     """
 
     timesteps_per_day: int = 7
@@ -96,9 +96,9 @@ class SubpopParams(ABC):
     Data container for pre-specified and fixed epidemiological
     parameters in model.
 
-    Assume that SubpopParams fields are constant or piecewise
+    Assume that `SubpopParams` fields are constant or piecewise
     constant throughout the simulation. For variables that
-    are more complicated and time-dependent, use an EpiMetric
+    are more complicated and time-dependent, use an `EpiMetric`
     instead.
     """
 
@@ -107,15 +107,15 @@ class SubpopParams(ABC):
 
 class InterSubpopRepo(ABC):
     """
-    Holds collection of SubpopState instances, with
+    Holds collection of `SubpopState` instances, with
         actions to query and interact with them.
 
     Attributes:
         subpop_models (sc.objdict):
             keys are unique names of subpopulation models,
-            values are their respective SubpopModel instances --
-            this dictionary contains all SubpopModel instances
-            that comprise a MetapopModel instance
+            values are their respective `SubpopModel` instances --
+            this dictionary contains all `SubpopModel` instances
+            that comprise a `MetapopModel` instance.
     """
 
     def __init__(self,
@@ -126,11 +126,11 @@ class InterSubpopRepo(ABC):
     def compute_shared_quantities(self):
         """
         Subclasses must provide concrete implementation. This method
-        is called by the MetapopModel instance at the beginning of
-        each simulation day, before each SubpopModel simulates that day.
+        is called by the `MetapopModel` instance at the beginning of
+        each simulation day, before each `SubpopModel` simulates that day.
 
-        Note: often, InteractionTerms across SubpopModels share similar
-        terms in their computation. This compute_shared_quantities()
+        Note: often, `InteractionTerm`s across `SubpopModel`s share similar
+        terms in their computation. This `self.compute_shared_quantities`
         method computes such similar terms up front to reduce redundant
         computation.
         """
@@ -138,6 +138,12 @@ class InterSubpopRepo(ABC):
         pass
 
     def update_all_interaction_terms(self):
+        """
+        Updates `SubpopState` of each `SubpopModel` in
+        `self.subpop_models` to reflect current values of each
+        `InteractionTerm` on that `SubpopModel`.
+        """
+
         for subpop_model in self.subpop_models.values():
             for iterm in subpop_model.interaction_terms.values():
                 iterm.update_current_val(self,
@@ -148,62 +154,488 @@ class InterSubpopRepo(ABC):
 @dataclass
 class SubpopState(ABC):
     """
-    Holds current values of Subpop simulation state.
+    Holds current values of `SubpopModel`'s simulation state.
     """
 
-    def sync_to_current_vals(self, lookup_dict):
+    def sync_to_current_vals(self, lookup_dict: dict):
+        """
+        Updates `SubpopState`'s attributes according to
+        data in `lookup_dict.` Keys of `lookup_dict` must match
+        names of attributes of `SubpopState` instance.
+        """
+
         for name, item in lookup_dict.items():
             setattr(self, name, item.current_val)
 
 
+class StateVariable:
+    """
+    Parent class of `InteractionTerm`, `Compartment`, `EpiMetric`,
+    `DynamicVal`, and `Schedule` classes. All subclasses have the
+    common attributes `self.init_val` and `self.current_val`.
+
+    Attributes:
+        init_val (np.ndarray):
+            holds initial value of `StateVariable` for age-risk groups.
+        current_val (np.ndarray):
+            same size as `self.init_val`, holds current value of `StateVariable`
+            for age-risk groups.
+        history_vals_list (list[np.ndarray]):
+            each element is the same size of `self.current_val`, holds
+            history of compartment states for age-risk groups --
+            element t corresponds to previous `self.current_val` value at
+            end of simulation day t.
+    """
+
+    def __init__(self, init_val=None):
+        self.init_val = init_val
+        self.current_val = copy.deepcopy(init_val)
+        self.history_vals_list = []
+
+    def save_history(self) -> None:
+        """
+        Saves current value to history by appending `self.current_val` attribute
+            to `self.history_vals_list` in place.
+
+        Deep copying is CRUCIAL because `self.current_val` is a mutable
+            `np.ndarray` -- without deep copying, `self.history_vals_list` would
+            have the same value for all elements.
+        """
+        self.history_vals_list.append(copy.deepcopy(self.current_val))
+
+    def clear_history(self) -> None:
+        """
+        Resets `self.history_vals_list` attribute to empty list.
+        """
+
+        self.history_vals_list = []
+
+
+class Compartment(StateVariable):
+    """
+    Class for epidemiological compartments (e.g. Susceptible,
+        Exposed, Infected, etc...).
+
+    Inherits attributes from `StateVariable`.
+
+    Attributes:
+        current_inflow (np.ndarray):
+            same size as `self.current_val`, used to sum up all
+            transition variable realizations incoming to this compartment
+            for age-risk groups.
+        current_outflow (np.ndarray):
+            same size of `self.current_val`, used to sum up all
+            transition variable realizations outgoing from this compartment
+            for age-risk groups.
+    """
+
+    def __init__(self,
+                 init_val):
+        super().__init__(init_val)
+
+        self.current_inflow = np.zeros(np.shape(init_val))
+        self.current_outflow = np.zeros(np.shape(init_val))
+
+    def update_current_val(self) -> None:
+        """
+        Updates `self.current_val` attribute in-place by adding
+            `self.current_inflow` (sum of all incoming transition variables'
+            realizations) and subtracting current outflow (sum of all
+            outgoing transition variables' realizations).
+        """
+        self.current_val += self.current_inflow - self.current_outflow
+
+    def reset_inflow(self) -> None:
+        """
+        Resets `self.current_inflow` attribute to np.ndarray of zeros.
+        """
+        self.current_inflow = np.zeros(np.shape(self.current_inflow))
+
+    def reset_outflow(self) -> None:
+        """
+        Resets `self.current_outflow` attribute to np.ndarray of zeros.
+        """
+        self.current_outflow = np.zeros(np.shape(self.current_outflow))
+
+
+class TransitionVariable(ABC):
+    """
+    Abstract base class for transition variables in
+    epidemiological model.
+
+    For example, in an S-I-R model, the new number infected
+    every iteration (the number going from S to I) in an iteration
+    is modeled as a `TransitionVariable` subclass, with a concrete
+    implementation of the abstract method `self.get_current_rate`.
+
+    When an instance is initialized, its `self.get_realization` attribute
+    is dynamically assigned, just like in the case of
+    `TransitionVariableGroup` instantiation.
+
+    Attributes:
+        _transition_type (str):
+            only values defined in `TransitionTypes` are valid, specifying
+            probability distribution of transitions between compartments.
+        get_current_rate (function):
+            provides specific implementation for computing current rate
+            as a function of current subpopulation simulation state and
+            epidemiological parameters.
+        current_rate (np.ndarray):
+            holds output from `self.get_current_rate` method -- used to generate
+            random variable realizations for transitions between compartments.
+        current_val (np.ndarray):
+            holds realization of random variable parameterized by
+            `self.current_rate`.
+        history_vals_list (list[np.ndarray]):
+            each element is the same size of `self.current_val`, holds
+            history of transition variable realizations for age-risk
+            groups -- element t corresponds to previous `self.current_val`
+            value at end of simulation day t.
+
+    See `__init__` docstring for other attributes.
+    """
+
+    def __init__(self,
+                 origin: Compartment,
+                 destination: Compartment,
+                 transition_type: TransitionTypes,
+                 is_jointly_distributed: str=False):
+        """
+        Parameters:
+            origin (Compartment):
+                `Compartment` from which `TransitionVariable` exits.
+            destination (Compartment):
+                `Compartment` that the `TransitionVariable` enters.
+            transition_type (str):
+                only values defined in `TransitionTypes` are valid, specifying
+                probability distribution of transitions between compartments.
+            is_jointly_distributed (bool):
+                indicates if transition quantity must be jointly computed
+                (i.e. if there are multiple outflows from the origin compartment).
+        """
+
+        self.origin = origin
+        self.destination = destination
+
+        # Also see __init__ method in TransitionVariableGroup class.
+        #   The structure is similar.
+        self._transition_type = transition_type
+        self._is_jointly_distributed = is_jointly_distributed
+
+        if is_jointly_distributed:
+            self.get_realization = None
+        else:
+            self.get_realization = getattr(self, "get_" + transition_type + "_realization")
+
+        self.current_rate = None
+        self.current_val = 0
+
+        self.history_vals_list = []
+
+    @property
+    def transition_type(self) -> TransitionTypes:
+        return self._transition_type
+
+    @property
+    def is_jointly_distributed(self) -> bool:
+        return self._is_jointly_distributed
+
+    @abstractmethod
+    def get_current_rate(self,
+                         state: SubpopState,
+                         params: SubpopParams) -> np.ndarray:
+        """
+        Computes and returns current rate of transition variable,
+        based on current state of the simulation and epidemiological parameters.
+        Output should be a numpy array of size |A| x |R|, where |A| is the
+        number of age groups and |R| is number of risk groups.
+
+        Args:
+            state (SubpopState):
+                holds subpopulation simulation state
+                (current values of `StateVariable` instances).
+            params (SubpopParams):
+                holds values of epidemiological parameters.
+
+        Returns:
+            np.ndarray:
+                holds age-risk transition rate,
+                must be same shape as origin.init_val,
+                i.e. be size |A| x |R|, where |A| is the number of age groups
+                and |R| is number of risk groups.
+        """
+        pass
+
+    def update_origin_outflow(self) -> None:
+        """
+        Adds current realization of `TransitionVariable` to
+            its origin `Compartment`'s current_outflow.
+            Used to compute total number leaving that
+            origin `Compartment`.
+        """
+
+        self.origin.current_outflow += self.current_val
+
+    def update_destination_inflow(self) -> None:
+        """
+        Adds current realization of `TransitionVariable` to
+            its destination `Compartment`'s `current_inflow`.
+            Used to compute total number leaving that
+            destination `Compartment`.
+        """
+
+        self.destination.current_inflow += self.current_val
+
+    def save_history(self) -> None:
+        """
+        Saves current value to history by appending `self.current_val`
+            attribute to `self.history_vals_list` in place.
+
+        Deep copying is CRUCIAL because `self.current_val` is a mutable
+            np.ndarray -- without deep copying, `self.history_vals_list` would
+            have the same value for all elements.
+        """
+        self.history_vals_list.append(copy.deepcopy(self.current_val))
+
+    def clear_history(self) -> None:
+        """
+        Resets `self.history_vals_list` attribute to empty list.
+        """
+
+        self.history_vals_list = []
+
+    def get_realization(self,
+                        RNG: np.random.Generator,
+                        num_timesteps: int) -> np.ndarray:
+        """
+        This method gets assigned to one of the following methods
+            based on the `TransitionVariable` transition type:
+            `self.get_binomial_realization`, `self.get_binomial_taylor_approx_realization`,
+            `self.get_poisson_realization`, `self.get_binomial_deterministic_realization`,
+            `self.get_binomial_taylor_approx_deterministic_realization`,
+            `self.get_poisson_deterministic_realization`. This is done so that
+            the same method `self.get_realization` can be called regardless of
+            transition type.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+        """
+
+        pass
+
+    def get_binomial_realization(self,
+                                 RNG: np.random.Generator,
+                                 num_timesteps: int) -> np.ndarray:
+        """
+        Uses `RNG` to generate binomial random variable with
+            number of trials equal to population count in the
+            origin `Compartment` and probability computed from
+            a function of the `TransitionVariable`'s current rate
+            -- see the `approx_binomial_probability_from_rate`
+            function for details.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
+        Returns:
+            np.ndarray:
+                size |A| x |R|, where |A| is the number of age groups and
+                |R| is number of risk groups.
+        """
+
+        return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
+                            p=approx_binomial_probability_from_rate(self.current_rate, 1.0 / num_timesteps))
+
+    def get_binomial_taylor_approx_realization(self,
+                                               RNG: np.random.Generator,
+                                               num_timesteps: int) -> np.ndarray:
+        """
+        Uses `RNG` to generate binomial random variable with
+            number of trials equal to population count in the
+            origin `Compartment` and probability equal to
+            the `TransitionVariable`'s `current_rate` / `num_timesteps`.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
+        Returns:
+            np.ndarray:
+                size |A| x |R|, where |A| is the number of age groups and L
+                is number of risk groups.
+        """
+        return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
+                            p=self.current_rate * (1.0 / num_timesteps))
+
+    def get_poisson_realization(self,
+                                RNG: np.random.Generator,
+                                num_timesteps: int) -> np.ndarray:
+        """
+        Uses `RNG` to generate Poisson random variable with
+            rate equal to (population count in the
+            origin `Compartment` x the `TransitionVariable`'s
+            `current_rate` / `num_timesteps`)
+
+        Parameters:
+            RNG (np.random.Generator object):
+                 used to generate stochastic transitions in the model and control
+                 reproducibility.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
+        Returns:
+            np.ndarray:
+                size |A| x |R|, where |A| is the number of age groups and
+                |R| is number of risk groups.
+        """
+        return RNG.poisson(self.base_count * self.current_rate / float(num_timesteps))
+
+    def get_binomial_deterministic_realization(self,
+                                               RNG: np.random.Generator,
+                                               num_timesteps: int) -> np.ndarray:
+        """
+        Deterministically returns mean of binomial distribution
+            (number of trials x probability), where number of trials
+            equals population count in the origin `Compartment` and
+            probability is computed from a function of the `TransitionVariable`'s
+            current rate -- see the `approx_binomial_probability_from_rate`
+            function for details.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                NOT USED -- only included so that get_realization has
+                the same function arguments regardless of transition type.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
+        Returns:
+            np.ndarray:
+                size |A| x |R|, where |A| is the number of age groups and
+                |R| is number of risk groups.
+        """
+
+        return np.asarray(self.base_count *
+                          approx_binomial_probability_from_rate(self.current_rate, 1.0 / num_timesteps),
+                          dtype=int)
+
+    def get_binomial_taylor_approx_deterministic_realization(self,
+                                                             RNG: np.random.Generator,
+                                                             num_timesteps: int) -> np.ndarray:
+        """
+        Deterministically returns mean of binomial distribution
+            (number of trials x probability), where number of trials
+            equals population count in the origin `Compartment` and
+            probability equals the `TransitionVariable`'s `current_rate` /
+            `num_timesteps`.
+
+        Parameters:
+            RNG (np.random.Generator object):
+                NOT USED -- only included so that get_realization has
+                the same function arguments regardless of transition type.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
+        Returns:
+            np.ndarray:
+                size |A| x |R|, where |A| is the number of age groups and
+                |R| is number of risk groups.
+        """
+
+        return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
+
+    def get_poisson_deterministic_realization(self,
+                                              RNG: np.random.Generator,
+                                              num_timesteps: int) -> np.ndarray:
+        """
+        Deterministically returns mean of Poisson distribution,
+            given by (population count in the origin `Compartment` x
+            `TransitionVariable`'s `current_rate` / `num_timesteps`).
+
+        Parameters:
+            RNG (np.random.Generator object):
+                NOT USED -- only included so that get_realization has
+                the same function arguments regardless of transition type.
+            num_timesteps (int):
+                number of timesteps per day -- used to determine time interval
+                length for discretization.
+
+        Returns:
+            np.ndarray:
+                size |A| x |R|, where |A| is the number of age groups and
+                |R| is number of risk groups.
+        """
+
+        return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
+
+    @property
+    def base_count(self) -> np.ndarray:
+        return self.origin.current_val
+
 class TransitionVariableGroup:
     """
-    Container for TransitionVariable objects to handle joint sampling,
+    Container for `TransitionVariable` objects to handle joint sampling,
     when there are multiple outflows from a single compartment.
 
-    For example, if all outflows of compartment H are: R and D,
-    i.e. from the Hosp compartment, people either go to Recovered
-    or Dead, a TransitionVariableGroup that holds both R and D handles
-    the correct correlation structure between R and D.
+    For example, if all outflows of compartment `H` are: `R` and `D`,
+    i.e. from the hospital, people either recover or die,
+    a `TransitionVariableGroup` that holds both `R` and `D` handles
+    the correct correlation structure between `R` and `D.`
 
-    When an instance is initialized, its get_joint_realization attribute
-    is dynamically assigned to a method according to its transition_type
+    When an instance is initialized, its `self.get_joint_realization` attribute
+    is dynamically assigned to a method according to its `self.transition_type`
     attribute. This enables all instances to use the same method during
     simulation.
 
     Attributes:
         origin (Compartment):
-            specifies origin of TransitionVariableGroup --
+            specifies origin of `TransitionVariableGroup` --
             corresponding populations leave this compartment.
         _transition_type (str):
-            only values defined in JointTransitionTypes Enum are valid,
+            only values defined in `JointTransitionTypes` are valid,
             specifies joint probability distribution of all outflows
             from origin.
-        transition_variables (list[TransitionVariable]):
-            specifying TransitionVariable instances that outflow from origin --
+        transition_variables (list[`TransitionVariable`]):
+            specifying `TransitionVariable` instances that outflow from origin --
             order does not matter.
         get_joint_realization (function):
             assigned at initialization, generates realizations according
-            to probability distribution given by _transition_type attribute,
+            to probability distribution given by `self._transition_type` attribute,
             returns either (M x |A| x |R|) or ((M+1) x |A| x |R|) np.ndarray,
-            where M is the length of transition_variables (i.e., number of
+            where M is the length of `self.transition_variables` (i.e., number of
             outflows from origin), |A| is the number of age groups, |R| is number of
             risk groups.
         current_vals_list (list):
-            used to store results from get_joint_realization --
+            used to store results from `self.get_joint_realization` --
             has either M or M+1 arrays of size |A| x |R|.
 
-    See __init__ docstring for other attributes.
+    See `__init__` docstring for other attributes.
     """
 
     def __init__(self,
-                 origin,
-                 transition_type,
-                 transition_variables):
+                 origin: Compartment,
+                 transition_type: TransitionTypes,
+                 transition_variables: list[TransitionVariable]):
         """
         Args:
             transition_type (str):
-                only values defined in TransitionTypes Enum are valid, specifying
+                only values defined in `TransitionTypes` are valid, specifying
                 probability distribution of transitions between compartments.
 
         See class docstring for other parameters.
@@ -240,11 +672,10 @@ class TransitionVariableGroup:
         that elements sum to 1.
 
         Returns:
-            np.ndarray:
-                contains positive floats, has size equal to number
-                of age groups x number of risk groups,
-                sum of current rates of transition variables in
-                transition variable group.
+            numpy array of positive floats with size equal to number
+            of age groups x number of risk groups, and with value
+            corresponding to sum of current rates of transition variables in
+            transition variable group.
         """
 
         # axis 0: corresponds to outgoing transition variable
@@ -257,16 +688,15 @@ class TransitionVariableGroup:
                                 num_timesteps: int) -> list:
         """
         Returns an array of probabilities used for joint binomial
-        (multinomial) transitions (get_multinomial_realization method).
+        (multinomial) transitions (`get_multinomial_realization` method).
 
         Returns:
-            np.ndarray:
-                contains positive floats <= 1, size equal to
-                ((length of outgoing transition variables list + 1)
-                x number of age groups x number of risk groups) --
-                note the "+1" corresponds to the multinomial outcome of staying
-                in the same epi compartment (not transitioning to any outgoing
-                epi compartment).
+            contains positive floats <= 1, size equal to
+            ((length of outgoing transition variables list + 1)
+            x number of age groups x number of risk groups) --
+            note the "+1" corresponds to the multinomial outcome of staying
+            in the same epi compartment (not transitioning to any outgoing
+            epi compartment).
         """
 
         total_rate = self.get_total_rate()
@@ -297,9 +727,8 @@ class TransitionVariableGroup:
         corresponds to current rate of ith transition variable.
 
         Returns:
-            np.ndarray:
-                array of positive floats, size equal to (length of outgoing
-                transition variables list x number of age groups x number of risk groups).
+            array of positive floats, size equal to (length of outgoing
+            transition variables list x number of age groups x number of risk groups).
         """
 
         current_rates_list = []
@@ -312,13 +741,13 @@ class TransitionVariableGroup:
                               RNG: np.random.Generator,
                               num_timesteps: int) -> np.ndarray:
         """
-        This function is dynamically assigned based on the Transition
-        Variable Group's transition type -- this function is set to
-        one of the following methods: get_multinomial_realization,
-        get_multinomial_taylor_approx_realization, get_poisson_realization,
-        get_multinomial_deterministic_realization,
-        get_multinomial_taylor_approx_deterministic_realization,
-        get_poisson_deterministic_realization.
+        This function is dynamically assigned based on the
+        `TransitionVariableGroup`'s `transition_type` -- this function is set to
+        one of the following methods: `self.get_multinomial_realization`,
+        `self.get_multinomial_taylor_approx_realization`,
+        `self.get_poisson_realization`, `self.get_multinomial_deterministic_realization`,
+        `self.get_multinomial_taylor_approx_deterministic_realization`,
+        `self.get_poisson_deterministic_realization`.
 
         Parameters:
             RNG (np.random.Generator object):
@@ -352,7 +781,7 @@ class TransitionVariableGroup:
                 ((length of outgoing transition variables list + 1)
                 x number of age groups x number of risk groups) --
                 note the "+1" corresponds to the multinomial outcome of staying
-                in the same epi compartment (not transitioning to any outgoing
+                in the same compartment (not transitioning to any outgoing
                 epi compartment).
         """
 
@@ -395,8 +824,8 @@ class TransitionVariableGroup:
                 size equal to (length of outgoing transition variables list + 1)
                 x number of age groups x number of risk groups --
                 note the "+1" corresponds to the multinomial outcome of staying
-                in the same epi compartment (not transitioning to any outgoing
-                epi compartment).
+                in the same compartment (not transitioning to any outgoing
+                compartment).
         """
 
         num_outflows = len(self.transition_variables)
@@ -471,7 +900,7 @@ class TransitionVariableGroup:
                                                   RNG: np.random.Generator,
                                                   num_timesteps: int) -> np.ndarray:
         """
-        Deterministic counterpart to get_multinomial_realization --
+        Deterministic counterpart to `self.get_multinomial_realization` --
         uses mean (n x p, i.e. total counts x probability array) as realization
         rather than randomly sampling.
 
@@ -489,8 +918,8 @@ class TransitionVariableGroup:
                 (length of outgoing transition variables list + 1)
                 x number of age groups x number of risk groups --
                 note the "+1" corresponds to the multinomial outcome of staying
-                in the same epi compartment (not transitioning to any outgoing
-                epi compartment).
+                in the same compartment (not transitioning to any outgoing
+                compartment).
         """
 
         probabilities_array = self.get_probabilities_array(num_timesteps)
@@ -500,7 +929,7 @@ class TransitionVariableGroup:
                                                                 RNG: np.random.Generator,
                                                                 num_timesteps: int) -> np.ndarray:
         """
-        Deterministic counterpart to get_multinomial_taylor_approx_realization --
+        Deterministic counterpart to `self.get_multinomial_taylor_approx_realization` --
         uses mean (n x p, i.e. total counts x probability array) as realization
         rather than randomly sampling.
 
@@ -518,8 +947,8 @@ class TransitionVariableGroup:
                 (length of outgoing transition variables list + 1)
                 x number of age groups x number of risk groups --
                 note the "+1" corresponds to the multinomial outcome of staying
-                in the same epi compartment (not transitioning to any outgoing
-                epi compartment).
+                in the same compartment (not transitioning to any outgoing
+                compartment).
         """
 
         current_rates_array = self.get_current_rates_array()
@@ -529,7 +958,7 @@ class TransitionVariableGroup:
                                               RNG: np.random.Generator,
                                               num_timesteps: int) -> np.ndarray:
         """
-        Deterministic counterpart to get_poisson_realization --
+        Deterministic counterpart to `self.get_poisson_realization` --
         uses mean (rate array) as realization rather than randomly sampling.
 
         Parameters:
@@ -547,16 +976,16 @@ class TransitionVariableGroup:
                 x number of age groups x number of risk groups).
         """
 
-        return np.asarray(self.origin.current_val * self.get_current_rates_array() / num_timesteps, dtype=int)
+        return np.asarray(self.origin.current_val *
+                          self.get_current_rates_array() / num_timesteps, dtype=int)
 
     def reset(self) -> None:
         self.current_vals_list = []
 
     def update_transition_variable_realizations(self) -> None:
         """
-        Updates current_val attribute on all
-        TransitionVariable instances contained in this
-        transition variable group.
+        Updates current_val attribute on all `TransitionVariable`
+        instances contained in this `TransitionVariableGroup`.
         """
 
         # Since the ith element in probabilities_array corresponds to the ith transition variable
@@ -568,449 +997,31 @@ class TransitionVariableGroup:
                 self.current_vals_list[ix, :, :]
 
 
-class TransitionVariable(ABC):
-    """
-    Abstract base class for transition variables in
-    epidemiological model.
-
-    For example, in an S-I-R model, the new number infected
-    every iteration (the number going from S to I) in an iteration
-    is modeled as a TransitionVariable subclass, with a concrete
-    implementation of the abstract method get_current_rate.
-
-    When an instance is initialized, its get_realization attribute
-    is dynamically assigned, just like in the case of
-    TransitionVariableGroup instantiation.
-
-    Attributes:
-        _transition_type (str):
-            only values defined in TransitionTypes Enum are valid, specifying
-            probability distribution of transitions between compartments.
-        get_current_rate (function):
-            provides specific implementation for computing current rate
-            as a function of current Subpop simulation state and
-            epidemiological parameters.
-        current_rate (np.ndarray):
-            holds output from get_current_rate method -- used to generate
-            random variable realizations for transitions between compartments.
-        current_val (np.ndarray):
-            holds realization of random variable parameterized by current_rate.
-        history_vals_list (list[np.ndarray]):
-            each element is the same size of current_val, holds
-            history of transition variable realizations for age-risk
-            groups -- element t corresponds to previous current_val value
-            at end of simulation day t.
-
-    See __init__ docstring for other attributes.
-    """
-
-    def __init__(self,
-                 origin,
-                 destination,
-                 transition_type,
-                 is_jointly_distributed=False):
-        """
-        Parameters:
-            origin (Compartment):
-                the compartment from which Transition Variable exits.
-            destination (Compartment):
-                compartment that the TransitionVariable enters.
-            transition_type (str):
-                only values defined in TransitionTypes Enum are valid, specifying
-                probability distribution of transitions between compartments.
-            is_jointly_distributed (bool):
-                indicates if transition quantity must be jointly computed
-                (i.e. if there are multiple outflows from the origin compartment).
-        """
-
-        self.origin = origin
-        self.destination = destination
-
-        # Also see __init__ method in TransitionVariableGroup class.
-        #   The structure is similar.
-        self._transition_type = transition_type
-        self._is_jointly_distributed = is_jointly_distributed
-
-        if is_jointly_distributed:
-            self.get_realization = None
-        else:
-            self.get_realization = getattr(self, "get_" + transition_type + "_realization")
-
-        self.current_rate = None
-        self.current_val = 0
-
-        self.history_vals_list = []
-
-    @property
-    def transition_type(self) -> TransitionTypes:
-        return self._transition_type
-
-    @property
-    def is_jointly_distributed(self) -> bool:
-        return self._is_jointly_distributed
-
-    @abstractmethod
-    def get_current_rate(self,
-                         state: SubpopState,
-                         params: SubpopParams) -> np.ndarray:
-        """
-        Computes and returns current rate of transition variable,
-        based on current state of the simulation and epidemiological parameters.
-        Output should be a numpy array of size |A| x |R|, where |A| is the
-        number of age groups and |R| is number of risk groups.
-
-        Args:
-            state (SubpopState):
-                holds Subpop simulation state (current values of StateVariable instances).
-            params (SubpopParams):
-                holds values of epidemiological parameters.
-
-        Returns:
-            np.ndarray:
-                holds age-risk transition rate,
-                must be same shape as origin.init_val,
-                i.e. be size |A| x |R|, where |A| is the number of age groups
-                and |R| is number of risk groups.
-        """
-        pass
-
-    def update_origin_outflow(self) -> None:
-        """
-        Adds current realization of TransitionVariable to
-            its origin Compartment's current_outflow.
-            Used to compute total number leaving that
-            origin Compartment.
-        """
-
-        self.origin.current_outflow += self.current_val
-
-    def update_destination_inflow(self) -> None:
-        """
-        Adds current realization of TransitionVariable to
-            its destination Compartment's current_inflow.
-            Used to compute total number leaving that
-            destination Compartment.
-        """
-
-        self.destination.current_inflow += self.current_val
-
-    def save_history(self) -> None:
-        """
-        Saves current value to history by appending current_val attribute
-            to history_vals_list in place
-
-        Deep copying is CRUCIAL because current_val is a mutable
-            np.ndarray -- without deep copying, history_vals_list would
-            have the same value for all elements
-        """
-        self.history_vals_list.append(copy.deepcopy(self.current_val))
-
-    def clear_history(self) -> None:
-        """
-        Resets history_vals_list attribute to empty list.
-        """
-
-        self.history_vals_list = []
-
-    def get_realization(self,
-                        RNG: np.random.Generator,
-                        num_timesteps: int) -> np.ndarray:
-        """
-        This method gets assigned to one of the following methods
-            based on the TransitionVariable transition type:
-            get_binomial_realization, get_binomial_taylor_approx_realization,
-            get_poisson_realization, get_binomial_deterministic_realization,
-            get_binomial_taylor_approx_deterministic_realization,
-            get_poisson_deterministic_realization. This is done so that
-            the same method get_realization can be called regardless of
-            transition type.
-
-        Parameters:
-            RNG (np.random.Generator object):
-                 used to generate stochastic transitions in the model and control
-                 reproducibility.
-            num_timesteps (int):
-                number of timesteps per day -- used to determine time interval
-                length for discretization.
-        """
-
-        pass
-
-    def get_binomial_realization(self,
-                                 RNG: np.random.Generator,
-                                 num_timesteps: int) -> np.ndarray:
-        """
-        Uses RNG to generate binomial random variable with
-            number of trials equal to population count in the
-            origin Compartment and probability computed from
-            a function of the TransitionVariable's current rate
-            -- see the approx_binomial_probability_from_rate
-            function for details
-
-        Parameters:
-            RNG (np.random.Generator object):
-                 used to generate stochastic transitions in the model and control
-                 reproducibility.
-            num_timesteps (int):
-                number of timesteps per day -- used to determine time interval
-                length for discretization.
-        
-        Returns:
-            np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and
-                |R| is number of risk groups.
-        """
-
-        return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
-                            p=approx_binomial_probability_from_rate(self.current_rate, 1.0 / num_timesteps))
-
-    def get_binomial_taylor_approx_realization(self,
-                                               RNG: np.random.Generator,
-                                               num_timesteps: int) -> np.ndarray:
-        """
-        Uses RNG to generate binomial random variable with
-            number of trials equal to population count in the
-            origin Compartment and probability equal to
-            the TransitionVariable's current_rate / num_timesteps
-
-        Parameters:
-            RNG (np.random.Generator object):
-                 used to generate stochastic transitions in the model and control
-                 reproducibility.
-            num_timesteps (int):
-                number of timesteps per day -- used to determine time interval
-                length for discretization.
-
-        Returns:
-            np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and L
-                is number of risk groups.
-        """
-        return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
-                            p=self.current_rate * (1.0 / num_timesteps))
-
-    def get_poisson_realization(self,
-                                RNG: np.random.Generator,
-                                num_timesteps: int) -> np.ndarray:
-        """
-        Uses RNG to generate Poisson random variable with
-            rate equal to (population count in the
-            origin Compartment x the TransitionVariable's
-            current_rate / num_timesteps)
-
-        Parameters:
-            RNG (np.random.Generator object):
-                 used to generate stochastic transitions in the model and control
-                 reproducibility.
-            num_timesteps (int):
-                number of timesteps per day -- used to determine time interval
-                length for discretization.
-
-        Returns:
-            np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and
-                |R| is number of risk groups.
-        """
-        return RNG.poisson(self.base_count * self.current_rate / float(num_timesteps))
-
-    def get_binomial_deterministic_realization(self,
-                                               RNG: np.random.Generator,
-                                               num_timesteps: int) -> np.ndarray:
-        """
-        Deterministically returns mean of binomial distribution
-            (number of trials x probability), where number of trials
-            equals population count in the origin Compartment and
-            probability is computed from a function of the TransitionVariable's
-            current rate -- see the approx_binomial_probability_from_rate
-            function for details
-
-        Parameters:
-            RNG (np.random.Generator object):
-                NOT USED -- only included so that get_realization has
-                the same function arguments regardless of transition type.
-            num_timesteps (int):
-                number of timesteps per day -- used to determine time interval
-                length for discretization.
-
-        Returns:
-            np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and
-                |R| is number of risk groups.
-        """
-
-        return np.asarray(self.base_count *
-                          approx_binomial_probability_from_rate(self.current_rate, 1.0 / num_timesteps),
-                          dtype=int)
-
-    def get_binomial_taylor_approx_deterministic_realization(self,
-                                                             RNG: np.random.Generator,
-                                                             num_timesteps: int) -> np.ndarray:
-        """
-        Deterministically returns mean of binomial distribution
-            (number of trials x probability), where number of trials
-            equals population count in the origin Compartment and
-            probability equals the TransitionVariable's current rate /
-            num_timesteps
-
-        Parameters:
-            RNG (np.random.Generator object):
-                NOT USED -- only included so that get_realization has
-                the same function arguments regardless of transition type.
-            num_timesteps (int):
-                number of timesteps per day -- used to determine time interval
-                length for discretization.
-
-        Returns:
-            np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and
-                |R| is number of risk groups.
-        """
-
-        return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
-
-    def get_poisson_deterministic_realization(self,
-                                              RNG: np.random.Generator,
-                                              num_timesteps: int) -> np.ndarray:
-        """
-        Deterministically returns mean of Poisson distribution,
-            givey by (population count in the origin Compartment x
-            TransitionVariable's current rate / num_timesteps)
-
-        Parameters:
-            RNG (np.random.Generator object):
-                NOT USED -- only included so that get_realization has
-                the same function arguments regardless of transition type.
-            num_timesteps (int):
-                number of timesteps per day -- used to determine time interval
-                length for discretization.
-
-        Returns:
-            np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and
-                |R| is number of risk groups.
-        """
-
-        return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
-
-    @property
-    def base_count(self) -> np.ndarray:
-        return self.origin.current_val
-
-
-class StateVariable:
-    """
-    Parent class of InteractionTerm, Compartment, EpiMetric, DynamicVal, and Schedule
-    classes. All subclasses have the common attributes "init_val" and "current_val."
-
-    Attributes:
-        init_val (np.ndarray):
-            holds initial value of StateVariable for age-risk groups.
-        current_val (np.ndarray):
-            same size as init_val, holds current value of StateVariable
-            for age-risk groups.
-        history_vals_list (list[np.ndarray]):
-            each element is the same size of current_val, holds
-            history of compartment states for age-risk groups --
-            element t corresponds to previous current_val value at
-            end of simulation day t.
-    """
-
-    def __init__(self, init_val=None):
-        self.init_val = init_val
-        self.current_val = copy.deepcopy(init_val)
-        self.history_vals_list = []
-
-    def save_history(self) -> None:
-        """
-        Saves current value to history by appending current_val attribute
-            to history_vals_list in place
-
-        Deep copying is CRUCIAL because current_val is a mutable
-            np.ndarray -- without deep copying, history_vals_list would
-            have the same value for all elements
-        """
-        self.history_vals_list.append(copy.deepcopy(self.current_val))
-
-    def clear_history(self) -> None:
-        """
-        Resets history_vals_list attribute to empty list.
-        """
-
-        self.history_vals_list = []
-
-
-class Compartment(StateVariable):
-    """
-    Class for epidemiological compartments (e.g. Susceptible,
-        Exposed, Infected, etc...).
-
-    Inherits attributes from StateVariable.
-
-    Attributes:
-        current_inflow (np.ndarray):
-            same size as current_val, used to sum up all
-            transition variable realizations incoming to this compartment
-            for age-risk groups.
-        current_outflow (np.ndarray):
-            same size of current_val, used to sum up all
-            transition variable realizations outgoing from this compartment
-            for age-risk groups.
-    """
-
-    def __init__(self,
-                 init_val):
-        super().__init__(init_val)
-
-        self.current_inflow = np.zeros(np.shape(init_val))
-        self.current_outflow = np.zeros(np.shape(init_val))
-
-    def update_current_val(self) -> None:
-        """
-        Updates current_val attribute in-place by adding
-            current_inflow (sum of all incoming transition variables'
-            realizations) and subtracting current outflow (sum of all
-            outgoing transition variables' realizations)
-        """
-        self.current_val += self.current_inflow - self.current_outflow
-
-    def reset_inflow(self) -> None:
-        """
-        Resets current_inflow attribute to np.ndarray of zeros.
-        """
-        self.current_inflow = np.zeros(np.shape(self.current_inflow))
-
-    def reset_outflow(self) -> None:
-        """
-        Resets current_outflow attribute to np.ndarray of zeros.
-        """
-        self.current_outflow = np.zeros(np.shape(self.current_outflow))
-
-
 class EpiMetric(StateVariable, ABC):
     """
     Abstract base class for epi metrics in epidemiological model.
 
     This is intended for variables that are aggregate deterministic functions of
-    the subpop simulation state (including epi compartment values, other parameters,
+    the `SubpopState` (including `Compartment` `current_val`'s, other parameters,
     and time.)
 
     For example, population-level immunity variables should be
-    modeled as a EpiMetric subclass, with a concrete
-    implementation of the abstract method get_change_in_current_val.
+    modeled as a `EpiMetric` subclass, with a concrete
+    implementation of the abstract method `self.get_change_in_current_val`.
 
-    Inherits attributes from StateVariable.
+    Inherits attributes from `StateVariable`.
 
     Attributes:
         current_val (np.ndarray):
-            same size as init_val, holds current value of State Variable
+            same size as init_val, holds current value of `StateVariable`
             for age-risk groups.
         change_in_current_val : (np.ndarray):
             initialized to None, but during simulation holds change in
-            current value of EpiMetric for age-risk groups
+            current value of `EpiMetric` for age-risk groups
             (size |A| x |R|, where |A| is the number of risk groups and |R| is number
             of age groups).
 
-    See __init__ docstring for other attributes.
+    See `__init__` docstring for other attributes.
     """
 
     def __init__(self,
@@ -1045,8 +1056,8 @@ class EpiMetric(StateVariable, ABC):
 
         Args:
             state (SubpopState):
-                holds Subpop simulation state (current values of StateVariable
-                instances).
+                holds subpopulation simulation state (current values of
+                `StateVariable` instances).
             params (SubpopParams):
                 holds values of epidemiological parameters.
             num_timesteps (int):
@@ -1062,8 +1073,8 @@ class EpiMetric(StateVariable, ABC):
 
     def update_current_val(self) -> None:
         """
-        Adds change_in_current_val attribute to current_val attribute
-            in-place.
+        Adds `self.change_in_current_val` attribute to
+            `self.current_val` attribute in-place.
         """
 
         self.current_val += self.change_in_current_val
@@ -1072,7 +1083,8 @@ class EpiMetric(StateVariable, ABC):
 class DynamicVal(StateVariable, ABC):
     """
     Abstract base class for variables that dynamically adjust
-    their values based the current values of other StateVariable instances.
+    their values based the current values of other `StateVariable`
+    instances.
 
     This class should model social distancing (and more broadly,
     staged-alert policies). For example, if we consider a
@@ -1082,9 +1094,9 @@ class DynamicVal(StateVariable, ABC):
     rates, depending on the epi compartments corresponding to
     infected people.
 
-    Inherits attributes from StateVariable.
+    Inherits attributes from `StateVariable`.
 
-    See __init__ docstring for other attributes.
+    See `__init__` docstring for other attributes.
     """
 
     def __init__(self,
@@ -1094,10 +1106,10 @@ class DynamicVal(StateVariable, ABC):
 
         Args:
             init_val (Optional[np.ndarray | float]):
-                starting value(s) at the beginning of the simulation
+                starting value(s) at the beginning of the simulation.
             is_enabled (Optional[bool]):
-                if False, this dynamic value does not get updated
-                during the simulation and defaults to its init_val.
+                if `False`, this dynamic value does not get updated
+                during the simulation and defaults to its `self.init_val`.
                 This is designed to allow easy toggling of
                 simulations with or without staged alert policies
                 and other interventions.
@@ -1113,8 +1125,8 @@ class DynamicVal(StateVariable, ABC):
         """
         Args:
             state (SubpopState):
-                holds Subpop simulation state (current values of StateVariable
-                instances).
+                holds subpopulation simulation state (current values of
+                `StateVariable` instances).
             params (SubpopParams):
                 holds values of epidemiological parameters.
         """
@@ -1128,9 +1140,9 @@ class Schedule(StateVariable, ABC):
     the week and whether the current day is a holiday), historical
     vaccination data, and seasonality.
 
-    Inherits attributes from StateVariable.
+    Inherits attributes from `StateVariable`.
 
-    See __init__ docstring for other attributes.
+    See `__init__` docstring for other attributes.
     """
 
     def __init__(self,
@@ -1141,7 +1153,7 @@ class Schedule(StateVariable, ABC):
             init_val (Optional[np.ndarray | float]):
                 starting value(s) at the beginning of the simulation
             timeseries_df (Optional[pd.DataFrame] = None):
-                has a "date" column with strings in format "YYYY-MM-DD"
+                has a "date" column with strings in format `"YYYY-MM-DD"`
                 of consecutive calendar days, and other columns
                 corresponding to values on those days
         """
@@ -1155,7 +1167,7 @@ class Schedule(StateVariable, ABC):
                            current_date: datetime.date) -> None:
         """
         Subpop classes must provide a concrete implementation of
-        updating self.current_val in-place.
+        updating `self.current_val` in-place.
 
         Args:
             params (SubpopParams):
@@ -1171,19 +1183,19 @@ class InteractionTerm(StateVariable, ABC):
 
     """
     Abstract base class for variables that depend on the state of
-    more than one SubpopModel (i.e., that depend on more than one
-    SubpopState). These variables are functions of how subpopulations
+    more than one `SubpopModel` (i.e., that depend on more than one
+    `SubpopState`). These variables are functions of how subpopulations
     interact.
 
-    In contrast to other state variables, interaction terms
-    take in an InterSubpopRepo instance to update its current value.
+    In contrast to other state variables, each `InteractionTerm`
+    takes in an `InterSubpopRepo` instance to update its `self.current_val`.
     Other state variables that are "local" and depend on
-    exactly one subpopulation only need to take in one SubpopState
-    and one SubpopParams instance to update its current value.
+    exactly one subpopulation only need to take in one `SubpopState`
+    and one `SubpopParams` instance to update its current value.
 
-    Inherits attributes from StateVariable.
+    Inherits attributes from `StateVariable`.
 
-    See __init__ docstring for other attributes.
+    See `__init__` docstring for other attributes.
     """
 
     @abstractmethod
@@ -1191,15 +1203,15 @@ class InteractionTerm(StateVariable, ABC):
                            inter_subpop_repo: InterSubpopRepo,
                            subpop_params: SubpopParams) -> None:
         """
-        Subpop classes must provide a concrete implementation of
-        updating self.current_val in-place.
+        Subclasses must provide a concrete implementation of
+        updating `self.current_val` in-place.
 
         Args:
             inter_subpop_repo (InterSubpopRepo):
                 manages collection of subpop models with
                 methods for querying information.
             subpop_params (SubpopParams):
-                holds values of Subpop's epidemiological parameters.
+                holds values of subpopulation's epidemiological parameters.
         """
 
         pass
@@ -1207,16 +1219,16 @@ class InteractionTerm(StateVariable, ABC):
 
 class MetapopModel(ABC):
     """
-    Abstract base class that bundles SubpopModels linked using
+    Abstract base class that bundles `SubpopModel`s linked using
         a travel model.
 
     Params:
         inter_subpop_repo (InterSubpopRepo):
-            Accesses and manages SubpopState instances
-            of corresponding SubpopModels, and provides
+            Accesses and manages `SubpopState` instances
+            of corresponding `SubpopModel`s, and provides
             methods to query current values.
 
-    See __init__ docstring for other attributes.
+    See `__init__` docstring for other attributes.
     """
 
     def __init__(self,
@@ -1225,13 +1237,13 @@ class MetapopModel(ABC):
         """
         Params:
             subpop_models (dict):
-                dictionary of SubpopModel instances -- keys are
-                unique names, values are the instances
+                dictionary of `SubpopModel` instances -- keys are
+                unique names, values are the instances.
             inter_subpop_repo (InterSubpopRepo):
-                manages collection of subpop models with
+                manages collection of subpopulation models with
                 methods for querying information.
             name (str):
-                unique identifier for metapopulation model.
+                unique identifier for `MetapopModel`.
         """
 
         self.subpop_models = inter_subpop_repo.subpop_models
@@ -1264,29 +1276,29 @@ class MetapopModel(ABC):
     def simulate_until_day(self,
                            simulation_end_day: int) -> None:
         """
-        Advance simulation model time until simulation_end_day in
-        MetapopModel.
+        Advance simulation model time until `simulation_end_day` in
+        `MetapopModel`.
         
-        NOT just the same as looping through each SubpopModel's 
-        "simulate_until_day" function. On the MetapopModel,
-        because SubpopModel instances are linked with InteractionTerms
-        and are not independent of each other, this MetapopModel's 
-        "simulate_until_day" function has additional functionality. 
+        NOT just the same as looping through each `SubpopModel`'s
+        `simulate_until_day` method. On the `MetapopModel`,
+        because `SubpopModel` instances are linked with `InteractionTerm`s
+        and are not independent of each other, this `MetapopModel`'s
+        `simulate_until_day` method has additional functionality.
 
         Note: the update order at the beginning of each day is very important!
-        - First, each SubpopModel updates its daily state (computing schedules
-            and dynamic values)
-        - Second, the MetapopModel's InterSubpopRepo computes any shared
+        - First, each `SubpopModel` updates its daily state (computing
+            `Schedule` and `DynamicVal` instances).
+        - Second, the `MetapopModel`'s `InterSubpopRepo` computes any shared
             terms used across subpopulations (to reduce computational overhead),
-            and then updates each SubpopModel's associated InteractionTerm
+            and then updates each `SubpopModel`'s associated `InteractionTerm`
             instances.
-        - Third, each SubpopModel simulates discretized timesteps (sampling
-            transition variables, updating epi metrics, and updating compartments)
+        - Third, each `SubpopModel` simulates discretized timesteps (sampling
+            `TransitionVariable`s, updating `EpiMetric`s, and updating `Compartment`s).
 
         Args:
             simulation_end_day (positive int):
-                stop simulation at simulation_end_day (i.e. exclusive,
-                simulate up to but not including simulation_end_day).
+                stop simulation at `simulation_end_day` (i.e. exclusive,
+                simulate up to but not including `simulation_end_day`).
         """
 
         if self.current_simulation_day > simulation_end_day:
@@ -1314,11 +1326,20 @@ class MetapopModel(ABC):
                 subpop_model.increment_simulation_day()
 
     def display(self):
-
+        """
+        Prints structure (compartments and linkages), transition variables,
+        epi metrics, schedules, and dynamic values for each `SubpopModel`
+        instance in `self.subpop_models`.
+        """
         for subpop_model in self.subpop_models.values():
             subpop_model.display()
 
     def reset_simulation(self):
+        """
+        Resets `MetapopModel` by resetting and clearing
+            history on all `SubpopModel` instances in
+            `self.subpop_models`.
+        """
 
         for subpop_model in self.subpop_models.values():
             subpop_model.reset_simulation()
@@ -1327,10 +1348,9 @@ class MetapopModel(ABC):
     def current_simulation_day(self) -> int:
         """
         Returns:
-             (int):
-                Current simulation day. The current simulation day of the
-                MetapopModel should be the same as each individual SubpopModel
-                in the MetapopModel. Otherwise, an error is raised.
+            Current simulation day. The current simulation day of the
+            `MetapopModel` should be the same as each individual `SubpopModel`
+            in the `MetapopModel`. Otherwise, an error is raised.
         """
 
         current_simulation_days_list = []
@@ -1350,11 +1370,10 @@ class MetapopModel(ABC):
     def current_real_date(self) -> datetime.date:
         """
         Returns:
-             (datetime.date):
-                Current real date corresponding to current simulation day.
-                The current real date of the MetapopModel should be the same as
-                each individual SubpopModel in the MetapopModel.
-                Otherwise, an error is raised.
+            Current real date corresponding to current simulation day.
+            The current real date of the `MetapopModel` should be the same as
+            each individual `SubpopModel` in the `MetapopModel`.
+            Otherwise, an error is raised.
         """
 
         current_real_dates_list = []
@@ -1376,7 +1395,7 @@ class SubpopModel(ABC):
     Contains and manages all necessary components for
     simulating a compartmental model for a given subpopulation.
 
-    Each SubpopModel instance includes compartments,
+    Each `SubpopModel` instance includes compartments,
     epi metrics, dynamic vals, a data container for the current simulation
     state, transition variables and transition variable groups,
     epidemiological parameters, simulation experiment configuration
@@ -1386,35 +1405,35 @@ class SubpopModel(ABC):
     compartment/transition structure, are instances of this class.
 
     When creating an instance, the order of elements does not matter
-    within compartments, epi_metrics, dynamic_vals,
-    transition_variables, and transition_variable_groups.
+    within `self.compartments`, `self.epi_metrics`, `self.dynamic_vals`,
+    `self.transition_variables`, and `self.transition_variable_groups`.
     The "flow" and "physics" information are stored on the objects.
 
     Attributes:
         interaction_terms (sc.objdict):
-            objdict of all the subpop model's InteractionTerm instances.
+            objdict of all the subpop model's `InteractionTerm` instances.
         compartments (sc.objdict):
-            objdict of all the subpop model's Compartment instances.
+            objdict of all the subpop model's `Compartment` instances.
         transition_variables (sc.objdict):
-            objdict of all the subpop model's TransitionVariable instances.
+            objdict of all the subpop model's `TransitionVariable` instances.
         transition_variable_groups (sc.objdict):
-            objdict of all the subpop model's TransitionVariableGroup instances.
+            objdict of all the subpop model's `TransitionVariableGroup` instances.
         epi_metrics (sc.objdict):
-            objdict of all the subpop model's EpiMetric instances.
+            objdict of all the subpop model's `EpiMetric` instances.
         dynamic_vals (sc.objdict):
-            objdict of all the subpop model's DynamicVal instances.
+            objdict of all the subpop model's `DynamicVal` instances.
         schedules (sc.objdict):
-            objdict of all the subpop model's Schedule instances.
+            objdict of all the subpop model's `Schedule` instances.
         current_simulation_day (int):
             tracks current simulation day -- incremented by +1
-            when config.timesteps_per_day discretized timesteps
+            when `config.timesteps_per_day` discretized timesteps
             have completed.
         current_real_date (datetime.date):
             tracks real-world date -- advanced by +1 day when
-            config.timesteps_per_day discretized timesteps
+            `config.timesteps_per_day` discretized timesteps
             have completed.
 
-    See __init__ docstring for other attributes.
+    See `__init__` docstring for other attributes.
     """
 
     def __init__(self,
@@ -1428,7 +1447,7 @@ class SubpopModel(ABC):
         """
         Params:
             state (SubpopState):
-                holds current values of SubpopModel's state variables.
+                holds current values of `SubpopModel`'s state variables.
             params (SubpopParams):
                 data container for the model's epidemiological parameters,
                 such as the "Greek letters" characterizing sojourn times
@@ -1439,10 +1458,10 @@ class SubpopModel(ABC):
                  used to generate stochastic transitions in the model and control
                  reproducibility.
             name (str):
-                unique identifier of SubpopModel
+                unique identifier of `SubpopModel`.
             metapop_model (Optional[MetapopModel]):
-                if not None, is the MetapopModel instance
-                associated with this SubpopModel.
+                if not `None`, is the `MetapopModel` instance
+                associated with this `SubpopModel`.
         """
 
         self.state = copy.deepcopy(state)
@@ -1510,7 +1529,7 @@ class SubpopModel(ABC):
 
     def get_start_real_date(self):
         """
-        Fetches start_real_date from config -- converts to
+        Fetches `start_real_date` from `self.config` -- converts to
             proper datetime.date format if originally given as
             string.
 
@@ -1561,8 +1580,8 @@ class SubpopModel(ABC):
 
     def modify_random_seed(self, new_seed_number) -> None:
         """
-        Modifies model's RNG attribute in-place to new generator
-        seeded at new_seed_number.
+        Modifies model's `self.RNG` attribute in-place to new generator
+        seeded at `new_seed_number`.
 
         Args:
             new_seed_number (int):
@@ -1575,19 +1594,19 @@ class SubpopModel(ABC):
     def simulate_until_day(self,
                            simulation_end_day: int) -> None:
         """
-        Advance simulation model time until simulation_end_day.
+        Advance simulation model time until `simulation_end_day`.
 
         Advance time by iterating through simulation days,
         which are simulated by iterating through discretized
         timesteps.
 
-        Save daily simulation data as history on each Compartment
+        Save daily simulation data as history on each `Compartment`
         instance.
 
         Args:
             simulation_end_day (positive int):
-                stop simulation at simulation_end_day (i.e. exclusive,
-                simulate up to but not including simulation_end_day).
+                stop simulation at `simulation_end_day` (i.e. exclusive,
+                simulate up to but not including `simulation_end_day`).
         """
 
         if self.current_simulation_day > simulation_end_day:
@@ -1612,11 +1631,11 @@ class SubpopModel(ABC):
     def simulate_timesteps(self,
                            num_timesteps: int) -> None:
         """
-        Subroutine for simulate_until_day.
+        Subroutine for `self.simulate_until_day`.
 
         Iterates through discretized timesteps to simulate next
         simulation day. Granularity of discretization is given by
-        attribute config.timesteps_per_day.
+        attribute `self.config.timesteps_per_day`.
 
         Properly scales transition variable realizations and changes
         in dynamic vals by specified timesteps per day.
@@ -1680,7 +1699,7 @@ class SubpopModel(ABC):
     def update_epi_metrics(self) -> None:
         """
         Update current value attribute on each associated
-            EpiMetric instance.
+            `EpiMetric` instance.
         """
 
         state = self.state
@@ -1711,9 +1730,9 @@ class SubpopModel(ABC):
         """
         For each transition variable, sample a random realization
             using its current rate. Handle jointly distributed transition
-            variables first (using TransitionVariableGroup logic), then
+            variables first (using `TransitionVariableGroup` logic), then
             handle marginally distributed transition variables.
-            Use SubpopModel's RNG to generate random variables.
+            Use `SubpopModel`'s `RNG` to generate random variables.
         """
 
         RNG = self.RNG
@@ -1737,8 +1756,8 @@ class SubpopModel(ABC):
 
     def update_compartments(self) -> None:
         """
-        Update current value of each Compartment, by
-            looping through all TransitionVariable instances
+        Update current value of each `Compartment`, by
+            looping through all `TransitionVariable` instances
             and subtracting/adding their current values
             from origin/destination compartments respectively.
         """
@@ -1769,9 +1788,9 @@ class SubpopModel(ABC):
         """
         Update history at end of each day, not at end of every
            discretization timestep, to be efficient.
-        Update history of state variables other than Schedule
+        Update history of state variables other than `Schedule`
            instances -- schedules do not have history
-           TransitionVariableGroup instances also do not
+           `TransitionVariableGroup` instances also do not
            have history, so do not include.
         """
         for svar in self.interaction_terms.values() + \
@@ -1783,20 +1802,20 @@ class SubpopModel(ABC):
     def reset_simulation(self) -> None:
         """
         Reset simulation in-place. Subsequent method calls of
-        simulate_until_day start from day 0, with original
+        `self.simulate_until_day` start from day 0, with original
         day 0 state.
 
-        Returns current_simulation_day to 0.
+        Returns `self.current_simulation_day` to 0.
         Restores state values to initial values.
         Clears history on model's state variables.
-        Resets transition variables' current_val attribute to 0.
+        Resets transition variables' `current_val` attribute to 0.
 
         WARNING:
             DOES NOT RESET THE MODEL'S RANDOM NUMBER GENERATOR TO
             ITS INITIAL STARTING SEED. RANDOM NUMBER GENERATOR WILL CONTINUE
             WHERE IT LEFT OFF.
 
-        Use method modify_random_seed to reset model's RNG to its
+        Use method `self.modify_random_seed` to reset model's `RNG` to its
         initial starting seed.
         """
 
@@ -1812,10 +1831,10 @@ class SubpopModel(ABC):
 
     def clear_history(self) -> None:
         """
-        Resets history_vals_list attribute of each InteractionTerm,
-            Compartment, EpiMetric, and DynamicVal to an empty list.
+        Resets `self.history_vals_list` attribute of each `InteractionTerm`,
+            `Compartment`, `EpiMetric`, and `DynamicVal` to an empty list.
             Clears current rates and current values of
-            TransitionVariable and TransitionVariableGroup instances.
+            `TransitionVariable` and `TransitionVariableGroup` instances.
         """
 
         # Schedules do not have history since they are deterministic
@@ -1832,7 +1851,7 @@ class SubpopModel(ABC):
     def find_name_by_compartment(self,
                                  target_compartment: Compartment) -> str:
         """
-        Given Compartment, returns name of that Compartment
+        Given `Compartment`, returns name of that `Compartment`.
 
         Args:
             target_compartment (Compartment):
@@ -1841,7 +1860,7 @@ class SubpopModel(ABC):
         Returns:
             str:
                 Compartment name, given by the key to look
-                it up in the SubpopModel's compartments objdict
+                it up in the `SubpopModel`'s compartments objdict
         """
 
         for name, compartment in self.compartments.items():
