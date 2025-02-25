@@ -1365,25 +1365,25 @@ class FluSubpopModel(clt.SubpopModel):
     """
 
     def __init__(self,
-                 compartments_epi_metrics_dict: dict,
-                 params_dict: dict,
-                 config_dict: dict,
+                 compartments_epi_metrics: dict,
+                 params: dict,
+                 config: dict,
                  calendar_df: pd.DataFrame,
                  RNG: np.random.Generator,
                  name: str = "",
                  wastewater_enabled: bool = False):
         """
         Args:
-            compartments_epi_metrics_dict (dict):
+            compartments_epi_metrics (dict):
                 holds current simulation state information,
                 such as current values of epidemiological compartments
                 and epi metrics -- keys and values respectively
                 must match field names and format of FluSubpopState.
-            params_dict (dict):
+            params (dict):
                 holds epidemiological parameter values -- keys and
                 values respectively must match field names and
                 format of FluSubpopParams.
-            config_dict (dict):
+            config (dict):
                 holds configuration values -- keys and values
                 respectively must match field names and format of
                 Config.
@@ -1418,9 +1418,9 @@ class FluSubpopModel(clt.SubpopModel):
 
         self.calendar_df = calendar_df
 
-        state = clt.make_dataclass_from_dict(FluSubpopState, compartments_epi_metrics_dict)
-        params = clt.make_dataclass_from_dict(FluSubpopParams, params_dict)
-        config = clt.make_dataclass_from_dict(clt.Config, config_dict)
+        state = clt.make_dataclass_from_dict(FluSubpopState, compartments_epi_metrics)
+        params = clt.make_dataclass_from_dict(FluSubpopParams, params)
+        config = clt.make_dataclass_from_dict(clt.Config, config)
 
         # IMPORTANT NOTE: as always, we must be careful with mutable objects
         #   and generally use deep copies to avoid modification of the same

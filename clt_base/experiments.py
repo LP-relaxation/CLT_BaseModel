@@ -169,6 +169,9 @@ class Experiment:
         results_df (pd.DataFrame):
             DataFrame holding simulation results from each
             `simulation` replication
+        has_been_run (bool):
+            indicates if `self.run_static_inputs`, `self.run_random_inputs`,
+            or `self.run_sequences_of_inputs` has been executed.
 
     See `__init__` docstring for other attributes.
     """
@@ -200,6 +203,8 @@ class Experiment:
         self.model = model
         self.state_variables_to_record = state_variables_to_record
         self.database_filename = database_filename
+
+        self.has_been_run = False
 
         # Create experiment_subpop_models tuple
         # If model is MetapopModel instance, then this tuple is a list
@@ -262,13 +267,21 @@ class Experiment:
                 experiment results are saved to this CSV file.
         """
 
-        self.create_results_sql_table()
+        if self.has_been_run:
+            raise ExperimentError("Experiment has already been run. "
+                                  "Create a new Experiment instance to simulate "
+                                  "more replications.")
 
-        self.simulate_reps_and_save_results(reps=num_reps,
-                                            end_day=simulation_end_day,
-                                            days_per_save=days_between_save_history,
-                                            inputs_are_static=True,
-                                            filename=results_filename)
+        else:
+            self.has_been_run = True
+
+            self.create_results_sql_table()
+
+            self.simulate_reps_and_save_results(reps=num_reps,
+                                                end_day=simulation_end_day,
+                                                days_per_save=days_between_save_history,
+                                                inputs_are_static=True,
+                                                filename=results_filename)
 
     def run_random_inputs(self,
                           num_reps: int,
@@ -325,21 +338,29 @@ class Experiment:
                 varies between replications
         """
 
-        self.sample_random_inputs(num_reps,
-                                  random_inputs_RNG,
-                                  random_inputs_spec)
+        if self.has_been_run:
+            raise ExperimentError("Experiment has already been run. "
+                                  "Create a new Experiment instance to simulate "
+                                  "more replications.")
 
-        self.create_results_sql_table()
-        self.create_inputs_realizations_sql_tables()
+        else:
+            self.has_been_run = True
 
-        self.simulate_reps_and_save_results(reps=num_reps,
-                                            end_day=simulation_end_day,
-                                            days_per_save=days_between_save_history,
-                                            inputs_are_static=False,
-                                            filename=results_filename)
+            self.sample_random_inputs(num_reps,
+                                      random_inputs_RNG,
+                                      random_inputs_spec)
 
-        if inputs_filename_suffix:
-            self.write_inputs_csvs(inputs_filename_suffix)
+            self.create_results_sql_table()
+            self.create_inputs_realizations_sql_tables()
+
+            self.simulate_reps_and_save_results(reps=num_reps,
+                                                end_day=simulation_end_day,
+                                                days_per_save=days_between_save_history,
+                                                inputs_are_static=False,
+                                                filename=results_filename)
+
+            if inputs_filename_suffix:
+                self.write_inputs_csvs(inputs_filename_suffix)
 
     def run_sequences_of_inputs(self,
                                 num_reps: int,
@@ -385,19 +406,27 @@ class Experiment:
                 varies between replications
         """
 
-        self.inputs_realizations = sequences_of_inputs
+        if self.has_been_run:
+            raise ExperimentError("Experiment has already been run. "
+                                  "Create a new Experiment instance to simulate "
+                                  "more replications.")
 
-        self.create_results_sql_table()
-        self.create_inputs_realizations_sql_tables()
+        else:
+            self.has_been_run = True
 
-        self.simulate_reps_and_save_results(reps=num_reps,
-                                            end_day=simulation_end_day,
-                                            days_per_save=days_between_save_history,
-                                            inputs_are_static=False,
-                                            filename=results_filename)
+            self.inputs_realizations = sequences_of_inputs
 
-        if inputs_filename_suffix:
-            self.write_inputs_csvs(inputs_filename_suffix)
+            self.create_results_sql_table()
+            self.create_inputs_realizations_sql_tables()
+
+            self.simulate_reps_and_save_results(reps=num_reps,
+                                                end_day=simulation_end_day,
+                                                days_per_save=days_between_save_history,
+                                                inputs_are_static=False,
+                                                filename=results_filename)
+
+            if inputs_filename_suffix:
+                self.write_inputs_csvs(inputs_filename_suffix)
 
     def sample_random_inputs(self,
                              total_reps: int,
@@ -728,7 +757,7 @@ class Experiment:
 
                 self.log_current_vals_to_sql(rep, cursor)
 
-            self.results_df = get_sql_table_as_df(conn, "SELECT * FROM results", chunk_size=int(1e4))
+        self.results_df = get_sql_table_as_df(conn, "SELECT * FROM results", chunk_size=int(1e4))
 
         if filename:
             self.results_df.to_csv(filename)

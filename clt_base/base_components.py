@@ -122,6 +122,14 @@ class InterSubpopRepo(ABC):
                  subpop_models: Optional[dict] = None):
         self.subpop_models = sc.objdict(subpop_models)
 
+        # The "name" argument for instantiating a SubpopModel
+        #   is optional -- but SubpopModel instances must have
+        #   names when used in a MetapopModel
+        # So, we assign names to each SubpopModel based on
+        #   the keys of the dictionary that creates the InterSubpopRepo
+        for name, model in subpop_models.items():
+            model.name = name
+
     @abstractmethod
     def compute_shared_quantities(self):
         """
@@ -1236,9 +1244,6 @@ class MetapopModel(ABC):
                  name: str = ""):
         """
         Params:
-            subpop_models (dict):
-                dictionary of `SubpopModel` instances -- keys are
-                unique names, values are the instances.
             inter_subpop_repo (InterSubpopRepo):
                 manages collection of subpopulation models with
                 methods for querying information.
