@@ -211,11 +211,13 @@ class StateVariable:
         """
         self.history_vals_list.append(copy.deepcopy(self.current_val))
 
-    def clear_history(self) -> None:
+    def reset(self) -> None:
         """
-        Resets `self.history_vals_list` attribute to empty list.
+        Resets `self.current_val` to `self.init_val`
+        and resets `self.history_vals_list` attribute to empty list.
         """
 
+        self.current_val = copy.deepcopy(self.init_val)
         self.history_vals_list = []
 
 
@@ -239,7 +241,7 @@ class Compartment(StateVariable):
 
     def __init__(self,
                  init_val):
-        super().__init__(init_val)
+        super().__init__(np.asarray(init_val, dtype=float))
 
         self.current_inflow = np.zeros(np.shape(init_val))
         self.current_outflow = np.zeros(np.shape(init_val))
@@ -251,7 +253,7 @@ class Compartment(StateVariable):
             realizations) and subtracting current outflow (sum of all
             outgoing transition variables' realizations).
         """
-        self.current_val += self.current_inflow - self.current_outflow
+        self.current_val = self.current_val + self.current_inflow - self.current_outflow
 
     def reset_inflow(self) -> None:
         """
@@ -382,7 +384,7 @@ class TransitionVariable(ABC):
             origin `Compartment`.
         """
 
-        self.origin.current_outflow += self.current_val
+        self.origin.current_outflow = self.origin.current_outflow + self.current_val
 
     def update_destination_inflow(self) -> None:
         """
@@ -392,7 +394,7 @@ class TransitionVariable(ABC):
             destination `Compartment`.
         """
 
-        self.destination.current_inflow += self.current_val
+        self.destination.current_inflow = self.destination.current_inflow + self.current_val
 
     def save_history(self) -> None:
         """
@@ -405,7 +407,7 @@ class TransitionVariable(ABC):
         """
         self.history_vals_list.append(copy.deepcopy(self.current_val))
 
-    def clear_history(self) -> None:
+    def reset(self) -> None:
         """
         Resets `self.history_vals_list` attribute to empty list.
         """
@@ -1832,9 +1834,9 @@ class SubpopModel(ABC):
             setattr(svar, "current_val", copy.deepcopy(svar.init_val))
 
         self.state.sync_to_current_vals(self.all_state_variables)
-        self.clear_history()
+        self.reset()
 
-    def clear_history(self) -> None:
+    def reset(self) -> None:
         """
         Resets `self.history_vals_list` attribute of each `InteractionTerm`,
             `Compartment`, `EpiMetric`, and `DynamicVal` to an empty list.
@@ -1844,7 +1846,7 @@ class SubpopModel(ABC):
 
         # Schedules do not have history since they are deterministic
         for svar in self.all_state_variables.values():
-            svar.clear_history()
+            svar.reset()
 
         for tvar in self.transition_variables.values():
             tvar.current_rate = None

@@ -659,7 +659,7 @@ class Wastewater(clt.EpiMetric):
         # reset the index of current_val_list
         self.cur_idx_timestep = -1
 
-    def clear_history(self) -> None:
+    def reset(self) -> None:
         """
         Resets history_vals_list attribute to empty list.
         """

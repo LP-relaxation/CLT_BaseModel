@@ -177,15 +177,12 @@ class Experiment:
     """
 
     def __init__(self,
-                 name: str,
                  model: SubpopModel | MetapopModel,
                  state_variables_to_record: list,
                  database_filename: str):
 
         """
         Params:
-            name (str):
-                name uniquely identifying Experiments instance.
             model (SubpopModel | MetapopModel):
                 SubpopModel or MetapopModel instance on which to
                 run multiple replications.
@@ -199,7 +196,6 @@ class Experiment:
                 experiment results are saved to this SQL database
         """
 
-        self.name = name
         self.model = model
         self.state_variables_to_record = state_variables_to_record
         self.database_filename = database_filename
@@ -551,6 +547,10 @@ class Experiment:
             this function's parameters).
         """
 
+        if state_var_name not in self.state_variables_to_record:
+            raise ExperimentError("\"state_var_name\" is not in \"self.state_variables_to_record\" --"
+                                  "function call is invalid.")
+
         conn = sqlite3.connect(self.database_filename)
 
         # Query all results table entries where state_var_name matches
@@ -573,7 +573,7 @@ class Experiment:
         # Filter DataFrame based on user-specified conditions
         #   (for example, if user specifies subpop_name, return subset of
         #   DataFrame where subpop_name matches)
-        conditions = [(df[col] == value) for col, value in filters.items() if value]
+        conditions = [(df[col] == value) for col, value in filters.items() if value is not None]
         df_filtered = df if not conditions else df[np.logical_and.reduce(conditions)]
 
         # Group DataFrame based on unique combinations of "rep" and "timepoint" columns
@@ -583,6 +583,7 @@ class Experiment:
             df_filtered.groupby(["rep",
                                  "timepoint"]).sum(numeric_only=True)["value"].reset_index()
 
+        # breakpoint()
 
         # Use pivot() function to reshape the DataFrame for its final form
         # The "timepoint" values are spread across new columns
@@ -658,7 +659,9 @@ class Experiment:
             # Create list of lists -- each nested list contains a sequence of values
             #   for that particular input
             subpop_inputs_realizations = self.inputs_realizations[subpop_model.name]
-            inputs_vals_over_reps_list = [subpop_inputs_realizations[input_name] for input_name in column_names]
+            inputs_vals_over_reps_list = \
+                [np.array(subpop_inputs_realizations[input_name]).reshape(-1,1) for input_name in column_names]
+            inputs_vals_over_reps_list = np.hstack(inputs_vals_over_reps_list)
 
             experiment_cursor.executemany(sql_statement, inputs_vals_over_reps_list)
 
@@ -853,4 +856,4 @@ class Experiment:
 
             subpop_inputs_df = get_sql_table_as_df(conn, f"SELECT * FROM {table_name}", chunk_size=int(1e4))
 
-            subpop_inputs_df.to_csv(f"{subpop_model.name}_{suffix}")
+            subpop_inputs_df.to_csv(f"{subpop_model.name}_{suffix}", index=False)

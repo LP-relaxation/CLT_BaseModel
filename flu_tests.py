@@ -396,6 +396,9 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
     config_dict_1_timestep = copy.deepcopy(config_dict)
     config_dict_1_timestep["timesteps_per_day"] = 1
 
+    num_age_groups = params_dict["num_age_groups"]
+    num_risk_groups = params_dict["num_risk_groups"]
+
     subpopA = flu.FluSubpopModel(compartments_epi_metrics_dict,
                                  params_dict,
                                  config_dict_1_timestep,
@@ -412,7 +415,7 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
 
     AB_inter_subpop_repo = flu.FluInterSubpopRepo({"subpopA": subpopA, "subpopB": subpopB},
                                                   {"subpopA": 0, "subpopB": 1},
-                                                  travel_proportions["travel_proportions_array"])
+                                                  np.zeros((2,2)))
 
     metapopAB_model = flu.FluMetapopModel(AB_inter_subpop_repo)
 
@@ -442,9 +445,6 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
 
     subpopA_independent.reset_simulation()
     subpopB_independent.reset_simulation()
-
-    num_age_groups = params_dict["num_age_groups"]
-    num_risk_groups = params_dict["num_risk_groups"]
 
     metapopAB_model.subpop_models.subpopA.params.prop_time_away_by_age = np.zeros((num_age_groups, num_risk_groups))
 
