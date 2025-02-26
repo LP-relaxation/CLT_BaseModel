@@ -447,8 +447,12 @@ class SympToHosp(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+
+        hosp_risk_reduce = params.hosp_risk_reduce
+        proportional_risk_reduction = hosp_risk_reduce / (1 - hosp_risk_reduce)
+
         return np.asarray(params.IS_to_H_rate * params.IS_to_H_adjusted_prop /
-                          (1 + params.hosp_risk_reduce * state.pop_immunity_hosp))
+                          (1 + proportional_risk_reduction * state.pop_immunity_hosp))
 
 
 class HospToDead(clt.TransitionVariable):
@@ -468,8 +472,12 @@ class HospToDead(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+
+        death_risk_reduce = params.death_risk_reduce
+        proportional_risk_reduction = death_risk_reduce / (1 - death_risk_reduce)
+
         return np.asarray(params.H_to_D_adjusted_prop * params.H_to_D_rate /
-                          (1 + params.death_risk_reduce * state.pop_immunity_hosp))
+                          (1 + proportional_risk_reduction * state.pop_immunity_hosp))
 
 
 class PopulationImmunityHosp(clt.EpiMetric):
@@ -824,14 +832,16 @@ def compute_immunity_force(subpop_state: FluSubpopState,
     travel model calculations.
 
     Returns:
-        np.ndarray:
-            |A| x |R| array -- where |A| is the number of age groups
-            and |R| is the number of risk groups -- representing
-            the force of population-level immunity against infection
-            -- used in the denominator of many computations
+        |A| x |R| array -- where |A| is the number of age groups
+        and |R| is the number of risk groups -- representing
+        the force of population-level immunity against infection
+        -- used in the denominator of many computations
     """
 
-    return 1 + (subpop_params.inf_risk_reduce *
+    inf_risk_reduce = subpop_params.inf_risk_reduce
+    proportional_risk_reduction = inf_risk_reduce / (1 - inf_risk_reduce)
+
+    return 1 + (proportional_risk_reduction *
                 subpop_state.pop_immunity_inf)
 
 

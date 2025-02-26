@@ -1272,7 +1272,7 @@ class MetapopModel(ABC):
         Takes objdict of subpop models, where keys are subpop model names and
             values are the subpop model instances, and returns objdict of
             subpop model states, where keys are subpop model names and
-            values are the subpop model SubpopState instances.
+            values are the subpop model `SubpopState` instances.
         """
 
         states_dict = \
@@ -1293,6 +1293,7 @@ class MetapopModel(ABC):
         `simulate_until_day` method has additional functionality.
 
         Note: the update order at the beginning of each day is very important!
+
         - First, each `SubpopModel` updates its daily state (computing
             `Schedule` and `DynamicVal` instances).
         - Second, the `MetapopModel`'s `InterSubpopRepo` computes any shared
