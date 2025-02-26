@@ -30,15 +30,15 @@
 							[0.5]],
 	"IP_relative_inf": 2.22,
 	"IA_relative_inf": 1.03,
-	"viral_shed_peak": 2,
-	"viral_shed_magnitude": 5,
-	"viral_shed_duration": 10,
-	"viral_shed_feces_mass": 255,
+	"total_contact_matrix": [[4.0, 1.5],[2.0, 2.0]],
+	"school_contact_matrix": [[2.0, 1.0], [1.0, 0.5]],
+	"work_contact_matrix": [[0.0, 0.0], [0.0, 1.0]],
 	"relative_suscept_by_age": [[0.8],[0.6]],
 	"prop_time_away_by_age": [[0.3],[0.2]],
 	"contact_mult_travel": 0.5,
 	"contact_mult_symp": 1.0,
-	"total_contact_matrix": [[4.0, 1.5],[2.0, 2.0]],
-	"school_contact_matrix": [[2.0, 1.0], [1.0, 0.5]],
-	"work_contact_matrix": [[0.0, 0.0], [0.0, 1.0]]
+	"viral_shed_peak": 2,
+	"viral_shed_magnitude": 5,
+	"viral_shed_duration": 10,
+	"viral_shed_feces_mass": 255
 }
