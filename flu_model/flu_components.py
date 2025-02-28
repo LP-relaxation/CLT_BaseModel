@@ -1451,6 +1451,8 @@ class FluSubpopModel(clt.SubpopModel):
         if self.metapop_model:
             interaction_terms["force_of_infection"] = ForceOfInfection(self.name)
 
+        return interaction_terms
+
     def create_compartments(self) -> sc.objdict[str, clt.Compartment]:
 
         # Create `Compartment` instances S-E-IA-IP-IS-H-R-D (7 compartments total),
