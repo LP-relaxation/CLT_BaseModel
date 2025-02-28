@@ -1439,27 +1439,22 @@ class FluSubpopModel(clt.SubpopModel):
         #   creates deep copies.
         super().__init__(state, params, config, RNG, name)
 
-    def create_interaction_terms(self) -> sc.objdict:
-        """
-        If there is no associated MetapopModel, then
-        there is no travel model, so do not create ForceOfInfection
-        instance -- there are no interaction terms for this
-        SubpopModel.
-        """
+    def create_interaction_terms(self) -> sc.objdict[str, clt.InteractionTerm]:
+
+        # Create interaction terms
+        # If there is no associated `MetapopModel`, then
+        #   there is no travel model, so do not create `ForceOfInfection`
+        #   instance -- there are no interaction terms for this `SubpopModel`.
+
+        interaction_terms = sc.objdict()
 
         if self.metapop_model:
-            interaction_terms = sc.objdict()
             interaction_terms["force_of_infection"] = ForceOfInfection(self.name)
-            return interaction_terms
 
-        else:
-            return sc.objdict()
+    def create_compartments(self) -> sc.objdict[str, clt.Compartment]:
 
-    def create_compartments(self) -> sc.objdict:
-        """
-        Create Compartment instances S-E-IA-IP-IS-H-R-D (7 compartments total),
-            save in sc.objdict, and return objdict
-        """
+        # Create `Compartment` instances S-E-IA-IP-IS-H-R-D (7 compartments total),
+        #   save in sc.objdict, and return objdict
 
         compartments = sc.objdict()
 
@@ -1468,9 +1463,9 @@ class FluSubpopModel(clt.SubpopModel):
 
         return compartments
 
-    def create_dynamic_vals(self) -> sc.objdict:
+    def create_dynamic_vals(self) -> sc.objdict[str, clt.DynamicVal]:
         """
-        Create all DynamicVal instances, save in sc.objdict, and return objdict
+        Create all `DynamicVal` instances, save in sc.objdict, and return objdict
         """
 
         dynamic_vals = sc.objdict()
@@ -1480,9 +1475,9 @@ class FluSubpopModel(clt.SubpopModel):
 
         return dynamic_vals
 
-    def create_schedules(self) -> sc.objdict():
+    def create_schedules(self) -> sc.objdict[str, clt.Schedule]:
         """
-        Create all Schedule instances, save in sc.objdict, and return objdict
+        Create all `Schedule` instances, save in sc.objdict, and return objdict
         """
 
         schedules = sc.objdict()
@@ -1493,21 +1488,19 @@ class FluSubpopModel(clt.SubpopModel):
 
         return schedules
 
-    def create_transition_variables(self) -> sc.objdict:
+    def create_transition_variables(self,
+                                    compartments: sc.objdict[str, clt.Compartment]) -> \
+            sc.objdict[str, clt.TransitionVariable]:
         """
-        Create all TransitionVariable instances,
+        Create all `TransitionVariable` instances,
             save in sc.objdict, and return objdict
         """
 
-        # NOTE: see the parent class SubpopModel's __init__() --
-        #   create_transition_variables is called after
-        #   self.config is assigned and after self.compartments
-        #   has been created -- so these variables do exist
-        # TODO: there is potentially a better way to design this
-        #   (in SubpopModel) to be more EXPLICIT -- think about this...
+        # NOTE: see the parent class `SubpopModel`'s `__init__()` --
+        #   `create_transition_variables` is called after
+        #   `self.config` is assigned
 
         transition_type = self.config.transition_type
-        compartments = self.compartments
 
         transition_variables = sc.objdict()
 
@@ -1533,7 +1526,11 @@ class FluSubpopModel(clt.SubpopModel):
 
         return transition_variables
 
-    def create_transition_variable_groups(self) -> sc.objdict:
+    def create_transition_variable_groups(
+            self,
+            compartments: sc.objdict[str, clt.Compartment],
+            transition_variables: sc.objdict[str, clt.TransitionVariable]) \
+            -> sc.objdict[str, clt.TransitionVariableGroup]:
         """
         Create all transition variable groups described in docstring (2 transition
         variable groups total), save in sc.objdict, return
@@ -1542,13 +1539,9 @@ class FluSubpopModel(clt.SubpopModel):
         # Shortcuts for attribute access
         # NOTE: see the parent class SubpopModel's __init__() --
         #   create_transition_variable_groups is called after
-        #   self.config is assigned and after
-        #   self.compartments and self.transition_variables are created
-        #   -- so these variables do exist
-        # See similar NOTE in create_transition_variables function
+        #   self.config is assigned
+
         transition_type = self.config.transition_type
-        compartments = self.compartments
-        transition_variables = self.transition_variables
 
         transition_variable_groups = sc.objdict()
 
@@ -1569,21 +1562,15 @@ class FluSubpopModel(clt.SubpopModel):
 
         return transition_variable_groups
 
-    def create_epi_metrics(self) -> sc.objdict:
+    def create_epi_metrics(self,
+                           transition_variables: sc.objdict[str, clt.TransitionVariable]) \
+            -> sc.objdict[str, clt.EpiMetric]:
         """
         Create all epi metric described in docstring (2 state
         variables total), save in sc.objdict, and return objdict
         """
 
         epi_metrics = sc.objdict()
-
-        # Shortcuts for attribute access
-        # NOTE: see the parent class SubpopModel's __init__() --
-        #   create_epi_metrics is called after self.transition_variables
-        #   are created -- so this variable exists
-        # See similar NOTE in create_transition_variables
-        #   and create_transition_variable_groups function
-        transition_variables = self.transition_variables
 
         epi_metrics.pop_immunity_inf = \
             PopulationImmunityInf(getattr(self.state, "pop_immunity_inf"),
