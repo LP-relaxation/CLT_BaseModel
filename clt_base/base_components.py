@@ -1,5 +1,5 @@
 from .utils import np, sc, copy, ABC, abstractmethod, dataclass, \
-    Optional, Enum, datetime, pd
+    Optional, Enum, datetime, pd, TypedDict
 from collections import defaultdict
 
 
@@ -309,7 +309,7 @@ class TransitionVariable(ABC):
                  origin: Compartment,
                  destination: Compartment,
                  transition_type: TransitionTypes,
-                 is_jointly_distributed: str=False):
+                 is_jointly_distributed: str = False):
         """
         Parameters:
             origin (Compartment):
@@ -597,6 +597,7 @@ class TransitionVariable(ABC):
     @property
     def base_count(self) -> np.ndarray:
         return self.origin.current_val
+
 
 class TransitionVariableGroup:
     """
@@ -1190,7 +1191,6 @@ class Schedule(StateVariable, ABC):
 
 
 class InteractionTerm(StateVariable, ABC):
-
     """
     Abstract base class for variables that depend on the state of
     more than one `SubpopModel` (i.e., that depend on more than one
@@ -1256,9 +1256,9 @@ class MetapopModel(ABC):
         self.subpop_models = inter_subpop_repo.subpop_models
 
         self.inter_subpop_repo = inter_subpop_repo
-        
+
         self.name = name
-        
+
         for model in self.subpop_models.values():
             model.metapop_model = self
             model.interaction_terms = model.create_interaction_terms()
@@ -1311,7 +1311,7 @@ class MetapopModel(ABC):
 
         if self.current_simulation_day > simulation_end_day:
             raise MetapopModelError(f"Current day counter ({self.current_simulation_day}) "
-                                   f"exceeds last simulation day ({simulation_end_day}).")
+                                    f"exceeds last simulation day ({simulation_end_day}).")
 
         while self.current_simulation_day < simulation_end_day:
 
@@ -1418,19 +1418,19 @@ class SubpopModel(ABC):
     The "flow" and "physics" information are stored on the objects.
 
     Attributes:
-        interaction_terms (sc.objdict):
+        interaction_terms (sc.objdict[str, InteractionTerm]):
             objdict of all the subpop model's `InteractionTerm` instances.
-        compartments (sc.objdict):
+        compartments (sc.objdict[str, Compartment]):
             objdict of all the subpop model's `Compartment` instances.
-        transition_variables (sc.objdict):
+        transition_variables (sc.objdict[str, TransitionVariable]):
             objdict of all the subpop model's `TransitionVariable` instances.
-        transition_variable_groups (sc.objdict):
+        transition_variable_groups (sc.objdict[str, TransitionVariableGroup]):
             objdict of all the subpop model's `TransitionVariableGroup` instances.
-        epi_metrics (sc.objdict):
+        epi_metrics (sc.objdict[str, EpiMetric]):
             objdict of all the subpop model's `EpiMetric` instances.
-        dynamic_vals (sc.objdict):
+        dynamic_vals (sc.objdict[str, DynamicVal]):
             objdict of all the subpop model's `DynamicVal` instances.
-        schedules (sc.objdict):
+        schedules (sc.objdict[str, Schedule]):
             objdict of all the subpop model's `Schedule` instances.
         current_simulation_day (int):
             tracks current simulation day -- incremented by +1
@@ -1485,16 +1485,14 @@ class SubpopModel(ABC):
         self.metapop_model = None
         self.name = name
 
+        self.schedules = self.create_schedules()
         self.interaction_terms = self.create_interaction_terms()
         self.compartments = self.create_compartments()
-        self.transition_variables = self.create_transition_variables()
-        self.transition_variable_groups = self.create_transition_variable_groups()
-
-        # Some epi metrics depend on transition variables, so
-        #   set up epi metrics after transition variables
-        self.epi_metrics = self.create_epi_metrics()
+        self.transition_variables = self.create_transition_variables(self.compartments)
+        self.transition_variable_groups = self.create_transition_variable_groups(self.compartments,
+                                                                                 self.transition_variables)
+        self.epi_metrics = self.create_epi_metrics(self.transition_variables)
         self.dynamic_vals = self.create_dynamic_vals()
-        self.schedules = self.create_schedules()
 
         self.all_state_variables = {**self.interaction_terms,
                                     **self.compartments,
@@ -1559,31 +1557,38 @@ class SubpopModel(ABC):
         return start_real_date
 
     @abstractmethod
-    def create_interaction_terms(self) -> sc.objdict:
+    def create_interaction_terms(self) -> sc.objdict[str, InteractionTerm]:
         pass
 
     @abstractmethod
-    def create_compartments(self) -> sc.objdict:
+    def create_compartments(self) -> sc.objdict[str, Compartment]:
         pass
 
     @abstractmethod
-    def create_transition_variables(self) -> sc.objdict:
+    def create_transition_variables(self,
+                                    compartments_dict: sc.objdict[str, Compartment] = None) \
+            -> sc.objdict[str, TransitionVariable]:
         pass
 
     @abstractmethod
-    def create_transition_variable_groups(self) -> sc.objdict:
+    def create_transition_variable_groups(self,
+                                          compartments_dict: sc.objdict[str, Compartment] = None,
+                                          transition_variables_dict: sc.objdict[str, TransitionVariable] = None) \
+            -> sc.objdict[str, TransitionVariableGroup]:
         pass
 
     @abstractmethod
-    def create_epi_metrics(self) -> sc.objdict:
+    def create_epi_metrics(self,
+                           transition_variables_dict: sc.objdict[str, TransitionVariable] = None)\
+            -> sc.objdict[str, EpiMetric]:
         pass
 
     @abstractmethod
-    def create_dynamic_vals(self) -> sc.objdict:
+    def create_dynamic_vals(self) -> sc.objdict[str, DynamicVal]:
         pass
 
     @abstractmethod
-    def create_schedules(self) -> sc.objdict:
+    def create_schedules(self) -> sc.objdict[str, Schedule]:
         pass
 
     def modify_random_seed(self, new_seed_number) -> None:
@@ -1655,7 +1660,6 @@ class SubpopModel(ABC):
         """
 
         for timestep in range(num_timesteps):
-
             self.update_transition_rates()
 
             self.sample_transitions()
@@ -1931,6 +1935,3 @@ class SubpopModel(ABC):
             else:
                 print(f"{name}: disabled")
         print("\n")
-
-
-
