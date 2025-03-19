@@ -1701,7 +1701,7 @@ class FluMetapopModel(clt.MetapopModel):
         subpop_names = self.inter_subpop_repo.subpop_names_mapping
         num_subpop_names = len(subpop_names)
         travel_proportions_array = self.inter_subpop_repo.travel_proportions_array
-        if np.size(travel_proportions_array) != \
+        if np.shape(travel_proportions_array) != \
                 (num_subpop_names, num_subpop_names):
             error_counter += 1
             if include_printing:
