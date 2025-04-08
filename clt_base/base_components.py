@@ -79,8 +79,12 @@ class Config:
         start_real_date (datetime.date):
             actual date that aligns with the beginning of the simulation.
         save_daily_history (bool):
-            set to `True` to save `StateVariable` state to history after each
+            set to `True` to save `current_val` of `StateVariable` to history after each
             simulation day -- set to `False` if want speedier performance.
+        save_transition_variables_history (bool):
+            set to `True` to save `current_val` of `TransitionVariable` to history
+            after each TIMESTEP -- note that this makes the simulation execution time
+            extremely slow -- set to `False` if want speedier performance.
     """
 
     timesteps_per_day: int = 7
@@ -88,6 +92,7 @@ class Config:
     start_real_date: datetime.time = datetime.datetime.strptime("2024-10-31",
                                                                 "%Y-%m-%d").date()
     save_daily_history: bool = True
+    save_transition_variables_history: bool = False
 
 
 @dataclass
@@ -412,6 +417,8 @@ class TransitionVariable(ABC):
         Resets `self.history_vals_list` attribute to empty list.
         """
 
+        self.current_rate = None
+        self.current_val = 0.0
         self.history_vals_list = []
 
     def get_realization(self,
@@ -1303,6 +1310,11 @@ class MetapopModel(ABC):
         - Third, each `SubpopModel` simulates discretized timesteps (sampling
             `TransitionVariable`s, updating `EpiMetric`s, and updating `Compartment`s).
 
+        Note: we only update the `InterSubpopRepo` shared quantities
+            once a day, not at every timestep -- in other words,
+            the travel model state-dependent values are only updated daily
+            -- this is to avoid severe computation inefficiency
+
         Args:
             simulation_end_day (positive int):
                 stop simulation at `simulation_end_day` (i.e. exclusive,
@@ -1749,6 +1761,7 @@ class SubpopModel(ABC):
 
         RNG = self.RNG
         timesteps_per_day = self.config.timesteps_per_day
+        save_transition_variables_history = self.config.save_transition_variables_history
 
         # Obtain transition variable realizations for jointly distributed transition variables
         #   (i.e. when there are multiple transition variable outflows from an epi compartment)
@@ -1765,6 +1778,10 @@ class SubpopModel(ABC):
         for tvar in self.transition_variables.values():
             if not tvar.is_jointly_distributed:
                 tvar.current_val = tvar.get_realization(RNG, timesteps_per_day)
+
+        if save_transition_variables_history:
+            for tvar in self.transition_variables.values():
+                tvar.save_history()
 
     def update_compartments(self) -> None:
         """
@@ -1801,9 +1818,7 @@ class SubpopModel(ABC):
         Update history at end of each day, not at end of every
            discretization timestep, to be efficient.
         Update history of state variables other than `Schedule`
-           instances -- schedules do not have history
-           `TransitionVariableGroup` instances also do not
-           have history, so do not include.
+           instances -- schedules do not have history.
         """
         for svar in self.interaction_terms.values() + \
                     self.compartments.values() + \
@@ -1839,23 +1854,12 @@ class SubpopModel(ABC):
             setattr(svar, "current_val", copy.deepcopy(svar.init_val))
 
         self.state.sync_to_current_vals(self.all_state_variables)
-        self.reset()
 
-    def reset(self) -> None:
-        """
-        Resets `self.history_vals_list` attribute of each `InteractionTerm`,
-            `Compartment`, `EpiMetric`, and `DynamicVal` to an empty list.
-            Clears current rates and current values of
-            `TransitionVariable` and `TransitionVariableGroup` instances.
-        """
-
-        # Schedules do not have history since they are deterministic
         for svar in self.all_state_variables.values():
             svar.reset()
 
         for tvar in self.transition_variables.values():
-            tvar.current_rate = None
-            tvar.current_val = 0.0
+            tvar.reset()
 
         for tvargroup in self.transition_variable_groups.values():
             tvargroup.current_vals_list = []

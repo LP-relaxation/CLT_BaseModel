@@ -253,6 +253,8 @@ class FluSubpopState(clt.SubpopState):
             total force of infection from movement within
             home location, travel to other locations,
             and visitors from other locations
+        hospital_admits (np.ndarray of int):
+            tracks IS to H
     """
 
     S: Optional[np.ndarray] = None
@@ -270,6 +272,7 @@ class FluSubpopState(clt.SubpopState):
     beta_reduct: Optional[float] = 0.0
     wastewater: Optional[np.ndarray] = None  # wastewater viral load
     force_of_infection: Optional[np.ndarray] = None
+    hospital_admits: Optional[np.ndarray] = None
 
 
 class SusceptibleToExposed(clt.TransitionVariable):
@@ -519,9 +522,9 @@ class PopulationImmunityHosp(clt.EpiMetric):
                                     (1 + params.immune_saturation * pop_immunity_hosp)
 
         immunity_gain = immunity_gain_numerator / immunity_gain_denominator
-        immunity_loss = params.hosp_immune_wane * state.pop_immunity_hosp
+        immunity_loss = params.hosp_immune_wane * pop_immunity_hosp
 
-        final_change = (immunity_gain - immunity_loss) / num_timesteps
+        final_change = immunity_gain - immunity_loss / num_timesteps
 
         return np.asarray(final_change, dtype=np.float64)
 
@@ -561,9 +564,9 @@ class PopulationImmunityInf(clt.EpiMetric):
                                     (1 + params.immune_saturation * pop_immunity_inf)
 
         immunity_gain = immunity_gain_numerator / immunity_gain_denominator
-        immunity_loss = params.inf_immune_wane * state.pop_immunity_inf
+        immunity_loss = params.inf_immune_wane * pop_immunity_inf
 
-        final_change = (immunity_gain - immunity_loss) / num_timesteps
+        final_change = immunity_gain - immunity_loss / num_timesteps
 
         return np.asarray(final_change, dtype=np.float64)
 
@@ -791,12 +794,14 @@ class FluContactMatrix(clt.Schedule):
 
         try:
             current_row = df[df["date"] == current_date].iloc[0]
+            self.current_val = subpop_params.total_contact_matrix - \
+                               (1 - current_row["is_school_day"]) * subpop_params.school_contact_matrix - \
+                               (1 - current_row["is_work_day"]) * subpop_params.work_contact_matrix
         except IndexError:
-            print(f"Error: {current_date} is not in the Calendar's calendar_df.")
+            # print(f"Error: {current_date} is not in the Calendar's calendar_df. Using total contact matrix.")
+            self.current_val = subpop_params.total_contact_matrix
 
-        self.current_val = subpop_params.total_contact_matrix - \
-                           (1 - current_row["is_school_day"]) * subpop_params.school_contact_matrix - \
-                           (1 - current_row["is_work_day"]) * subpop_params.work_contact_matrix
+
 
 
 def compute_wtd_presymp_asymp(subpop_state: FluSubpopState,
