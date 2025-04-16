@@ -1,0 +1,18 @@
+"Data Notes: 
+- Data is presented at both the statewide and public health region levels to allow for analysis across broader and more localized contexts. Texas is divided into eight public health regions. A public health region (PHR) refers to a geographical area that provides support and technical assistance to local health departments/districts.
+- This project is modeled after the approach utilized by the Centers for Disease Control and Prevention (CDC). For further insights, please refer to the CDC Severe Viral Respiratory Illness dashboard: https://www.cdc.gov/respiratory-viruses/data-research/dashboard/illness-severity.html.   
+- Guidance for Hospitals and Acute Care Facilities Reporting of Respiratory Pathogen, Bed Capacity, and Supply Data to CDC’s National Healthcare Safety Network (NHSN): https://www.hhs.gov/sites/default/files/covid-19-faqs-hospitals-hospital-laboratory-acute-care-facility-data-reporting.pdf.",,,,
+,,,,
+"Disclaimer: 
+
+- Not all Texas facilities are required to report COVID-19 & Flu data on the National Healthcare Safety Network (NHSN), therefore there can be multiple unrecorded cases.
+- Psychiatric, rehabilitation, and religious non-medical hospital types are excluded from calculations.
+- Facilities do not send their data at the same time interval, therefore, a data export at a given time may not capture all visits that have occurred. 
+- The data provided can be used as insight for prevention and developing further predictions, but not as an official count.",,,,
+,,,,
+Data Descriptions:,,,,
+Element Value,Data Type,Element Description,,
+week_ending,Time unit,"As defined by the Morbidity and Mortality Weekly Report system, weeks typically start on a Sunday and end on a Saturday. Useful for reporting public health data consistently across jurisdictions.",,
+geo,Geographic identifier ,One of the eight Texas Public Health Regions and cumulative Statewide data. A public health region (PHR) refers to a geographical area that provides support and technical assistance to local health departments/districts.,,
+covid_rate,Rate,"Weekly total new hospital admissions rates of patients with COVID-19 per 100,000 population by PHR.",,
+flu_rate,Rate,"Weekly total new hospital admissions rates of patients with Flu per 100,000 population by PHR.",,
