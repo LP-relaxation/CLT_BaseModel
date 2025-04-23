@@ -201,9 +201,22 @@ class StateVariable:
     """
 
     def __init__(self, init_val=None):
-        self.init_val = init_val
+        self._init_val = init_val
         self.current_val = copy.deepcopy(init_val)
         self.history_vals_list = []
+
+    @property
+    def init_val(self):
+        return self._init_val
+
+    @init_val.setter
+    def init_val(self, value):
+        """
+        We need to use properties/setters because when we change
+            `init_val`, we want `current_val` to be updated too!
+        """
+        self._init_val = value
+        self.current_val = copy.deepcopy(value)
 
     def save_history(self) -> None:
         """
@@ -1325,6 +1338,13 @@ class MetapopModel(ABC):
             raise MetapopModelError(f"Current day counter ({self.current_simulation_day}) "
                                     f"exceeds last simulation day ({simulation_end_day}).")
 
+        # Adding this in case the user manually changes the initial
+        #   value or current value of any state variable --
+        #   otherwise, the state will not get updated
+        # Analogous logic in SubpopModel's `simulate_until_day` method
+        for subpop_model in self.subpop_models.values():
+            subpop_model.state.sync_to_current_vals(subpop_model.all_state_variables)
+
         while self.current_simulation_day < simulation_end_day:
 
             for subpop_model in self.subpop_models.values():
@@ -1640,6 +1660,11 @@ class SubpopModel(ABC):
 
         save_daily_history = self.config.save_daily_history
         timesteps_per_day = self.config.timesteps_per_day
+
+        # Adding this in case the user manually changes the initial
+        #   value or current value of any state variable --
+        #   otherwise, the state will not get updated
+        self.state.sync_to_current_vals(self.all_state_variables)
 
         # simulation_end_day is exclusive endpoint
         while self.current_simulation_day < simulation_end_day:

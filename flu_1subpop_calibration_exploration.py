@@ -26,7 +26,6 @@ import clt_base as clt
 # Import flu model module, which contains customized subclasses
 import flu_model as flu
 
-
 ###########################################################
 ################# READ INPUT FILES ########################
 ###########################################################
@@ -115,21 +114,26 @@ array_of_5s = np.full((5, 1), 5)
 array_of_10s = np.full((5, 1), 10)
 array_of_20s = np.full((5, 1), 20)
 
-model.params.beta_baseline = 0.0232592 # Warning: beta_baseline is VERY touchy
-model.params.R_to_S_rate = 0.02
+# model.params.beta_baseline = 0.0232592 # Warning: beta_baseline is VERY touchy
+# model.params.beta_baseline = 2.244e-02
 
-model.compartments.E.current_val = copy.copy(array_of_5s)
-model.compartments.IS.current_val = copy.copy(array_of_5s)
-model.compartments.IP.current_val = copy.copy(array_of_1s)
-model.compartments.IA.current_val = copy.copy(array_of_1s)
-model.compartments.H.current_val = copy.copy(array_of_10s)
+model.params.beta_baseline = 0.017
+model.params.R_to_S_rate = 0.001
 
-# model.params.inf_immune_gain = 0
-# model.params.hosp_immune_gain = 0
+model.params.IS_to_R_rate = 0.3
+
+model.compartments.E.init_val = copy.copy(array_of_20s)
+model.compartments.IS.init_val = copy.copy(array_of_10s)
+model.compartments.IP.init_val = copy.copy(array_of_1s)
+model.compartments.IA.init_val = copy.copy(array_of_1s)
+model.compartments.H.init_val = copy.copy(array_of_1s)
+
+model.params.inf_immune_gain = 0
+model.params.hosp_immune_gain = 0
 model.params.inf_immune_wane = 0
 model.params.hosp_immune_wane = 0
-model.epi_metrics.pop_immunity_inf.current_val = model.epi_metrics.pop_immunity_inf.current_val * 2
-model.epi_metrics.pop_immunity_hosp.current_val = model.epi_metrics.pop_immunity_hosp.current_val * 2
+model.epi_metrics.pop_immunity_inf.init_val = 0
+model.epi_metrics.pop_immunity_hosp.init_val = 0
 
 # Misc musings to self...
 # For week 36, there are 122 total historical hospitalizations
@@ -144,18 +148,22 @@ model.epi_metrics.pop_immunity_hosp.current_val = model.epi_metrics.pop_immunity
 total_texas_pop = 30500000
 
 base_path = Path(__file__).parent / "flu_texas_1subpop"
-historical_hosp_admits = pd.read_csv(base_path / "texas_flu_hosp_rate_20232024" / "data.csv")["flu_rate"] * \
-                         total_texas_pop / int(1e5)
-historical_hosp_admits = np.asarray(historical_hosp_admits)
+historical_hosp_admits_weekly = pd.read_csv(base_path / "texas_flu_hosp_rate_20232024" / "data.csv")["flu_rate"] * \
+                                total_texas_pop / int(1e5)
+historical_hosp_admits_weekly = np.asarray(historical_hosp_admits_weekly)
 
-num_historical_weeks = len(historical_hosp_admits)
+num_historical_weeks = len(historical_hosp_admits_weekly)
 
 ##########################################################################
 ################# PLOTTING AND CALIBRATION CONSTANTS #####################
 ##########################################################################
 
 weeks_offset = 20
-calibration_period_length_weeks = 8
+calibration_period_length_weeks = 40
+
+historical_hosp_admits_weekly_subset = historical_hosp_admits_weekly[
+                                       weeks_offset:weeks_offset + calibration_period_length_weeks]
+
 
 ###################################################
 ################# CALIBRATION #####################
@@ -175,40 +183,55 @@ calibration_period_length_weeks = 8
 #   beta_baseline, inf_immune_wane (same as hosp_immune_wane),
 #   and init_immunity_level
 
-def compute_hospital_admits(_unused_x, beta_baseline):
+def compute_hospital_admits(x):
     model.reset_simulation()
 
-    model.params.beta_baseline = beta_baseline
+    model.params.beta_baseline = x[0]
+    model.params.R_to_S_rate = x[1]
+
     # model.inf_immune_wane = waning_rate
     # model.hosp_immune_wane = waning_rate
     # model.params.pop_immunity_inf = np.full((5, 1), init_immunity_level)
     # model.params.pop_immunity_hosp = np.full((5, 1), init_immunity_level)
 
-    model.simulate_until_day(7 * (num_historical_weeks - weeks_offset))
+    model.simulate_until_day(7 * calibration_period_length_weeks)
 
     model_hosp_admits = np.asarray(model.transition_variables.IS_to_H.history_vals_list).sum(axis=(1, 2))
-    model_hosp_admits_weekly = model_hosp_admits.reshape(-1, 49).sum(axis=1)[
-                               weeks_offset:weeks_offset + calibration_period_length_weeks]
+    model_hosp_admits_weekly_subset = model_hosp_admits.reshape(-1, 49).sum(axis=1)[:calibration_period_length_weeks]
 
-    return model_hosp_admits_weekly
+    epsilon = 1e-8  # small value to avoid log(0)
+    loss = np.sum(np.square(
+        np.log(historical_hosp_admits_weekly_subset + epsilon) -
+        np.log(model_hosp_admits_weekly_subset + epsilon)
+    ))
+
+    return loss
+
+
+# compute_hospital_admits(0.0232592)
 
 
 run_optimization = False
 
 if run_optimization:
-    x_fit = scipy.optimize.curve_fit(compute_hospital_admits,
-                                     np.arange(8),
-                                     historical_hosp_admits[
-                                     weeks_offset:weeks_offset + calibration_period_length_weeks],
-                                     p0=[.05],
-                                     bounds=[0.001, 0.1])
+    start_time = time.time()
 
-    beta_baseline_fit = x_fit[0]
+    x_fit = scipy.optimize.minimize(compute_hospital_admits, method="Nelder-Mead", x0=[0.02161, 0.02])
+
+    beta_baseline_fit = x_fit.x[0]
+    R_to_S_rate_fit = x_fit.x[1]
+
+    print(x_fit)
+    print(time.time() - start_time)
+
+    breakpoint()
 
     print("Beta baseline fit is " + str(beta_baseline_fit))
 
     model.reset_simulation()
     model.params.beta_baseline = beta_baseline_fit
+    model.params.R_to_S_rate = R_to_S_rate_fit
+
     # model.params.pop_immunity_inf = np.full((5, 1), init_immunity_level_fit)
     # model.params.pop_immunity_hosp = np.full((5, 1), init_immunity_level_fit)
     # model.params.hosp_immune_wane = waning_rate_fit
@@ -218,18 +241,18 @@ if run_optimization:
 ################# SIMULATION ###################
 ################################################
 
-model.simulate_until_day(7 * (num_historical_weeks - weeks_offset))
+model.simulate_until_day(7 * (weeks_offset + calibration_period_length_weeks))
 
 model_hosp_admits = np.asarray(model.transition_variables.IS_to_H.history_vals_list).sum(axis=(1, 2))
 model_hosp_admits_weekly = model_hosp_admits.reshape(-1, 49).sum(axis=1)
+model_hosp_admits_weekly_subset = model_hosp_admits_weekly[:calibration_period_length_weeks]
 
 model_new_infections = np.asarray(model.transition_variables.E_to_IA.history_vals_list).sum(axis=(1, 2)) + \
                        np.asarray(model.transition_variables.E_to_IP.history_vals_list).sum(axis=(1, 2))
 
 model_new_infections_weekly = model_new_infections.reshape(-1, 49).sum(axis=1)
 
-x_positions = np.arange(weeks_offset, weeks_offset + len(model_hosp_admits_weekly))
-
+x_positions = np.arange(calibration_period_length_weeks)
 
 ################################################
 ################# PLOTTING #####################
@@ -242,9 +265,10 @@ print("Total recovered-to-susceptible " + str(np.sum(model.transition_variables.
 plt.figure(figsize=(10, 12))
 
 plt.subplot(4, 2, 1)  # (rows, columns, index)
-plt.plot(x_positions, np.asarray(historical_hosp_admits[weeks_offset:]), marker='o', linestyle='-',
+plt.plot(x_positions, np.asarray(historical_hosp_admits_weekly_subset),
+         marker='o', linestyle='-',
          label="Historical hosp admits")
-plt.plot(x_positions, model_hosp_admits_weekly, label="Simulated hospital admits")
+plt.plot(x_positions, model_hosp_admits_weekly_subset, label="Simulated hospital admits")
 plt.title("Hospital admits")
 plt.xlabel("Week")
 plt.legend()
