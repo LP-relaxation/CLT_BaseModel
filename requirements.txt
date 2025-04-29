@@ -141,7 +141,7 @@ threadpoolctl==3.5.0
 tomli @ file:///home/conda/feedstock_root/build_artifacts/tomli_1644342247877/work
 tomlkit==0.13.2
 toolz==1.0.0
-torch==2.2.2
+torch==2.6.0
 tornado @ file:///Users/runner/miniforge3/conda-bld/tornado_1666788897868/work
 tqdm==4.67.1
 typing_extensions @ file:///home/conda/feedstock_root/build_artifacts/typing_extensions_1695040754690/work
