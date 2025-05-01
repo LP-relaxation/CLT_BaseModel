@@ -1848,7 +1848,8 @@ class SubpopModel(ABC):
         for svar in self.interaction_terms.values() + \
                     self.compartments.values() + \
                     self.epi_metrics.values() + \
-                    self.dynamic_vals.values():
+                    self.dynamic_vals.values() +\
+                    self.schedules.values():
             svar.save_history()
 
     def reset_simulation(self) -> None:

@@ -7,8 +7,10 @@
 # with population-level immunity EpiMetric M
 
 import numpy as np
+import pandas as pd
 import sciris as sc
 from pathlib import Path
+import datetime
 
 from dataclasses import dataclass
 from typing import Optional
@@ -37,6 +39,8 @@ class ToyImmunitySubpopParams(clt.SubpopParams):
     immune_wane: Optional[float] = None
     immune_saturation: Optional[float] = None
     risk_reduction: Optional[float] = None
+    humidity_impact: Optional[float] = None
+    humidity_filepath: Optional[str] = None
 
 
 @dataclass
@@ -46,6 +50,8 @@ class ToyImmunitySubpopState(clt.SubpopState):
     I: Optional[int] = None
     R: Optional[int] = None
     M: Optional[float] = None
+    absolute_humidity: Optional[float] = None
+    Rt: Optional[float] = None
 
 
 class SusceptibleToInfected(clt.TransitionVariable):
@@ -53,8 +59,9 @@ class SusceptibleToInfected(clt.TransitionVariable):
     def get_current_rate(self,
                          state: ToyImmunitySubpopState,
                          params: ToyImmunitySubpopParams) -> np.ndarray:
-
-        return state.I * params.beta / (params.total_pop *
+        
+        beta_adjusted = params.beta * (1 + params.humidity_impact * np.exp(-180 * state.absolute_humidity))
+        return state.I * beta_adjusted / (params.total_pop *
                                         (1 + params.risk_reduction * state.M))
 
 
@@ -89,6 +96,51 @@ class Immunity(clt.EpiMetric):
                (params.total_pop * (1 + params.immune_saturation * state.M)) - \
                params.immune_wane * state.M / num_timesteps
 
+
+class EffectiveReproductionNumber(clt.EpiMetric):
+    def __init__(self, init_val):
+        super().__init__(init_val)
+
+    def get_change_in_current_val(self,
+                                  state: ToyImmunitySubpopState,
+                                  params: ToyImmunitySubpopParams,
+                                  num_timesteps: int) -> np.ndarray:
+        
+        beta_adjusted = params.beta * (1 + params.humidity_impact * np.exp(-180 * state.absolute_humidity))
+        
+        new_val = beta_adjusted / (1 + params.risk_reduction * state.M) * \
+            (1 / params.I_to_R_rate) * \
+            (state.S / params.total_pop)
+                
+        return new_val - self.current_val
+    
+
+class AbsoluteHumidity(clt.Schedule):
+    
+    
+    def __init__(self,
+                 init_val: Optional[np.ndarray | float] = None,
+                 filepath: Optional[str] = None):
+        """
+        Args:
+            init_val (Optional[np.ndarray | float]):
+                starting value(s) at the beginning of the simulation
+            timeseries_df (Optional[pd.DataFrame] = None):
+                has a "date" column with strings in format `"YYYY-MM-DD"`
+                of consecutive calendar days, and other columns
+                corresponding to values on those days
+        """
+
+        super().__init__(init_val)
+        
+        df = pd.read_csv(filepath)
+        df["date"] = pd.to_datetime(df["date"], format='%m/%d/%y').dt.date
+        self.time_series_df = df
+        
+    def update_current_val(self, params, current_date: datetime.date) -> None:
+        self.current_val = self.time_series_df.loc[
+            self.time_series_df["date"] == current_date, "humidity"].values[0]
+    
 
 class ToyImmunitySubpopModel(clt.SubpopModel):
 
@@ -154,6 +206,8 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
     def create_schedules(self) -> sc.objdict[str, clt.Schedule]:
 
         schedules = sc.objdict()
+        # self.schedule_lookup["absolute_humidity"] = AbsoluteHumidity("absolute_humidity")
+        schedules["absolute_humidity"] = AbsoluteHumidity(filepath=self.params.humidity_filepath)
 
         return schedules
 
@@ -164,6 +218,7 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
         epi_metrics = sc.objdict()
 
         epi_metrics["M"] = Immunity(self.state.M, transition_variables.R_to_S)
+        epi_metrics["Rt"] = EffectiveReproductionNumber(self.state.Rt)
 
         return epi_metrics
 
@@ -200,3 +255,4 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
             -> sc.objdict[str, clt.TransitionVariableGroup]:
 
         return sc.objdict()
+

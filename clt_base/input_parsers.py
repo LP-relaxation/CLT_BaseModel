@@ -64,7 +64,7 @@ def make_dataclass_from_dict(dataclass_ref: Type[DataClassProtocol],
     """
 
     d = convert_dict_vals_lists_to_arrays(d)
-
+    
     return dataclass_ref(**d)
 
 
