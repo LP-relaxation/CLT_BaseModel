@@ -12,6 +12,10 @@
 ######################## IMPORTS ##########################
 ###########################################################
 
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
 from pathlib import Path
 import scipy
 import matplotlib.pyplot as plt
@@ -24,7 +28,7 @@ import copy
 import clt_base as clt
 
 # Import flu model module, which contains customized subclasses
-import flu_model as flu
+import flu_components as flu
 
 ###########################################################
 ################# READ INPUT FILES ########################
@@ -117,10 +121,7 @@ array_of_20s = np.full((5, 1), 20)
 # model.params.beta_baseline = 0.0232592 # Warning: beta_baseline is VERY touchy
 # model.params.beta_baseline = 2.244e-02
 
-model.params.beta_baseline = 0.017
-model.params.R_to_S_rate = 0.001
-
-model.params.IS_to_R_rate = 0.3
+model.params.beta_baseline = 0.021486
 
 model.compartments.E.init_val = copy.copy(array_of_20s)
 model.compartments.IS.init_val = copy.copy(array_of_10s)
@@ -128,12 +129,16 @@ model.compartments.IP.init_val = copy.copy(array_of_1s)
 model.compartments.IA.init_val = copy.copy(array_of_1s)
 model.compartments.H.init_val = copy.copy(array_of_1s)
 
-model.params.inf_immune_gain = 0
-model.params.hosp_immune_gain = 0
-model.params.inf_immune_wane = 0
-model.params.hosp_immune_wane = 0
+model.params.immune_saturation = 2
+
+model.params.inf_immune_wane = 0.001
+model.params.hosp_immune_wane = 0.004
 model.epi_metrics.pop_immunity_inf.init_val = 0
 model.epi_metrics.pop_immunity_hosp.init_val = 0
+
+model.params.hosp_risk_reduce = 1
+model.params.inf_risk_reduce = 1
+model.params.death_risk_reduce = 1
 
 # Misc musings to self...
 # For week 36, there are 122 total historical hospitalizations

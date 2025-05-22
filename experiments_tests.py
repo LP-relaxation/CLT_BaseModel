@@ -2,7 +2,7 @@
 # Models are simulated deterministically (without microstochastics,
 #   i.e. random transitions between compartments)
 
-import flu_model as flu
+from flu_model import flu_components as flu
 import clt_base as clt
 
 import numpy as np
@@ -16,7 +16,7 @@ from pathlib import Path
 #################### SETUP ######################
 #################################################
 
-base_path = Path(__file__).parent / "flu_demo_input_files"
+base_path = Path(__file__).parent / "flu_model" / "flu_demo_input_files"
 
 params_filepath = base_path / "common_params.json"
 compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"

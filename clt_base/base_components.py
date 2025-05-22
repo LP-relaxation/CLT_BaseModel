@@ -1514,7 +1514,7 @@ class SubpopModel(ABC):
         self.start_real_date = self.get_start_real_date()
         self.current_real_date = self.start_real_date
 
-        self.metapop_model = None
+        self.metapop_model = metapop_model
         self.name = name
 
         self.schedules = self.create_schedules()
