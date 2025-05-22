@@ -9,11 +9,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 # Import city-level transmission base components module
 import clt_base as clt
 
 # Import flu model module, which contains customized subclasses
-import flu_model as flu
+import flu_components as flu
 
 ###########################################################
 ################# READ INPUT FILES ########################

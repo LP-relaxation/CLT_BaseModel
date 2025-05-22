@@ -452,7 +452,11 @@ class SympToHosp(clt.TransitionVariable):
                          params: FluSubpopParams) -> np.ndarray:
 
         hosp_risk_reduce = params.hosp_risk_reduce
-        proportional_risk_reduction = hosp_risk_reduce / (1 - hosp_risk_reduce)
+
+        if (hosp_risk_reduce != 1).all():
+            proportional_risk_reduction = hosp_risk_reduce / (1 - hosp_risk_reduce)
+        else:
+            proportional_risk_reduction = 1
 
         return np.asarray(params.IS_to_H_rate * params.IS_to_H_adjusted_prop /
                           (1 + proportional_risk_reduction * state.pop_immunity_hosp))
@@ -477,7 +481,11 @@ class HospToDead(clt.TransitionVariable):
                          params: FluSubpopParams) -> np.ndarray:
 
         death_risk_reduce = params.death_risk_reduce
-        proportional_risk_reduction = death_risk_reduce / (1 - death_risk_reduce)
+
+        if (death_risk_reduce != 1).all():
+            proportional_risk_reduction = death_risk_reduce / (1 - death_risk_reduce)
+        else:
+            proportional_risk_reduction = 1
 
         return np.asarray(params.H_to_D_adjusted_prop * params.H_to_D_rate /
                           (1 + proportional_risk_reduction * state.pop_immunity_hosp))
@@ -515,6 +523,7 @@ class PopulationImmunityHosp(clt.EpiMetric):
                                   state: FluSubpopState,
                                   params: FluSubpopParams,
                                   num_timesteps: int) -> np.ndarray:
+
         pop_immunity_hosp = state.pop_immunity_hosp
 
         immunity_gain_numerator = params.hosp_immune_gain * self.R_to_S.current_val
@@ -557,6 +566,7 @@ class PopulationImmunityInf(clt.EpiMetric):
                                   state: FluSubpopState,
                                   params: FluSubpopParams,
                                   num_timesteps: int):
+
         pop_immunity_inf = np.float64(state.pop_immunity_inf)
 
         immunity_gain_numerator = params.inf_immune_gain * self.R_to_S.current_val
@@ -802,8 +812,6 @@ class FluContactMatrix(clt.Schedule):
             self.current_val = subpop_params.total_contact_matrix
 
 
-
-
 def compute_wtd_presymp_asymp(subpop_state: FluSubpopState,
                               subpop_params: FluSubpopParams) -> np.ndarray:
     """
@@ -844,7 +852,10 @@ def compute_immunity_force(subpop_state: FluSubpopState,
     """
 
     inf_risk_reduce = subpop_params.inf_risk_reduce
-    proportional_risk_reduction = inf_risk_reduce / (1 - inf_risk_reduce)
+    if (inf_risk_reduce != 1).all():
+        proportional_risk_reduction = inf_risk_reduce / (1 - inf_risk_reduce)
+    else:
+        proportional_risk_reduction = 1
 
     return 1 + (proportional_risk_reduction *
                 subpop_state.pop_immunity_inf)

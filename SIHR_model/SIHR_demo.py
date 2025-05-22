@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import clt_base as clt
 import SIHR_model as SIHR
 
@@ -29,4 +33,4 @@ city = SIHR.SIHRSubpopModel(compartments_epi_metrics_dict,
 
 city.simulate_until_day(100)
 
-clt.plot_subpop_basic_compartment_history(city, savefig_filename="city_compartment_history.png")
+clt.plot_subpop_basic_compartment_history(city, savefig_filename="../city_compartment_history.png")

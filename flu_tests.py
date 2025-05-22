@@ -18,7 +18,7 @@
 #   Binomial Taylor Approximation transition type may not reliably
 #   pass all tests with arbitrary Config values.
 
-import flu_model as flu
+from flu_model import flu_components as flu
 import clt_base as clt
 
 import numpy as np
@@ -28,7 +28,7 @@ import pytest
 
 from pathlib import Path
 
-base_path = Path(__file__).parent / "flu_demo_input_files"
+base_path = Path(__file__).parent / "flu_model" / "flu_demo_input_files"
 
 config_filepath = base_path / "config.json"
 params_filepath = base_path / "common_params.json"

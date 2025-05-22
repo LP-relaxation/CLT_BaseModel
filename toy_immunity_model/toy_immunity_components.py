@@ -1,10 +1,17 @@
-###########################################################
-######################## SIR-M Model ######################
-###########################################################
+###############################################################
+######################## SIHR-M-Mv Model ######################
+###############################################################
 
-# The S-I-R model we demonstrate has the following structure:
-#   S -> I -> R -> S
-# with population-level immunity EpiMetric M
+# The SIHR-M-Mv model we demonstrate has the following structure:
+#   S -> I -> H -> R -> S
+# with population-level immunity EpiMetric M and Mv
+
+# TODO: add vaccination time series as a Schedule --
+#   for now it is constant, given in params
+
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import numpy as np
 import sciris as sc
@@ -16,13 +23,18 @@ from typing import Optional
 import clt_base as clt
 
 # The math for transitions is as follows:
-#   - S to I transition rate: I * beta / (total_pop * (1 + risk_reduction * M))
-#   - I to R transition rate: I_to_R_rate
+#   - S to I transition rate: I * beta / (total_pop * (1 + inf_induced_inf_risk_constant * M +
+#                                                           vax_induced_inf_risk_constant * M_v))
+#   - I to H transition rate: I_to_H_rate * I_to_H_adjusted_prop /
+#                               (inf_induced_hosp_risk_constant * M + vax_induced_hosp_risk_constant * M_v))
+#   - I to R transition rate: I_to_R_rate * (1 - I_to_H_adjusted_prop)
+#   - H to R transition rate: H_to_R_rate
 #   - R to S transition rate: R_to_S_rate
 
 # The update rule for immunity is
-#   - dM/dt = (immune_gain * R_to_S_rate * R) /
-#               (total_pop * (1 + immune_saturation * M)) - immune_wane * M
+#   - dM/dt = R_to_S_rate * R / (1 + inf_induced_saturation * M + vax_induced_saturation * M_v)
+#               - inf_induced_immune_wane * M
+#   - dMv/dt = (new vaccinations at time t - delta)/ N - vax_induced_immune_wane
 
 @dataclass
 class ToyImmunitySubpopParams(clt.SubpopParams):
@@ -31,12 +43,20 @@ class ToyImmunitySubpopParams(clt.SubpopParams):
     num_risk_groups: int = 1,
     total_pop: Optional[int] = None
     beta: Optional[float] = None
+    I_to_H_rate: Optional[float] = None
     I_to_R_rate: Optional[float] = None
+    H_to_R_rate: Optional[float] = None
     R_to_S_rate: Optional[float] = None
-    immune_gain: Optional[float] = None
-    immune_wane: Optional[float] = None
-    immune_saturation: Optional[float] = None
-    risk_reduction: Optional[float] = None
+    I_to_H_adjusted_prop: Optional[float] = None
+    inf_induced_saturation: Optional[float] = None
+    inf_induced_immune_wane: Optional[float] = None
+    vax_induced_saturation: Optional[float] = None
+    vax_induced_immune_wane: Optional[float] = None
+    inf_induced_inf_risk_constant: Optional[float] = None
+    inf_induced_hosp_risk_constant: Optional[float] = None
+    vax_induced_inf_risk_constant: Optional[float] = None
+    vax_induced_hosp_risk_constant: Optional[float] = None
+    vaccines_per_day: Optional[float] = None
 
 
 @dataclass
@@ -44,8 +64,10 @@ class ToyImmunitySubpopState(clt.SubpopState):
 
     S: Optional[int] = None
     I: Optional[int] = None
+    H: Optional[int] = None
     R: Optional[int] = None
     M: Optional[float] = None
+    Mv: Optional[float] = None
 
 
 class SusceptibleToInfected(clt.TransitionVariable):
@@ -55,7 +77,18 @@ class SusceptibleToInfected(clt.TransitionVariable):
                          params: ToyImmunitySubpopParams) -> np.ndarray:
 
         return state.I * params.beta / (params.total_pop *
-                                        (1 + params.risk_reduction * state.M))
+                                        (1 + params.inf_induced_inf_risk_constant * state.M +
+                                         params.vax_induced_inf_risk_constant * state.Mv))
+
+
+class InfectedToHospitalized(clt.TransitionVariable):
+
+    def get_current_rate(self,
+                         state: ToyImmunitySubpopState,
+                         params: ToyImmunitySubpopParams) -> np.ndarray:
+        return params.I_to_H_rate * params.I_to_H_adjusted_prop / \
+               (1 + params.inf_induced_hosp_risk_constant * state.M +
+                params.vax_induced_hosp_risk_constant * state.Mv)
 
 
 class InfectedToRecovered(clt.TransitionVariable):
@@ -63,7 +96,17 @@ class InfectedToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          state: ToyImmunitySubpopState,
                          params: ToyImmunitySubpopParams) -> np.ndarray:
-        return params.I_to_R_rate
+
+        return params.I_to_R_rate * (1 - params.I_to_H_adjusted_prop)
+
+
+class HospitalizedToRecovered(clt.TransitionVariable):
+
+    def get_current_rate(self,
+                         state: ToyImmunitySubpopState,
+                         params: ToyImmunitySubpopParams) -> np.ndarray:
+
+        return params.H_to_R_rate
 
 
 class RecoveredToSusceptible(clt.TransitionVariable):
@@ -74,7 +117,7 @@ class RecoveredToSusceptible(clt.TransitionVariable):
         return params.R_to_S_rate
 
 
-class Immunity(clt.EpiMetric):
+class InfInducedImmunity(clt.EpiMetric):
 
     def __init__(self, init_val, R_to_S):
         super().__init__(init_val)
@@ -85,9 +128,20 @@ class Immunity(clt.EpiMetric):
                                   params: ToyImmunitySubpopParams,
                                   num_timesteps: int) -> np.ndarray:
         
-        return params.immune_gain * self.R_to_S.current_val / \
-               (params.total_pop * (1 + params.immune_saturation * state.M)) - \
-               params.immune_wane * state.M / num_timesteps
+        return self.R_to_S.current_val / (params.total_pop *
+                                          (1 + params.inf_induced_saturation * state.M +
+                                           params.vax_induced_saturation * state.Mv)) - \
+               params.inf_induced_immune_wane * state.M / num_timesteps
+
+
+class VaxInducedImmunity(clt.EpiMetric):
+
+    def get_change_in_current_val(self,
+                                  state: ToyImmunitySubpopState,
+                                  params: ToyImmunitySubpopParams,
+                                  num_timesteps: int) -> np.ndarray:
+
+        return params.vaccines_per_day / (params.total_pop * num_timesteps) - params.vax_induced_immune_wane * state.Mv / num_timesteps
 
 
 class ToyImmunitySubpopModel(clt.SubpopModel):
@@ -163,7 +217,8 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
 
         epi_metrics = sc.objdict()
 
-        epi_metrics["M"] = Immunity(self.state.M, transition_variables.R_to_S)
+        epi_metrics["M"] = InfInducedImmunity(self.state.M, transition_variables.R_to_S)
+        epi_metrics["Mv"] = VaxInducedImmunity(self.state.Mv)
 
         return epi_metrics
 
@@ -171,7 +226,7 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
 
         compartments = sc.objdict()
 
-        for name in ("S", "I", "R"):
+        for name in ("S", "I", "H", "R"):
             compartments[name] = clt.Compartment(getattr(self.state, name))
 
         return compartments
@@ -185,10 +240,13 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
 
         S = compartments.S
         I = compartments.I
+        H = compartments.H
         R = compartments.R
 
         transition_variables.S_to_I = SusceptibleToInfected(origin=S, destination=I, transition_type=type)
         transition_variables.I_to_R = InfectedToRecovered(origin=I, destination=R, transition_type=type)
+        transition_variables.I_to_H = InfectedToHospitalized(origin=I, destination=H, transition_type=type)
+        transition_variables.H_to_R = HospitalizedToRecovered(origin=H, destination=R, transition_type=type)
         transition_variables.R_to_S = RecoveredToSusceptible(origin=R, destination=S, transition_type=type)
 
         return transition_variables
