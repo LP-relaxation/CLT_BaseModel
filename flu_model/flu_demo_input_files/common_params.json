@@ -2,7 +2,7 @@
 	"num_age_groups":2,
 	"num_risk_groups":1,
 	"beta_baseline": 1,
-	"humidity_impact": 0.001,
+	"humidity_impact": 0.2,
 	"hosp_immune_gain": 0.12,
 	"inf_immune_gain": 0.1,
 	"immune_saturation": [[1.0], [1.0]],

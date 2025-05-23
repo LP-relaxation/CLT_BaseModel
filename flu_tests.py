@@ -34,6 +34,7 @@ config_filepath = base_path / "config.json"
 params_filepath = base_path / "common_params.json"
 compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
 calendar_filepath = base_path / "school_work_calendar.csv"
+humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
 travel_proportions_filepath = base_path / "travel_proportions.json"
 
 compartments_epi_metrics_dict = clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
@@ -49,7 +50,8 @@ subpopA_model = flu.FluSubpopModel(compartments_epi_metrics_dict,
                                    params_dict,
                                    config_dict,
                                    calendar_df,
-                                   np.random.Generator(bit_generator))
+                                   np.random.Generator(bit_generator),
+                                   humidity_filepath)
 
 starting_random_seed = 123456789123456789
 
@@ -77,7 +79,8 @@ def create_subpop_models_all_transition_types(RNG: np.random.Generator) -> list:
                                                   params_dict,
                                                   new_config_dict,
                                                   calendar_df,
-                                                  RNG))
+                                                  RNG,
+                                                  humidity_filepath))
 
     return models_list
 
@@ -103,7 +106,8 @@ def test_num_timesteps():
                                              params_dict,
                                              config_dict,
                                              calendar_df,
-                                             np.random.default_rng(starting_random_seed))
+                                             np.random.default_rng(starting_random_seed),
+                                             humidity_filepath)
 
     few_timesteps_model.prepare_daily_state()
     few_timesteps_model.simulate_timesteps(1)
@@ -116,7 +120,8 @@ def test_num_timesteps():
                                               params_dict,
                                               config_dict,
                                               calendar_df,
-                                              np.random.default_rng(starting_random_seed))
+                                              np.random.default_rng(starting_random_seed),
+                                              humidity_filepath)
 
     many_timesteps_model.prepare_daily_state()
     many_timesteps_model.simulate_timesteps(1)
@@ -166,13 +171,15 @@ def test_subpop_constructor_no_unintended_sharing():
                                      params_dict,
                                      config_dict,
                                      calendar_df,
-                                     np.random.default_rng(1))
+                                     np.random.default_rng(1),
+                                     humidity_filepath)
 
     second_model = flu.FluSubpopModel(compartments_epi_metrics_dict,
                                       params_dict,
                                       config_dict,
                                       calendar_df,
-                                      np.random.default_rng(1))
+                                      np.random.default_rng(1),
+                                      humidity_filepath)
 
     first_model.simulate_until_day(100)
 
@@ -210,7 +217,8 @@ def test_subpop_constructor_reproducible_results():
                                      params_dict,
                                      config_dict,
                                      calendar_df,
-                                     np.random.default_rng(1))
+                                     np.random.default_rng(1),
+                                     humidity_filepath)
 
     first_model.simulate_until_day(100)
 
@@ -218,7 +226,8 @@ def test_subpop_constructor_reproducible_results():
                                       params_dict,
                                       config_dict,
                                       calendar_df,
-                                      np.random.default_rng(1))
+                                      np.random.default_rng(1),
+                                      humidity_filepath)
     second_model.simulate_until_day(100)
 
     check_state_variables_same_history(first_model, second_model)
@@ -233,7 +242,8 @@ def test_subpop_no_transmission_when_beta_zero():
                                       params_dict,
                                       config_dict,
                                       calendar_df,
-                                      np.random.default_rng(1))
+                                      np.random.default_rng(1),
+                                      humidity_filepath)
 
     subpop_model.reset_simulation()
     subpop_model.params.beta_baseline = 0
@@ -404,6 +414,7 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
                                  config_dict_1_timestep,
                                  calendar_df,
                                  np.random.default_rng(starting_random_seed),
+                                 humidity_filepath,
                                  name="subpopA")
 
     subpopB = flu.FluSubpopModel(compartments_epi_metrics_dict,
@@ -411,6 +422,7 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
                                  config_dict_1_timestep,
                                  calendar_df,
                                  np.random.default_rng(starting_random_seed ** 2),
+                                 humidity_filepath,
                                  name="subpopB")
 
     AB_inter_subpop_repo = flu.FluInterSubpopRepo({"subpopA": subpopA, "subpopB": subpopB},
@@ -426,6 +438,7 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
                                              config_dict_1_timestep,
                                              calendar_df,
                                              np.random.default_rng(starting_random_seed),
+                                             humidity_filepath,
                                              name="subpopA")
 
     subpopB_independent = flu.FluSubpopModel(compartments_epi_metrics_dict,
@@ -433,6 +446,7 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
                                              config_dict_1_timestep,
                                              calendar_df,
                                              np.random.default_rng(starting_random_seed ** 2),
+                                             humidity_filepath,
                                              name="subpopB")
 
     subpopA_independent.simulate_until_day(100)

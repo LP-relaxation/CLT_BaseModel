@@ -14,7 +14,7 @@
 
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from pathlib import Path
 import scipy
@@ -51,6 +51,8 @@ compartments_epi_metrics_init_vals_filepath = \
 params_filepath = base_path / "texas_common_params.json"
 config_filepath = base_path / "config.json"
 
+humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
+
 # Get filepaths for school-work calendar CSV
 calendar_filepath = base_path / "school_work_calendar.csv"
 
@@ -76,7 +78,8 @@ model = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            params_dict,
                            config_dict,
                            calendar_df,
-                           np.random.Generator(jumped_bit_generator))
+                           np.random.Generator(jumped_bit_generator),
+                           humidity_filepath)
 
 ######################################################################
 ################# ASIDE: DOUBLE-CHECKING RATES #######################

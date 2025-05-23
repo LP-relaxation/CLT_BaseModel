@@ -21,6 +21,7 @@ base_path = Path(__file__).parent / "flu_model" / "flu_demo_input_files"
 params_filepath = base_path / "common_params.json"
 compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
 calendar_filepath = base_path / "school_work_calendar.csv"
+humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
 travel_proportions_filepath = base_path / "travel_proportions.json"
 
 config_dict = {}
@@ -42,13 +43,15 @@ subpopA = flu.FluSubpopModel(compartments_epi_metrics_dict,
                              params_dict,
                              config_dict,
                              calendar_df,
-                             np.random.Generator(bit_generator))
+                             np.random.Generator(bit_generator),
+                             humidity_filepath)
 
 subpopB = flu.FluSubpopModel(compartments_epi_metrics_dict,
                              params_dict,
                              config_dict,
                              calendar_df,
-                             np.random.Generator(jumped_bit_generator))
+                             np.random.Generator(jumped_bit_generator),
+                             humidity_filepath)
 
 repoAB = flu.FluInterSubpopRepo({"subpopA": subpopA, "subpopB": subpopB},
                                 {"subpopA": 0, "subpopB": 1},

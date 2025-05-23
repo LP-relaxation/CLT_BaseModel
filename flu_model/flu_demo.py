@@ -33,8 +33,9 @@ params_filepath = base_path / "common_params.json"
 config_filepath = base_path / "config.json"
 travel_proportions_filepath = base_path / "travel_proportions.json"
 
-# Get filepaths for school-work calendar CSV
+# Get filepaths for school-work calendar CSV and humidity CSV
 calendar_filepath = base_path / "school_work_calendar.csv"
+humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
 
 # Read in files as dictionaries and dataframes
 # Note that we can also create these dictionaries directly
@@ -69,6 +70,7 @@ north = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            config_dict,
                            calendar_df,
                            np.random.Generator(bit_generator),
+                           humidity_filepath,
                            name="north")
 
 south = flu.FluSubpopModel(compartments_epi_metrics_dict,
@@ -76,6 +78,7 @@ south = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            config_dict,
                            calendar_df,
                            np.random.Generator(jumped_bit_generator),
+                           humidity_filepath,
                            name="south")
 
 # The structure of the code allows us to access

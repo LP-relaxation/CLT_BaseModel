@@ -453,7 +453,7 @@ class SympToHosp(clt.TransitionVariable):
 
         hosp_risk_reduce = params.hosp_risk_reduce
 
-        if (hosp_risk_reduce != 1).all():
+        if (np.asarray(hosp_risk_reduce) != 1).all():
             proportional_risk_reduction = hosp_risk_reduce / (1 - hosp_risk_reduce)
         else:
             proportional_risk_reduction = 1
@@ -482,7 +482,7 @@ class HospToDead(clt.TransitionVariable):
 
         death_risk_reduce = params.death_risk_reduce
 
-        if (death_risk_reduce != 1).all():
+        if (np.asarray(death_risk_reduce) != 1).all():
             proportional_risk_reduction = death_risk_reduce / (1 - death_risk_reduce)
         else:
             proportional_risk_reduction = 1
@@ -726,52 +726,30 @@ class BetaReduct(clt.DynamicVal):
                 self.current_val = 0.0
 
 
-def absolute_humidity_func(current_date: datetime.date) -> float:
-    """
-    Note: this is a dummy function loosely based off of
-    the absolute humidity data from Kaiming and Shraddha's
-    new burden averted draft.
-
-    TODO: replace this function with real humidity function
-
-    The following calculation is used to achieve the correct
-        upside-down parabola with the right min and max
-        values and location
-        max_value = 12.5
-        0.00027 = (max_value - k) / ((0 - h) ** 2)
-
-    Args:
-        current_date (datetime.date):
-            datetime.date object corresponding to
-            real-world date
-
-    Returns:
-        float:
-            nonnegative float between 3.4 and 12.5
-            corresponding to absolute humidity
-            that day of the year
-    """
-
-    # Convert datetime.date to integer between 1 and 365
-    #   corresponding to day of the year
-    day_of_year = current_date.timetuple().tm_yday
-
-    # Minimum humidity occurs in January and December
-    # Maximum humidity occurs in July
-    return 12.5 - 0.00027 * (day_of_year % 365 - 180) ** 2
-
-
 class AbsoluteHumidity(clt.Schedule):
-    """
-    Schedule-derived class for absolute humidity.
-    Depends on real date (absolute humidity is higher in the summer
-    and lower in the winter in the US).
-    """
 
-    def update_current_val(self,
-                           subpop_params: FluSubpopParams,
-                           current_date: datetime.date) -> None:
-        self.current_val = absolute_humidity_func(current_date)
+    def __init__(self,
+                 init_val: Optional[np.ndarray | float] = None,
+                 filepath: Optional[str] = None):
+        """
+        Args:
+            init_val (Optional[np.ndarray | float]):
+                starting value(s) at the beginning of the simulation
+            timeseries_df (Optional[pd.DataFrame] = None):
+                has a "date" column with strings in format `"YYYY-MM-DD"`
+                of consecutive calendar days, and other columns
+                corresponding to values on those days
+        """
+
+        super().__init__(init_val)
+
+        df = pd.read_csv(filepath)
+        df["date"] = pd.to_datetime(df["date"], format='%m/%d/%y').dt.date
+        self.time_series_df = df
+
+    def update_current_val(self, params, current_date: datetime.date) -> None:
+        self.current_val = self.time_series_df.loc[
+            self.time_series_df["date"] == current_date, "humidity"].values[0]
 
 
 class FluContactMatrix(clt.Schedule):
@@ -852,7 +830,7 @@ def compute_immunity_force(subpop_state: FluSubpopState,
     """
 
     inf_risk_reduce = subpop_params.inf_risk_reduce
-    if (inf_risk_reduce != 1).all():
+    if (np.asarray(inf_risk_reduce) != 1).all():
         proportional_risk_reduction = inf_risk_reduce / (1 - inf_risk_reduce)
     else:
         proportional_risk_reduction = 1
@@ -876,22 +854,12 @@ def compute_common_coeff_force_of_infection(subpop_state: FluSubpopState,
             many computations
     """
 
-    beta = compute_beta_humidity_adjusted(subpop_state, subpop_params)
+    beta = subpop_params.beta_baseline * (1 + subpop_params.humidity_impact *
+                                          np.exp(-180 * subpop_state.absolute_humidity))
     relative_suscept_by_age = subpop_params.relative_suscept_by_age
     immunity_force = compute_immunity_force(subpop_state, subpop_params)
 
     return beta * np.divide(relative_suscept_by_age, immunity_force)
-
-
-def compute_beta_humidity_adjusted(subpop_state: FluSubpopState,
-                                   subpop_params: FluSubpopParams) -> float:
-    """
-    Computes and returns humidity-adjusted beta.
-    """
-
-    # We subtract absolute_humidity because higher humidity means less transmission
-    return (1 - subpop_state.absolute_humidity * subpop_params.humidity_impact) \
-           * subpop_params.beta_baseline
 
 
 def compute_pop_by_age(subpop_params: FluSubpopParams) -> np.ndarray:
@@ -1396,6 +1364,7 @@ class FluSubpopModel(clt.SubpopModel):
                  config: dict,
                  calendar_df: pd.DataFrame,
                  RNG: np.random.Generator,
+                 absolute_humidity_filepath: str,
                  name: str = "",
                  wastewater_enabled: bool = False):
         """
@@ -1423,6 +1392,10 @@ class FluSubpopModel(clt.SubpopModel):
             RNG (np.random.Generator):
                 numpy random generator object used to obtain
                 random numbers.
+            absolute_humidity_filepath (str):
+                filepath (ending in ".csv") corresponding to
+                absolute humidity data -- see `AbsoluteHumidity`
+                class for CSV file specifications
             name (str):
                 unique name of MetapopModel instance.
             wastewater_enabled (bool):
@@ -1435,6 +1408,7 @@ class FluSubpopModel(clt.SubpopModel):
         # and sim state information
 
         self.wastewater_enabled = wastewater_enabled
+        self.absolute_humidity_filepath = absolute_humidity_filepath
 
         if not all(isinstance(val, datetime.date) for val in calendar_df["date"]):
             try:
@@ -1500,7 +1474,7 @@ class FluSubpopModel(clt.SubpopModel):
 
         schedules = sc.objdict()
 
-        schedules["absolute_humidity"] = AbsoluteHumidity()
+        schedules["absolute_humidity"] = AbsoluteHumidity(filepath=self.absolute_humidity_filepath)
         schedules["flu_contact_matrix"] = FluContactMatrix(init_val=None,
                                                            calendar_df=self.calendar_df)
 
