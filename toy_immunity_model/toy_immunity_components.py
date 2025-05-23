@@ -2,6 +2,14 @@
 ######################## SIHR-M-Mv Model ######################
 ###############################################################
 
+# This code has Remy's humidity (seasonal forcing) functionality
+
+# ToyImmunitySubpopModel has nonlinear saturation in dM/dt
+# LinearSaturationSubpopModel is the same except it has linear
+#   saturation in dM/dt (Anass's new proposal)
+
+# See below for the precise write-up
+
 # The SIHR-M-Mv model we demonstrate has the following structure:
 #   S -> I -> H -> R -> S
 # with population-level immunity EpiMetric M and Mv
@@ -9,11 +17,13 @@
 # TODO: add vaccination time series as a Schedule --
 #   for now it is constant, given in params
 
+import datetime
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import numpy as np
+import pandas as pd
 import sciris as sc
 from pathlib import Path
 
@@ -32,9 +42,12 @@ import clt_base as clt
 #   - R to S transition rate: R_to_S_rate
 
 # The update rule for immunity is
-#   - dM/dt = R_to_S_rate * R / (1 + inf_induced_saturation * M + vax_induced_saturation * M_v)
+#   - dM/dt = R_to_S_rate * R / (N * (1 + inf_induced_saturation * M + vax_induced_saturation * M_v))
 #               - inf_induced_immune_wane * M
 #   - dMv/dt = (new vaccinations at time t - delta)/ N - vax_induced_immune_wane
+
+# The update rule for linear saturation immunity is
+#   - dM/dt = (R_to_S_rate * R / N) * (1 - inf_induced_saturation * M - vax_induced_saturation * M_v)
 
 @dataclass
 class ToyImmunitySubpopParams(clt.SubpopParams):
@@ -43,6 +56,7 @@ class ToyImmunitySubpopParams(clt.SubpopParams):
     num_risk_groups: int = 1,
     total_pop: Optional[int] = None
     beta: Optional[float] = None
+    humidity_impact: Optional[float] = None
     I_to_H_rate: Optional[float] = None
     I_to_R_rate: Optional[float] = None
     H_to_R_rate: Optional[float] = None
@@ -76,7 +90,9 @@ class SusceptibleToInfected(clt.TransitionVariable):
                          state: ToyImmunitySubpopState,
                          params: ToyImmunitySubpopParams) -> np.ndarray:
 
-        return state.I * params.beta / (params.total_pop *
+        beta_adjusted = params.beta * (1 + params.humidity_impact * np.exp(-180 * state.absolute_humidity))
+
+        return state.I * beta_adjusted / (params.total_pop *
                                         (1 + params.inf_induced_inf_risk_constant * state.M +
                                          params.vax_induced_inf_risk_constant * state.Mv))
 
@@ -141,7 +157,60 @@ class VaxInducedImmunity(clt.EpiMetric):
                                   params: ToyImmunitySubpopParams,
                                   num_timesteps: int) -> np.ndarray:
 
-        return params.vaccines_per_day / (params.total_pop * num_timesteps) - params.vax_induced_immune_wane * state.Mv / num_timesteps
+        return params.vaccines_per_day / (params.total_pop * num_timesteps) - \
+               params.vax_induced_immune_wane * state.Mv / num_timesteps
+
+
+class InfInducedImmunityLinearSaturation(clt.EpiMetric):
+
+    def __init__(self, init_val, R_to_S):
+        super().__init__(init_val)
+        self.R_to_S = R_to_S
+
+    def get_change_in_current_val(self,
+                                  state: ToyImmunitySubpopState,
+                                  params: ToyImmunitySubpopParams,
+                                  num_timesteps: int) -> np.ndarray:
+
+        return (self.R_to_S.current_val / params.total_pop) * \
+               (1 - params.inf_induced_saturation * state.M - params.vax_induced_saturation * state.Mv) - \
+               params.inf_induced_immune_wane * state.M / num_timesteps
+
+
+class VaxInducedImmunityLinearSaturation(clt.EpiMetric):
+
+    def get_change_in_current_val(self,
+                                  state: ToyImmunitySubpopState,
+                                  params: ToyImmunitySubpopParams,
+                                  num_timesteps: int) -> np.ndarray:
+        return params.vaccines_per_day / (params.total_pop * num_timesteps) - \
+               params.vax_induced_immune_wane * state.Mv / num_timesteps
+
+
+class AbsoluteHumidity(clt.Schedule):
+
+    def __init__(self,
+                 init_val: Optional[np.ndarray | float] = None,
+                 filepath: Optional[str] = None):
+        """
+        Args:
+            init_val (Optional[np.ndarray | float]):
+                starting value(s) at the beginning of the simulation
+            timeseries_df (Optional[pd.DataFrame] = None):
+                has a "date" column with strings in format `"YYYY-MM-DD"`
+                of consecutive calendar days, and other columns
+                corresponding to values on those days
+        """
+
+        super().__init__(init_val)
+
+        df = pd.read_csv(filepath)
+        df["date"] = pd.to_datetime(df["date"], format='%m/%d/%y').dt.date
+        self.time_series_df = df
+
+    def update_current_val(self, params, current_date: datetime.date) -> None:
+        self.current_val = self.time_series_df.loc[
+            self.time_series_df["date"] == current_date, "humidity"].values[0]
 
 
 class ToyImmunitySubpopModel(clt.SubpopModel):
@@ -151,6 +220,7 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
                  params_dict: dict,
                  config_dict: dict,
                  RNG: np.random.Generator,
+                 absolute_humidity_filepath: str,
                  name: str = "",
                  wastewater_enabled: bool = False):
         """
@@ -171,6 +241,10 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
             RNG (np.random.Generator):
                 numpy random generator object used to obtain
                 random numbers.
+            absolute_humidity_filepath (str):
+                filepath (ending in ".csv") corresponding to
+                absolute humidity data -- see `AbsoluteHumidity`
+                class for CSV file specifications
             name (str):
                 name.
             wastewater_enabled (bool):
@@ -183,6 +257,8 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
         # and sim state information
 
         self.wastewater_enabled = wastewater_enabled
+
+        self.absolute_humidity_filepath = absolute_humidity_filepath
 
         state = clt.make_dataclass_from_dict(ToyImmunitySubpopState, compartments_epi_metrics_dict)
         params = clt.make_dataclass_from_dict(ToyImmunitySubpopParams, params_dict)
@@ -208,6 +284,7 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
     def create_schedules(self) -> sc.objdict[str, clt.Schedule]:
 
         schedules = sc.objdict()
+        schedules["absolute_humidity"] = AbsoluteHumidity(filepath=self.absolute_humidity_filepath)
 
         return schedules
 
@@ -258,3 +335,17 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
             -> sc.objdict[str, clt.TransitionVariableGroup]:
 
         return sc.objdict()
+
+
+class LinearSaturationSubpopModel(ToyImmunitySubpopModel):
+
+    def create_epi_metrics(self,
+                           transition_variables: sc.objdict[str, clt.TransitionVariable]) \
+            -> sc.objdict[str, clt.EpiMetric]:
+
+        epi_metrics = sc.objdict()
+
+        epi_metrics["M"] = InfInducedImmunityLinearSaturation(self.state.M, transition_variables.R_to_S)
+        epi_metrics["Mv"] = VaxInducedImmunityLinearSaturation(self.state.Mv)
+
+        return epi_metrics

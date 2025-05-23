@@ -13,6 +13,7 @@ import toy_immunity_plotting
 
 import sys
 import os
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import city-level transmission base components module
@@ -33,6 +34,8 @@ base_path = Path(__file__).parent / "toy_immunity_input_files"
 compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
 params_filepath = base_path / "params.json"
 config_filepath = base_path / "config.json"
+
+humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
 
 # Read in files as dictionaries and dataframes
 # Note that we can also create these dictionaries directly
@@ -62,18 +65,18 @@ jumped_bit_generator = bit_generator.jumped(1)
 model = imm.ToyImmunitySubpopModel(compartments_epi_metrics_dict,
                                    params_dict,
                                    config_dict,
-                                   np.random.Generator(bit_generator))
+                                   np.random.Generator(bit_generator),
+                                   humidity_filepath)
 
 model.simulate_until_day(300)
 
-model2 = imm.ToyImmunitySubpopModel(compartments_epi_metrics_dict,
-                                   params_dict,
-                                   config_dict,
-                                   np.random.Generator(bit_generator))
+linear_saturation_model = imm.LinearSaturationSubpopModel(compartments_epi_metrics_dict,
+                                                          params_dict,
+                                                          config_dict,
+                                                          np.random.Generator(bit_generator),
+                                                          humidity_filepath)
 
-model2.beta = 5
-
-model2.simulate_until_day(300)
+linear_saturation_model.simulate_until_day(300)
 
 clt.plot_subpop_basic_compartment_history(model)
 
@@ -81,7 +84,7 @@ clt.plot_subpop_epi_metrics(model)
 
 toy_immunity_plotting.make_graph_set(model)
 
-toy_immunity_plotting.make_comparison_graph_set(model, model2)
+toy_immunity_plotting.make_comparison_graph_set(model, linear_saturation_model)
 
 toy_immunity_plotting.changing_param_val_graph(model, "param", "beta", [0.5, 1, 1.5, 2])
 
