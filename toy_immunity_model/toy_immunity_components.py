@@ -122,7 +122,7 @@ class HospitalizedToRecovered(clt.TransitionVariable):
                          state: ToyImmunitySubpopState,
                          params: ToyImmunitySubpopParams) -> np.ndarray:
 
-        return params.H_to_R_rate
+        return params.H_to_R_rate * params.I_to_H_adjusted_prop
 
 
 class RecoveredToSusceptible(clt.TransitionVariable):
