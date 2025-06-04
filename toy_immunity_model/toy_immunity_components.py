@@ -82,6 +82,7 @@ class ToyImmunitySubpopState(clt.SubpopState):
     R: Optional[int] = None
     M: Optional[float] = None
     Mv: Optional[float] = None
+    absolute_humidity: Optional[float] = None
 
 
 class SusceptibleToInfected(clt.TransitionVariable):

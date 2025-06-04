@@ -943,7 +943,7 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
         force_of_infection_array = []
 
         wtd_no_symp_by_age_cache = self.create_wtd_no_symp_by_age_cache()
-        effective_pop_by_age_cache = self.create_pop_by_age_cache()
+        effective_pop_by_age_cache = self.create_effective_pop_by_age_cache()
 
         # Extract subpop names in correct order corresponding to their mapping
         subpop_names_ordered = sorted(self.subpop_names_mapping, key=self.subpop_names_mapping.get)
@@ -1060,10 +1060,10 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
             subpop_state = subpop_model.state
 
             pop_healthy_by_age[subpop_name] = \
-                (pop_by_age_cache[subpop_name] -
-                 subpop_model.params.contact_mult_symp *
-                 np.sum(subpop_state.IS, axis=1, keepdims=True) +
-                 np.sum(subpop_state.H, axis=1, keepdims=True))
+                pop_by_age_cache[subpop_name] - \
+                (1 - subpop_model.params.contact_mult_symp) * \
+                np.sum(subpop_state.IS, axis=1, keepdims=True) - \
+                np.sum(subpop_state.H, axis=1, keepdims=True)
 
         return pop_healthy_by_age
 
@@ -1086,7 +1086,8 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
                                                            subpop_name) *
                     pop_healthy_by_age[origin_subpop_name])
 
-        return np.sum(wtd_visitors_by_origin, axis=1)
+        # return np.sum(wtd_visitors_by_origin, axis=1)
+        return np.sum(wtd_visitors_by_origin, axis=2)
 
     def create_effective_pop_by_age_cache(self):
         """

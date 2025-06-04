@@ -31,8 +31,8 @@ from pathlib import Path
 base_path = Path(__file__).parent / "flu_model" / "flu_demo_input_files"
 
 config_filepath = base_path / "config.json"
-params_filepath = base_path / "common_params.json"
-compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
+params_filepath = base_path / "common_params_multiple_risk_groups.json"
+compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals_multiple_risk_groups.json"
 calendar_filepath = base_path / "school_work_calendar.csv"
 humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
 travel_proportions_filepath = base_path / "travel_proportions.json"
