@@ -134,34 +134,6 @@ class RecoveredToSusceptible(clt.TransitionVariable):
         return params.R_to_S_rate
 
 
-class InfInducedImmunity(clt.EpiMetric):
-
-    def __init__(self, init_val, R_to_S):
-        super().__init__(init_val)
-        self.R_to_S = R_to_S
-
-    def get_change_in_current_val(self,
-                                  state: ToyImmunitySubpopState,
-                                  params: ToyImmunitySubpopParams,
-                                  num_timesteps: int) -> np.ndarray:
-        
-        return self.R_to_S.current_val / (params.total_pop *
-                                          (1 + params.inf_induced_saturation * state.M +
-                                           params.vax_induced_saturation * state.Mv)) - \
-               params.inf_induced_immune_wane * state.M / num_timesteps
-
-
-class VaxInducedImmunity(clt.EpiMetric):
-
-    def get_change_in_current_val(self,
-                                  state: ToyImmunitySubpopState,
-                                  params: ToyImmunitySubpopParams,
-                                  num_timesteps: int) -> np.ndarray:
-
-        return params.vaccines_per_day / (params.total_pop * num_timesteps) - \
-               params.vax_induced_immune_wane * state.Mv / num_timesteps
-
-
 class InfInducedImmunityLinearSaturation(clt.EpiMetric):
 
     def __init__(self, init_val, R_to_S):
@@ -295,8 +267,8 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
 
         epi_metrics = sc.objdict()
 
-        epi_metrics["M"] = InfInducedImmunity(self.state.M, transition_variables.R_to_S)
-        epi_metrics["Mv"] = VaxInducedImmunity(self.state.Mv)
+        epi_metrics["M"] = InfInducedImmunityLinearSaturation(self.state.M, transition_variables.R_to_S)
+        epi_metrics["Mv"] = VaxInducedImmunityLinearSaturation(self.state.Mv)
 
         return epi_metrics
 
@@ -336,17 +308,3 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
             -> sc.objdict[str, clt.TransitionVariableGroup]:
 
         return sc.objdict()
-
-
-class LinearSaturationSubpopModel(ToyImmunitySubpopModel):
-
-    def create_epi_metrics(self,
-                           transition_variables: sc.objdict[str, clt.TransitionVariable]) \
-            -> sc.objdict[str, clt.EpiMetric]:
-
-        epi_metrics = sc.objdict()
-
-        epi_metrics["M"] = InfInducedImmunityLinearSaturation(self.state.M, transition_variables.R_to_S)
-        epi_metrics["Mv"] = VaxInducedImmunityLinearSaturation(self.state.Mv)
-
-        return epi_metrics
