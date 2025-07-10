@@ -315,7 +315,7 @@ class SusceptibleToExposed(clt.TransitionVariable):
 
             return compute_common_coeff_force_of_infection(state, params) * \
                    np.matmul(state.flu_contact_matrix,
-                             np.divide(state.IS + wtd_presymp_asymp,
+                             np.divide(np.reshape(np.sum(state.IS, axis=1), (2,1)) + wtd_presymp_asymp,
                                        compute_pop_by_age(params)))
 
 
@@ -1086,8 +1086,7 @@ class FluInterSubpopRepo(clt.InterSubpopRepo):
                                                            subpop_name) *
                     pop_healthy_by_age[origin_subpop_name])
 
-        # return np.sum(wtd_visitors_by_origin, axis=1)
-        return np.sum(wtd_visitors_by_origin, axis=2)
+        return np.sum(wtd_visitors_by_origin, axis=1)
 
     def create_effective_pop_by_age_cache(self):
         """

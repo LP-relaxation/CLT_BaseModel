@@ -46,19 +46,25 @@ params.dt = 0.1
 
 true_H_history = flu_torch.simulate(state, params, 200).clone().detach()
 
+print(params.beta_baseline)
+print(params.inf_induced_hosp_risk_constant)
+print(params.vax_induced_hosp_risk_constant)
+
 state = flu_torch.State(**flu_torch.auto_tensor_dict(state_data))
 params = flu_torch.Params(**flu_torch.auto_tensor_dict(params_data))
 
 params.dt = 0.1
 params.beta_baseline = torch.tensor(0.5, dtype=torch.float32, requires_grad=True)
-# params.inf_induced_saturation = torch.tensor(0.5, dtype=torch.float32, requires_grad=True)
-# params.vax_induced_saturation = torch.tensor(0.5, dtype=torch.float32, requires_grad=True)
+params.inf_induced_hosp_risk_constant = torch.tensor(0.5, dtype=torch.float32, requires_grad=True)
+params.vax_induced_hosp_risk_constant = torch.tensor(0.5, dtype=torch.float32, requires_grad=True)
 
-optimizer = torch.optim.Adam([params.beta_baseline], lr=0.01)
+optimizer = torch.optim.Adam([params.beta_baseline,
+                              params.inf_induced_hosp_risk_constant,
+                              params.vax_induced_hosp_risk_constant], lr=0.01)
 
 beta_baseline_opt_history = []
-inf_induced_saturation_opt_history = []
-vax_induced_saturation_opt_history = []
+inf_induced_hosp_risk_constant_opt_history = []
+vax_induced_hosp_risk_constant_opt_history = []
 
 fitting_start_time = time.time()
 
@@ -66,11 +72,12 @@ for i in range(500):
     optimizer.zero_grad()
     sim_result = flu_torch.simulate(state, params, 200)
     loss = torch.nn.functional.mse_loss(sim_result, true_H_history)
+    print(loss)
     loss.backward()
     optimizer.step()
     beta_baseline_opt_history.append(params.beta_baseline.clone().detach())
-    # inf_induced_saturation_opt_history.append(params.inf_induced_saturation.clone().detach())
-    # vax_induced_saturation_opt_history.append(params.vax_induced_saturation.clone().detach())
+    inf_induced_hosp_risk_constant_opt_history.append(params.inf_induced_hosp_risk_constant.clone().detach())
+    vax_induced_hosp_risk_constant_opt_history.append(params.vax_induced_hosp_risk_constant.clone().detach())
 
 print(time.time() - fitting_start_time)
 
@@ -84,6 +91,25 @@ plt.clf()
 plt.plot(beta_baseline_opt_history, label="Estimated beta over time")
 plt.axhline(y = 1.5, color = 'b', label = 'True beta')
 plt.legend()
+plt.savefig("beta_baseline_plot.png", dpi=1200)
+plt.show()
+
+breakpoint()
+
+plt.clf()
+plt.plot(beta_baseline_opt_history, label="Estimated inf_induced_hosp_risk_constant")
+plt.axhline(y = 1, color = 'b', label = 'True value')
+plt.legend()
+plt.savefig("inf_induced_hosp_risk_constant_plot.png", dpi=1200)
+plt.show()
+
+breakpoint()
+
+plt.clf()
+plt.plot(beta_baseline_opt_history, label="Estimated vax_induced_hosp_risk_constant")
+plt.axhline(y = 1, color = 'b', label = 'True value')
+plt.legend()
+plt.savefig("vax_induced_hosp_risk_constant_plot.png", dpi=1200)
 plt.show()
 
 breakpoint()
@@ -92,6 +118,7 @@ plt.clf()
 plt.plot(torch.sum(true_H_history, dim=1), label="True H")
 plt.plot(torch.sum(fitted_H_history.clone().detach(), dim=1), label="Fitted H")
 plt.legend()
+plt.savefig("H_plot.png", dpi=1200)
 plt.show()
 
 breakpoint()

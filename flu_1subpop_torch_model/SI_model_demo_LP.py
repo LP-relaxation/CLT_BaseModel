@@ -158,6 +158,8 @@ for i in range(200):
 
     loss = F.mse_loss(torch.stack(transition_history).mean(dim=0), true_transition_history)
 
+    print(loss)
+
     loss.backward()
 
     optimizer.step()
