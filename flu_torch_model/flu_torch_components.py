@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import json
+from typing import Union
 
 import time
 import matplotlib.pyplot as plt
@@ -41,7 +42,7 @@ def to_tensor(x, requires_grad):
     return torch.tensor(x, dtype=torch.float32, requires_grad=requires_grad)
 
 
-def auto_tensor_dict(d: dict,
+def create_dict_of_tensors(d: dict,
                      requires_grad: bool = True,
                      non_tensor_keys: list = []) -> dict:
     """
@@ -122,6 +123,74 @@ class State:
     D: torch.Tensor = None
     M: torch.Tensor = None
     Mv: torch.Tensor = None
+
+
+def standardize_shapes(self, state: State, params: Params, indices_dict: dict) -> (State, Params):
+
+    """
+    For all fields in `input`, if field is not a scalar or L x A x R,
+        or is not a special variable listed below, then apply dimension
+        expansion so that fields are L x A x R for tensor multiplication.
+
+    Special variables that are exempted:
+        - `total_contact_matrix`, `school_contact_matrix`, `work_contact_matrix`:
+            all of these must be dimension A x A
+        - `travel_proportions_array`: this must be L x L
+
+    Valid values for the `indices_dict` are: "age", "age_risk",
+        "location", and "location_age" -- other combinations
+        are not considered because they do not make sense --
+        we assume that we only have risk IF we have age, for example
+    """
+
+    L = params.num_locations
+    A = params.num_age_groups
+    R = params.num_risk_groups
+
+    exempted_variable_names = ["total_contact_matrix",
+                               "school_contact_matrix",
+                               "home_contact_matrix",
+                               "travel_proportions_array"]
+
+    error_str = f"{name} size does not match index specification in \n"\
+                f"indices dictionary -- please check files and inputs, \n"\
+                f"then try again."
+
+    for dc in [state, params]:
+        for name, value in vars(dc):
+
+            # If scalar or already L x A x R, do not need to adjust
+            #   dimensions
+            if value.ndim == 0 or value.size() == torch.Size([L, A, R]):
+                continue
+
+            elif name in exempted_variable_names:
+                continue
+
+            elif getattr(indices_dict, name) == "age":
+                if value.size() != torch.size([A]):
+                    raise Exception(error_str)
+                else:
+                    setattr(dc, name, value.view(1, A, 1).expand(L, A, R))
+
+            elif getattr(indices_dict, name) == "age_risk":
+                if value.size() != torch.size([A, R]):
+                    raise Exception(error_str)
+                else:
+                    setattr(dc, name, value.view(1, A, R).expand(L, A, R))
+
+            # We probably won't use this, but just in case...
+            elif getattr(indices_dict, name) == "location":
+                if value.size() != torch.size([L]):
+                    raise Exception(error_str)
+                else:
+                    setattr(dc, name, value.view(L, 1, 1).expand(L, A, R))
+
+            elif getattr(indices_dict, name) == "location_age":
+                if value.size() != torch.size([L, A]):
+                    raise Exception(error_str)
+                else:
+                    setattr(dc, name, value.view(L, A, 1).expand(L, A, R))
 
 
 class Precomputed:
@@ -521,12 +590,12 @@ breakpoint()
 state_path = base_path / "compartments_epi_metrics_init_vals.json"
 with state_path.open("r") as f:
     state_data = json.load(f)
-state = State(**auto_tensor_dict(state_data, False))
+state = State(**create_dict_of_tensors(state_data, False))
 
 params_path = base_path / "params.json"
 with params_path.open("r") as f:
     params_data = json.load(f)
-params = Params(**auto_tensor_dict(params_data, True, ["num_locations", "num_age_groups", "num_risk_groups"]))
+params = Params(**create_dict_of_tensors(params_data, True, ["num_locations", "num_age_groups", "num_risk_groups"]))
 
 params.dt = 0.1
 
