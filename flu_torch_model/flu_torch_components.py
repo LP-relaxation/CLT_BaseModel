@@ -22,6 +22,7 @@ import pandas as pd
 from pathlib import Path
 import json
 from typing import Union
+import numbers
 
 import time
 import matplotlib.pyplot as plt
@@ -39,12 +40,11 @@ base_path = Path(__file__).parent / "flu_torch_input_files"
 def to_tensor(x, requires_grad):
     if x is None:
         return None
-    return torch.tensor(x, dtype=torch.float32, requires_grad=requires_grad)
+    return torch.tensor(x, dtype=torch.float64, requires_grad=requires_grad)
 
 
 def create_dict_of_tensors(d: dict,
-                     requires_grad: bool = True,
-                     non_tensor_keys: list = []) -> dict:
+                           requires_grad: bool = True) -> dict:
     """
     Converts dictionary entries to `tensor` (of type `torch.float32`)
         and turns on gradient tracking for each entry -- returns new dictionary.
@@ -53,21 +53,18 @@ def create_dict_of_tensors(d: dict,
     def to_tensor(k, v):
         if v is None:
             return None
-        if k not in non_tensor_keys:
-            return torch.tensor(v, dtype=torch.float32, requires_grad=requires_grad)
         else:
-            return v
+            return torch.tensor(v, dtype=torch.float64, requires_grad=requires_grad)
 
     return {k: to_tensor(k, v) for k, v in d.items()}
 
 
 @dataclass
 class Params:
-    dt: torch.Tensor = None
+    dt: float = None
     num_locations: int = None
     num_age_groups: int = None
     num_risk_groups: int = None
-    total_pop: torch.Tensor = None
 
     beta_baseline: torch.Tensor = None
     humidity_impact: torch.Tensor = None
@@ -106,8 +103,8 @@ class Params:
     IP_relative_inf: torch.Tensor = None
     IA_relative_inf: torch.Tensor = None
 
-    relative_suscept_by_age: torch.Tensor = None
-    prop_time_away_by_age: torch.Tensor = None
+    relative_suscept: torch.Tensor = None
+    prop_time_away: torch.Tensor = None
     travel_proportions_array: torch.Tensor = None
 
 
@@ -125,7 +122,10 @@ class State:
     Mv: torch.Tensor = None
 
 
-def standardize_shapes(self, state: State, params: Params, indices_dict: dict) -> (State, Params):
+def standardize_shapes(state: State,
+                       states_indices_dict: dict,
+                       params: Params,
+                       params_indices_dict: dict) -> None:
 
     """
     For all fields in `input`, if field is not a scalar or L x A x R,
@@ -143,52 +143,63 @@ def standardize_shapes(self, state: State, params: Params, indices_dict: dict) -
         we assume that we only have risk IF we have age, for example
     """
 
-    L = params.num_locations
-    A = params.num_age_groups
-    R = params.num_risk_groups
+    L = int(params.num_locations.item())
+    A = int(params.num_age_groups.item())
+    R = int(params.num_risk_groups.item())
 
-    exempted_variable_names = ["total_contact_matrix",
-                               "school_contact_matrix",
-                               "home_contact_matrix",
-                               "travel_proportions_array"]
+    error_str = " size does not match index specification in \n"\
+                "indices dictionary -- please check files and inputs, \n"\
+                "then try again."
 
-    error_str = f"{name} size does not match index specification in \n"\
-                f"indices dictionary -- please check files and inputs, \n"\
-                f"then try again."
+    for dc, indices_dict in zip([state, params], [states_indices_dict, params_indices_dict]):
+        for name, value in vars(dc).items():
 
-    for dc in [state, params]:
-        for name, value in vars(dc):
+            # Disregard if variable is not supposed to
+            #   be a tensor
+
+                                            # "school_contact_matrix",
+                                          # "work_contact_matrix",
+                                          # "travel_proportions_array"
+            # Contact matrices should be A x A
+            if "contact_matrix" in name:
+                if value.size() != torch.Size([A, A]):
+                    raise Exception(str(name) + error_str)
+                setattr(dc, name, value.view(1, A, A).expand(L, A, A))
+
+            elif name == "travel_proportions_array":
+                if value.size() != torch.Size([L, L]):
+                    raise Exception(str(name) + error_str)
 
             # If scalar or already L x A x R, do not need to adjust
             #   dimensions
-            if value.ndim == 0 or value.size() == torch.Size([L, A, R]):
+            elif value.size() == torch.Size([]):
                 continue
 
-            elif name in exempted_variable_names:
+            elif value.size() == torch.Size([L, A, R]):
                 continue
 
-            elif getattr(indices_dict, name) == "age":
-                if value.size() != torch.size([A]):
-                    raise Exception(error_str)
+            elif indices_dict[name] == "age":
+                if value.size() != torch.Size([A]):
+                    raise Exception(str(name) + error_str)
                 else:
                     setattr(dc, name, value.view(1, A, 1).expand(L, A, R))
 
             elif getattr(indices_dict, name) == "age_risk":
-                if value.size() != torch.size([A, R]):
-                    raise Exception(error_str)
+                if value.size() != torch.Size([A, R]):
+                    raise Exception(str(name) + error_str)
                 else:
                     setattr(dc, name, value.view(1, A, R).expand(L, A, R))
 
             # We probably won't use this, but just in case...
             elif getattr(indices_dict, name) == "location":
-                if value.size() != torch.size([L]):
-                    raise Exception(error_str)
+                if value.size() != torch.Size([L]):
+                    raise Exception(str(name) + error_str)
                 else:
                     setattr(dc, name, value.view(L, 1, 1).expand(L, A, R))
 
             elif getattr(indices_dict, name) == "location_age":
-                if value.size() != torch.size([L, A]):
-                    raise Exception(error_str)
+                if value.size() != torch.Size([L, A]):
+                    raise Exception(str(name) + error_str)
                 else:
                     setattr(dc, name, value.view(L, A, 1).expand(L, A, R))
 
@@ -199,7 +210,7 @@ class Precomputed:
     used, for computational efficiency.
     """
 
-    def __init__(self, params: Params, state: State) -> None:
+    def __init__(self, state: State, params: Params) -> None:
 
         self.total_pop_LAR = torch.tensor(state.S +
                                           state.E +
@@ -209,6 +220,10 @@ class Precomputed:
                                           state.H +
                                           state.R +
                                           state.D)
+
+        self.L = int(params.num_locations.item())
+        self.A = int(params.num_age_groups.item())
+        self.R = int(params.num_risk_groups.item())
 
         self.total_pop_LA = torch.sum(self.total_pop_LAR, dim=2)
 
@@ -222,14 +237,15 @@ class Precomputed:
         #   nonlocal_travel_prop to 0
         self.sum_residents_nonlocal_travel_prop = self.nonlocal_travel_prop.sum(dim=1)
 
+        self.wtd_infectious_ratio_LLA = None
 
 humidity_df = pd.read_csv(base_path / "humidity_austin_2023_2024.csv")
 humidity_df["date"] = pd.to_datetime(humidity_df["date"], format="%m/%d/%y").dt.date
 
 
-def compute_beta_adjusted(params: Params, timestep_counter: int) -> torch.tensor:
+def compute_beta_adjusted(state: State, params: Params, timestep_counter: int) -> torch.tensor:
 
-    absolute_humidity = humidity_df.iloc[int(np.floor(timestep_counter * params.dt))]["humidity"]
+    absolute_humidity = humidity_df.iloc[int(np.floor(timestep_counter * params.dt.item()))]["humidity"]
 
     beta_adjusted = params.beta_baseline * (1 + params.humidity_impact * np.exp(-180 * absolute_humidity))
 
@@ -243,23 +259,22 @@ def compute_wtd_infected(state: State, params: Params) -> torch.tensor:
 
 def compute_S_to_E(state: State,
                    params: Params,
-                   timestep_counter: int,
-                   force_of_infection: torch.tensor) -> torch.tensor:
+                   precomputed: Precomputed,
+                   timestep_counter: int) -> torch.tensor:
 
-    if force_of_infection.size() != torch.Size([params.num_locations,
-                                                params.num_age_groups,
-                                                params.num_risk_groups]):
+    force_of_infection = compute_total_foi(state, params, precomputed, timestep_counter)
+
+    if force_of_infection.size() != torch.Size([precomputed.L,
+                                                precomputed.A,
+                                                precomputed.R]):
         raise Exception("force_of_infection must be L x A x R corresponding \n"
                         "to number of locations (subpopulations), age groups, \n"
                         "and risk groups.")
 
-    beta_adjusted = compute_beta_adjusted(params, timestep_counter)
+    # print("FOI", force_of_infection.sum())
 
-    wtd_infected = compute_wtd_infected(state, params)
-
-    S_to_E = params.dt * state.S * beta_adjusted * \
-             torch.matmul(params.total_contact_matrix, torch.sum(wtd_infected, dim=1)) / \
-             (params.total_pop * (1 + params.inf_induced_inf_risk_constant * state.M +
+    S_to_E = params.dt * state.S * force_of_infection / \
+             (precomputed.total_pop_LAR * (1 + params.inf_induced_inf_risk_constant * state.M +
                                   params.vax_induced_inf_risk_constant * state.Mv))
 
     return S_to_E
@@ -332,16 +347,16 @@ def compute_R_to_S(state: State, params: Params) -> torch.tensor:
     return R_to_S
 
 
-def compute_M_change(state: State, params: Params) -> torch.tensor:
-    M_change = ((state.R * params.dt * params.R_to_S_rate / params.total_pop) * \
+def compute_M_change(state: State, params: Params, precomputed: Precomputed) -> torch.tensor:
+    M_change = ((state.R * params.dt * params.R_to_S_rate / precomputed.total_pop_LAR) * \
                 (1 - params.inf_induced_saturation * state.M - params.vax_induced_saturation * state.Mv) - \
                 params.inf_induced_immune_wane * state.M) * params.dt
 
     return M_change
 
 
-def compute_Mv_change(state: State, params: Params) -> torch.tensor:
-    Mv_change = (params.vaccines_per_day / params.total_pop - \
+def compute_Mv_change(state: State, params: Params, precomputed: Precomputed) -> torch.tensor:
+    Mv_change = (params.vaccines_per_day / precomputed.total_pop_LAR - \
                  params.vax_induced_immune_wane * state.Mv) * params.dt
 
     return Mv_change
@@ -383,6 +398,8 @@ def compute_effective_pop_LA(state: State,
                              params: Params,
                              precomputed: Precomputed) -> torch.tensor:
 
+    L, A = precomputed.L, precomputed.A
+
     active_pop_LAR = compute_active_pop_LAR(state, params, precomputed)
 
     # Nonlocal travel proportions is L x L
@@ -395,11 +412,13 @@ def compute_effective_pop_LA(state: State,
     traveling_residents_LAR = precomputed.sum_residents_nonlocal_travel_prop[:, None, None] * \
                               active_pop_LAR
 
-    effective_pop_LA = precomputed.total_pop_LA.unsqueeze(-1) + \
-        params.relative_suscept_by_age.unsqueeze(0) * \
-                       torch.sum(outside_visitors_LAR + traveling_residents_LAR, dim=2).unsqueeze(-1)
+    effective_pop_LA = precomputed.total_pop_LA + \
+        params.prop_time_away[0, :, 0] * \
+                       torch.sum(outside_visitors_LAR + traveling_residents_LAR, dim=2)
 
-    return effective_pop_LA.squeeze(2)
+    assert effective_pop_LA.size() == torch.Size([L, A])
+
+    return effective_pop_LA
 
 
 def compute_wtd_infectious_ratio_LLA(state: State,
@@ -420,58 +439,128 @@ def compute_wtd_infectious_ratio_LLA(state: State,
 
     prop_wtd_infectious = torch.einsum("ka,la->kla",
                                        wtd_infectious_LA,
-                                       effective_pop_LA)
+                                       1/effective_pop_LA)
 
     return prop_wtd_infectious
 
 
-def compute_raw_local_to_local_foi(params: Params,
-                                   state: State,
+def compute_raw_local_to_local_foi(state: State,
+                                   params: Params,
                                    precomputed: Precomputed,
                                    location_ix: int) -> torch.tensor:
     """
-    Raw means that this is unnormalized by `relative_suscept_by_age`
+    Raw means that this is unnormalized by `relative_suscept`
+
+    Excludes beta -- that is factored in later
     """
 
-    return (1 - params.prop_time_away_by_age *
-            precomputed.sum_residents_nonlocal_travel_prop) * \
-           torch.matmul(params.total_contact_matrix[location_ix, :, :],
-                        precomputed.wtd_infectious_ratio_LLA[location_ix, location_ix, :])
+    A = precomputed.A
+
+    result = (1 - params.prop_time_away[0, :, 0] *
+     precomputed.sum_residents_nonlocal_travel_prop[location_ix]) * \
+    torch.matmul(params.total_contact_matrix[location_ix, :, :].double(),
+                 precomputed.wtd_infectious_ratio_LLA[location_ix, location_ix, :].double())
+
+    assert result.size() == torch.Size([A])
+
+    return result
 
 
-def compute_raw_outside_visitors_foi(params: Params,
-                                     state: State,
+def compute_raw_outside_visitors_foi(state: State,
+                                     params: Params,
                                      precomputed: Precomputed,
                                      local_ix: int,
                                      visitors_ix: int) -> torch.tensor:
     """
-    Computes raw (unnormalized by `relative_suscept_by_age`) force
+    Computes raw (unnormalized by `relative_suscept`) force
         of infection to local_ix, due to outside visitors from
         visitors_ix
+
+    Excludes beta -- that is factored in later
+
+    Output should be size A
     """
 
     # In location dest_ix, we are looking at the visitors from
     #   origin_ix who come to dest_ix (and infect folks in dest_ix)
-    return params.travel_proportions_array[visitors_ix, local_ix] * \
-           torch.matmul(params.prop_day_spend_travel_by_age * params.total_contact_matrix[local_ix, :, :],
+
+    A = precomputed.A
+
+    result = params.travel_proportions_array[visitors_ix, local_ix] * \
+           torch.matmul(params.prop_time_away[0, :, 0] * params.total_contact_matrix[local_ix, :, :],
                         precomputed.wtd_infectious_ratio_LLA[visitors_ix, local_ix, :])
 
+    assert result.size() == torch.Size([A])
 
-def compute_raw_residents_traveling_foi(params: Params,
-                                        state: State,
+    return result
+
+
+def compute_raw_residents_traveling_foi(state: State,
+                                        params: Params,
                                         precomputed: Precomputed,
                                         local_ix: int,
                                         dest_ix: int) -> torch.tensor:
     """
-    Computes raw (unnormalized by `relative_suscept_by_age`) force
+    Computes raw (unnormalized by `relative_suscept`) force
         of infection to local_ix, due to residents of local_ix
         traveling to dest_ix and getting infected in dest_ix
+
+    Excludes beta -- that is factored in later
+
+    Output should be size A
     """
 
-    return params.prop_day_spend_travel_by_age * \
+    A = precomputed.A
+
+    result = params.prop_time_away[0,:,0] * \
            params.travel_proportions_array[local_ix, dest_ix] * \
            torch.matmul(params.total_contact_matrix[local_ix, :, :],
                         precomputed.wtd_infectious_ratio_LLA[dest_ix, dest_ix, :])
+
+    assert result.size() == torch.Size([A])
+
+    return result
+
+
+def compute_total_foi(state: State,
+                      params: Params,
+                      precomputed: Precomputed,
+                      timestep_counter: int) -> torch.tensor:
+    """
+    Compute total force of infection! Includes beta
+    """
+
+    L, A, R = precomputed.L, precomputed.A, precomputed.R
+
+    foi = torch.tensor(np.zeros((L, A, R)))
+
+    precomputed.wtd_infectious_ratio_LLA = \
+        compute_wtd_infectious_ratio_LLA(state, params, precomputed)
+
+    for l in np.arange(L):
+
+        raw_foi = torch.tensor(np.zeros(A))
+
+        # local-to-local force of infection
+        raw_foi = raw_foi + compute_raw_local_to_local_foi(state, params, precomputed, l)
+
+        for k in np.arange(L):
+
+            raw_foi = raw_foi + compute_raw_outside_visitors_foi(state, params, precomputed, l, k)
+
+            raw_foi = raw_foi + compute_raw_residents_traveling_foi(state, params, precomputed, l, k)
+
+            # print(raw_foi)
+
+            # breakpoint()
+
+        normalized_foi = params.relative_suscept[0,:,0] * raw_foi
+
+        foi[l, :, :] = normalized_foi.view(A, 1).expand((A, R))
+
+    beta_adjusted = compute_beta_adjusted(state, params, timestep_counter)
+
+    return beta_adjusted * foi
 
 
 def step(state: State,
@@ -488,31 +577,7 @@ def step(state: State,
     #   leaf tensors), but here we do non-in-place operations
     #   just in case
 
-    L = params.num_locations
-    A = params.num_age_groups
-    R = params.num_risk_groups
-
-    force_of_infection = torch.tensor(np.zeros((L, A, R)))
-
-    precomputed.wtd_infectious_ratio_LLA = \
-        compute_wtd_infectious_ratio_LLA(state, params, precomputed)
-
-    for l in np.arange(L):
-
-        raw_foi = torch.tensor(np.zeros((A, 1)))
-
-        # local-to-local force of infection
-        raw_foi = raw_foi + compute_raw_local_to_local_foi(params, state, precomputed, l)
-
-        for k in np.arange(L):
-
-            raw_foi = raw_foi + compute_raw_outside_visitors_foi(params, state, precomputed, l, k)
-
-            raw_foi = raw_foi + compute_raw_residents_traveling_foi(params, state, precomputed, l, k)
-
-        normalized_foi = params.relative_suscept_by_age * raw_foi
-
-    S_to_E = compute_S_to_E(state, params, timestep_counter)
+    S_to_E = compute_S_to_E(state, params, precomputed, timestep_counter)
 
     E_to_IP = compute_E_to_IP(state, params)
 
@@ -532,9 +597,9 @@ def step(state: State,
 
     R_to_S = compute_R_to_S(state, params)
 
-    M_change = compute_M_change(state, params)
+    M_change = compute_M_change(state, params, precomputed)
 
-    Mv_change = compute_Mv_change(state, params)
+    Mv_change = compute_Mv_change(state, params, precomputed)
 
     S_new = state.S + R_to_S - S_to_E
 
@@ -556,14 +621,18 @@ def step(state: State,
 
     Mv_new = state.Mv + Mv_change
 
+    # print(S_new.sum())
+
     return State(S=S_new, E=E_new, IP=IP_new, IS=IS_new, IA=IA_new, H=H_new, R=R_new, D=D_new, M=M_new, Mv=Mv_new)
 
 
-def simulate_full_history(init_state: State, params: Params, num_timesteps: int) -> dict:
+def simulate_full_history(state: State, params: Params, num_timesteps: int) -> dict:
     """
     Not autodiff compatible
     """
     history_dict = defaultdict(list)
+
+    precomputed = Precomputed(state, params)
 
     for timestep in range(num_timesteps):
         state = step(state, params, precomputed, timestep)
@@ -574,10 +643,15 @@ def simulate_full_history(init_state: State, params: Params, num_timesteps: int)
     return history_dict
 
 
-def simulate(init_state: State, params: Params, num_timesteps: int) -> torch.Tensor:
+def simulate(state: State,
+             params: Params,
+             num_timesteps: int) -> torch.Tensor:
+
+    # Check sizes
+
     history = []
 
-    state = init_state
+    precomputed = Precomputed(state, params)
 
     for timestep in range(num_timesteps):
         state = step(state, params, precomputed, timestep)
@@ -585,21 +659,29 @@ def simulate(init_state: State, params: Params, num_timesteps: int) -> torch.Ten
 
     return torch.stack(history)
 
-breakpoint()
 
-state_path = base_path / "compartments_epi_metrics_init_vals.json"
-with state_path.open("r") as f:
-    state_data = json.load(f)
-state = State(**create_dict_of_tensors(state_data, False))
+states_path = base_path / "init_vals.json"
+with states_path.open("r") as f:
+    states_data = json.load(f)
+state = State(**create_dict_of_tensors(states_data, False))
+
+states_indices_path = base_path / "init_vals_indices.json"
+with states_indices_path.open("r") as f:
+    states_indices_dict = json.load(f)
 
 params_path = base_path / "params.json"
 with params_path.open("r") as f:
     params_data = json.load(f)
-params = Params(**create_dict_of_tensors(params_data, True, ["num_locations", "num_age_groups", "num_risk_groups"]))
+params = Params(**create_dict_of_tensors(params_data, True))
 
-params.dt = 0.1
+params_indices_path = base_path / "params_indices.json"
+with params_indices_path.open("r") as f:
+    params_indices_dict = json.load(f)
 
-precomputed = Precomputed(params, state)
+standardize_shapes(state,
+                   states_indices_dict,
+                   params,
+                   params_indices_dict)
 
 true_H_history = simulate(state, params, 200).clone().detach()
 
