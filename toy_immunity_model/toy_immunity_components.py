@@ -3,11 +3,6 @@
 ###############################################################
 
 # This code has Remy's humidity (seasonal forcing) functionality
-
-# ToyImmunitySubpopModel has nonlinear saturation in dM/dt
-# LinearSaturationSubpopModel is the same except it has linear
-#   saturation in dM/dt (Anass's new proposal)
-
 # See below for the precise write-up
 
 # The SIHR-M-Mv model we demonstrate has the following structure:
@@ -33,7 +28,7 @@ from typing import Optional
 import clt_base as clt
 
 # The math for transitions is as follows:
-#   - S to I transition rate: I * beta / (total_pop * (1 + inf_induced_inf_risk_constant * M +
+#   - S to I transition rate: I * beta / (total_pop_age_risk * (1 + inf_induced_inf_risk_constant * M +
 #                                                           vax_induced_inf_risk_constant * M_v))
 #   - I to H transition rate: I_to_H_rate * I_to_H_adjusted_prop /
 #                               (inf_induced_hosp_risk_constant * M + vax_induced_hosp_risk_constant * M_v))
@@ -54,7 +49,7 @@ class ToyImmunitySubpopParams(clt.SubpopParams):
 
     num_age_groups: int = 1,
     num_risk_groups: int = 1,
-    total_pop: Optional[int] = None
+    total_pop_age_risk: Optional[int] = None
     beta: Optional[float] = None
     humidity_impact: Optional[float] = None
     I_to_H_rate: Optional[float] = None
@@ -93,7 +88,7 @@ class SusceptibleToInfected(clt.TransitionVariable):
 
         beta_adjusted = params.beta * (1 + params.humidity_impact * np.exp(-180 * state.absolute_humidity))
 
-        return state.I * beta_adjusted / (params.total_pop *
+        return state.I * beta_adjusted / (params.total_pop_age_risk *
                                         (1 + params.inf_induced_inf_risk_constant * state.M +
                                          params.vax_induced_inf_risk_constant * state.Mv))
 
@@ -145,7 +140,7 @@ class InfInducedImmunityLinearSaturation(clt.EpiMetric):
                                   params: ToyImmunitySubpopParams,
                                   num_timesteps: int) -> np.ndarray:
 
-        return (self.R_to_S.current_val / params.total_pop) * \
+        return (self.R_to_S.current_val / params.total_pop_age_risk) * \
                (1 - params.inf_induced_saturation * state.M - params.vax_induced_saturation * state.Mv) - \
                params.inf_induced_immune_wane * state.M / num_timesteps
 
@@ -156,7 +151,7 @@ class VaxInducedImmunityLinearSaturation(clt.EpiMetric):
                                   state: ToyImmunitySubpopState,
                                   params: ToyImmunitySubpopParams,
                                   num_timesteps: int) -> np.ndarray:
-        return params.vaccines_per_day / (params.total_pop * num_timesteps) - \
+        return params.vaccines_per_day / (params.total_pop_age_risk * num_timesteps) - \
                params.vax_induced_immune_wane * state.Mv / num_timesteps
 
 

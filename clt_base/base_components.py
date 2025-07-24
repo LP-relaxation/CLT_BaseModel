@@ -356,7 +356,7 @@ class TransitionVariable(ABC):
             self.get_realization = getattr(self, "get_" + transition_type + "_realization")
 
         self.current_rate = None
-        self.current_val = 0
+        self.current_val = None
 
         self.history_vals_list = []
 
@@ -431,7 +431,7 @@ class TransitionVariable(ABC):
         """
 
         self.current_rate = None
-        self.current_val = 0.0
+        self.current_val = None
         self.history_vals_list = []
 
     def get_realization(self,

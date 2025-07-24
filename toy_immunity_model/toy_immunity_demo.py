@@ -53,39 +53,20 @@ jumped_bit_generator = bit_generator.jumped(1)
 ############# CREATE SUBPOPULATION MODELS #################
 ###########################################################
 
-# Create two subpopulation models, one for the north
-#   side of the city and one for the south side of the city
-# In this case, these two (toy) subpopulations have the
-#   same demographics, initial compartment and epi metric values,
-#   fixed parameters, and school-work calendar.
-# If we wanted the "north" subpopulation and "south"
-#   subpopulation to have different aforementioned values,
-#   we could read in two separate sets of files -- one
-#   for each subpopulation
+params_dict["inf_induced_saturation"] = 0
+params_dict["inf_induced_immune_wane"] = 0
+params_dict["vax_induced_saturation"] = 0
+params_dict["vax_induced_immune_wane"] = 0
+
 model = imm.ToyImmunitySubpopModel(compartments_epi_metrics_dict,
                                    params_dict,
                                    config_dict,
                                    np.random.Generator(bit_generator),
                                    humidity_filepath)
 
-model.simulate_until_day(300)
+model.simulate_until_day(100)
 
-linear_saturation_model = imm.LinearSaturationSubpopModel(compartments_epi_metrics_dict,
-                                                          params_dict,
-                                                          config_dict,
-                                                          np.random.Generator(bit_generator),
-                                                          humidity_filepath)
+if np.isclose(np.sum(model.transition_variables.R_to_S.history_vals_list)/np.sum(model.params.total_pop_age_risk),
+              np.sum(model.epi_metrics.M.history_vals_list[-1])):
+    print("Anass's condition is correct with these parameters")
 
-linear_saturation_model.simulate_until_day(300)
-
-clt.plot_subpop_basic_compartment_history(model)
-
-clt.plot_subpop_epi_metrics(model)
-
-toy_immunity_plotting.make_graph_set(model)
-
-toy_immunity_plotting.make_comparison_graph_set(model, linear_saturation_model)
-
-toy_immunity_plotting.changing_param_val_graph(model, "param", "beta", [0.5, 1, 1.5, 2])
-
-breakpoint()
