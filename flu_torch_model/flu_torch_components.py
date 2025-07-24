@@ -129,7 +129,7 @@ class State:
         for field in fields(self):
             if field.name == "init_vals":
                 continue
-            self.init_vals[field.name] = getattr(self, field.name).clone().detach()
+            self.init_vals[field.name] = getattr(self, field.name).clone()
 
     def reset_to_init_vals(self):
 
@@ -168,7 +168,7 @@ def standardize_shapes(state: State,
     for dc, indices_dict in zip([state, params], [states_indices, params_indices]):
         for name, value in vars(dc).items():
 
-            # Ignore this dictionary
+            # Ignore the field that corresponds to a dictionary
             if name == "init_vals":
                 continue
 
@@ -178,9 +178,12 @@ def standardize_shapes(state: State,
             #   "work_contact_matrix",
             #   "travel_proportions_array"
             elif "contact_matrix" in name:
-                if value.size() != torch.Size([A, A]):
-                    raise Exception(str(name) + error_str)
-                setattr(dc, name, value.view(1, A, A).expand(L, A, A))
+                # Need nested if-statements because user may
+                #   have already converted contact matrix to L x A x A
+                if value.size() != torch.Size([L, A, A]):
+                    if value.size() != torch.Size([A, A]):
+                        raise Exception(str(name) + error_str)
+                    setattr(dc, name, value.view(1, A, A).expand(L, A, A))
 
             elif name == "travel_proportions_array":
                 if value.size() != torch.Size([L, L]):
@@ -667,36 +670,36 @@ def simulate(state: State,
 
     for timestep in range(num_timesteps):
         state = step(state, params, precomputed, timestep)
-        history.append(state.H.clone().detach())
+        history.append(state.H.clone())
 
     return torch.stack(history)
 
 
-states_path = base_path / "init_vals.json"
-with states_path.open("r") as f:
-    states_data = json.load(f)
-state = State(**create_dict_of_tensors(states_data, False))
-
-states_indices_path = base_path / "init_vals_indices.json"
-with states_indices_path.open("r") as f:
-    states_indices = json.load(f)
-
-params_path = base_path / "params.json"
-with params_path.open("r") as f:
-    params_data = json.load(f)
-params = Params(**create_dict_of_tensors(params_data, True))
-
-params_indices_path = base_path / "params_indices.json"
-with params_indices_path.open("r") as f:
-    params_indices = json.load(f)
-
-standardize_shapes(state,
-                   states_indices,
-                   params,
-                   params_indices)
-
-start = time.time()
-true_H_history = simulate(state, params, 200).clone().detach()
-print(time.time() - start)
+# states_path = base_path / "init_vals.json"
+# with states_path.open("r") as f:
+#     states_data = json.load(f)
+# state = State(**create_dict_of_tensors(states_data, False))
+#
+# states_indices_path = base_path / "init_vals_indices.json"
+# with states_indices_path.open("r") as f:
+#     states_indices = json.load(f)
+#
+# params_path = base_path / "params.json"
+# with params_path.open("r") as f:
+#     params_data = json.load(f)
+# params = Params(**create_dict_of_tensors(params_data, True))
+#
+# params_indices_path = base_path / "params_indices.json"
+# with params_indices_path.open("r") as f:
+#     params_indices = json.load(f)
+#
+# standardize_shapes(state,
+#                    states_indices,
+#                    params,
+#                    params_indices)
+#
+# start = time.time()
+# true_H_history = simulate(state, params, 200).clone().detach()
+# print(time.time() - start)
 
 # breakpoint()
