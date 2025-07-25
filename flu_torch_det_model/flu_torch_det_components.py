@@ -92,7 +92,7 @@ class Params:
     vax_induced_hosp_risk_constant: torch.Tensor = None
     vax_induced_death_risk_constant: torch.Tensor = None
 
-    vaccines_per_day: torch.Tensor = None
+    daily_vaccines: torch.Tensor = None
 
     total_contact_matrix: torch.Tensor = None
     school_contact_matrix: torch.Tensor = None
@@ -367,7 +367,7 @@ def compute_M_change(state: State, params: Params, precomputed: Precomputed) -> 
 
 
 def compute_Mv_change(state: State, params: Params, precomputed: Precomputed) -> torch.Tensor:
-    Mv_change = params.vaccines_per_day / precomputed.total_pop_LAR - \
+    Mv_change = params.daily_vaccines / precomputed.total_pop_LAR - \
                 params.vax_induced_immune_wane * state.Mv
 
     return Mv_change * params.dt

@@ -15,6 +15,8 @@
 import datetime
 import sys
 import os
+from abc import ABC
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import numpy as np
@@ -65,7 +67,7 @@ class ToyImmunitySubpopParams(clt.SubpopParams):
     inf_induced_hosp_risk_constant: Optional[float] = None
     vax_induced_inf_risk_constant: Optional[float] = None
     vax_induced_hosp_risk_constant: Optional[float] = None
-    vaccines_per_day: Optional[float] = None
+    daily_vaccines: Optional[float] = None
 
 
 @dataclass
@@ -129,7 +131,7 @@ class RecoveredToSusceptible(clt.TransitionVariable):
         return params.R_to_S_rate
 
 
-class InfInducedImmunityLinearSaturation(clt.EpiMetric):
+class InfInducedImmunity(clt.EpiMetric):
 
     def __init__(self, init_val, R_to_S):
         super().__init__(init_val)
@@ -145,13 +147,13 @@ class InfInducedImmunityLinearSaturation(clt.EpiMetric):
                params.inf_induced_immune_wane * state.M / num_timesteps
 
 
-class VaxInducedImmunityLinearSaturation(clt.EpiMetric):
+class VaxInducedImmunity(clt.EpiMetric):
 
     def get_change_in_current_val(self,
                                   state: ToyImmunitySubpopState,
                                   params: ToyImmunitySubpopParams,
                                   num_timesteps: int) -> np.ndarray:
-        return params.vaccines_per_day / (params.total_pop_age_risk * num_timesteps) - \
+        return params.daily_vaccines / (params.total_pop_age_risk * num_timesteps) - \
                params.vax_induced_immune_wane * state.Mv / num_timesteps
 
 
@@ -181,7 +183,7 @@ class AbsoluteHumidity(clt.Schedule):
             self.time_series_df["date"] == current_date, "humidity"].values[0]
 
 
-class ToyImmunitySubpopModel(clt.SubpopModel):
+class ToyImmunitySubpopModel(clt.SubpopModel, ABC):
 
     def __init__(self,
                  compartments_epi_metrics_dict: dict,
@@ -239,16 +241,6 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
         #   creates deep copies.
         super().__init__(state, params, config, RNG, name)
 
-    def create_interaction_terms(self) -> sc.objdict[str, clt.InteractionTerm]:
-
-        return sc.objdict()
-
-    def create_dynamic_vals(self) -> sc.objdict[str, clt.DynamicVal]:
-
-        dynamic_vals = sc.objdict()
-
-        return dynamic_vals
-
     def create_schedules(self) -> sc.objdict[str, clt.Schedule]:
 
         schedules = sc.objdict()
@@ -262,8 +254,8 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
 
         epi_metrics = sc.objdict()
 
-        epi_metrics["M"] = InfInducedImmunityLinearSaturation(self.state.M, transition_variables.R_to_S)
-        epi_metrics["Mv"] = VaxInducedImmunityLinearSaturation(self.state.Mv)
+        epi_metrics["M"] = InfInducedImmunity(self.state.M, transition_variables.R_to_S)
+        epi_metrics["Mv"] = VaxInducedImmunity(self.state.Mv)
 
         return epi_metrics
 
@@ -295,11 +287,3 @@ class ToyImmunitySubpopModel(clt.SubpopModel):
         transition_variables.R_to_S = RecoveredToSusceptible(origin=R, destination=S, transition_type=type)
 
         return transition_variables
-
-    def create_transition_variable_groups(
-            self,
-            compartments: sc.objdict[str, clt.Compartment] = None,
-            transition_variables: sc.objdict[str, clt.TransitionVariable] = None)\
-            -> sc.objdict[str, clt.TransitionVariableGroup]:
-
-        return sc.objdict()

@@ -214,10 +214,7 @@ def test_subpop_correct_object_count():
     assert len(subpopA_model.transition_variables) == 10
     assert len(subpopA_model.transition_variable_groups) == 3
 
-    if subpopA_model.wastewater_enabled:
-        assert len(subpopA_model.epi_metrics) == 3
-    else:
-        assert len(subpopA_model.epi_metrics) == 2
+    assert len(subpopA_model.epi_metrics) == 2
 
     assert len(subpopA_model.dynamic_vals) == 1
 
@@ -546,18 +543,4 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
     check_state_variables_same_history(subpopB, subpopB_independent)
 
 
-# TODO: NEED TO ADD MORE WASTEWATER TESTS
-# wastewater test
-@pytest.mark.parametrize("model", subpop_models_transition_variations_list)
-def test_wastewater_when_beta_zero(model):
-    """
-    If the transmission rate beta_baseline = 0, then viral load should be zero
-    """
-    if model.wastewater_enabled:
-        model.reset_simulation()
-        model.params.beta_baseline = 0
-        model.simulate_until_day(300)
 
-        ww_history = model.epi_metrics["wastewater"].history_vals_list
-        tol = 1e-6
-        assert np.sum(np.abs(ww_history) < tol) == len(ww_history)

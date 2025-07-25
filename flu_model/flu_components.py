@@ -47,31 +47,36 @@ class FluSubpopParams(clt.SubpopParams):
         humidity_impact (positive float):
             coefficient that determines how much absolute
             humidity affects beta_baseline.
-        hosp_immune_gain (positive float):
-            factor by which population-level immunity
-            against hospitalization grows after each
-            case that recovers.
-        inf_immune_gain (positive float):
-            factor by which population-level immunity
-            against infection grows after each case
-                that recovers.
-        immune_saturation (np.ndarray of positive floats):
+        inf_induced_saturation (np.ndarray of positive floats):
             constant(s) modeling saturation of antibody
-            production of individuals.
-        hosp_immune_wane (positive float):
-            rate at which infection-induced immunity
-            against hospitalization wanes.
-        inf_immune_wane (positive float):
+            production of infected individuals.
+        inf_induced_immune_wane (positive float):
             rate at which infection-induced immunity
             against infection wanes.
-        hosp_risk_reduce (positive float in [0,1]):
-            reduction in hospitalization risk from
-            infection-induced immunity.
-        inf_risk_reduce (positive float in [0,1]):
-            reduction in infection risk
-            from infection-induced immunity.
-        death_risk_reduce (positive float in [0,1]):
-            reduction in death risk from infection-induced immunity.
+        vax_induced_saturation (np.ndarray of positive floats):
+            constant(s) modeling saturation of antibody
+            production of vaccinated individuals.
+        vax_induced_immune_wane (positive float):
+            rate at which vaccine-induced immunity
+            against infection wanes.
+        inf_induced_inf_risk_reduce (positive float):
+            reduction in risk of getting infected
+            after getting infected
+        inf_induced_hosp_risk_reduce (positive float):
+            reduction in risk of hospitalization
+            after getting infected
+        inf_induced_death_risk_reduce (positive float):
+            reduction in risk of death
+            after getting infected
+        vax_induced_inf_risk_reduce (positive float):
+            reduction in risk of getting infected
+            after getting vaccinated
+        vax_induced_hosp_risk_reduce (positive float):
+            reduction in risk of hospitalization
+            after getting vaccinated
+        vax_induced_death_risk_reduce (positive float):
+            reduction in risk of death
+            after getting vaccinated
         R_to_S_rate (positive float):
             rate at which people in R move to S.
         E_to_I_rate (positive float):
@@ -109,15 +114,6 @@ class FluSubpopParams(clt.SubpopParams):
         IA_relative_inf (positive float):
             relative infectiousness of asymptomatic to symptomatic
             people (IA to IS compartment).
-        viral_shed_peak (positive float):
-            the peak time of an individual's viral shedding.
-        viral_shed_magnitude (positive float):
-            magnitude of the viral shedding.
-        viral_shed_duration (positive float):
-            duration of the viral shedding,
-            must be larger than viral_shed_peak
-        viral_shed_feces_mass (positive float):
-            average mass of feces (gram)
         relative_suscept_by_age (np.ndarray of positive floats in [0,1]):
             relative susceptibility to infection by age group
         prop_time_away_by_age (np.ndarray of positive floats in [0,1]):
@@ -145,6 +141,12 @@ class FluSubpopParams(clt.SubpopParams):
             age group i has at work -- this matrix plus the
             work_contact_matrix must be less than the
             total_contact_matrix, element-wise
+        daily_vaccines (int):
+            WARNING: THIS IS A PLACEHOLDER. See `DailyVaccines`
+            class for more information. This will be deleted once
+            we have historical vaccine data and set up the
+            `DailyVaccines` `Schedule` properly.
+
     """
 
     num_age_groups: Optional[int] = None
@@ -152,14 +154,18 @@ class FluSubpopParams(clt.SubpopParams):
     beta_baseline: Optional[float] = None
     total_pop_age_risk: Optional[np.ndarray] = None
     humidity_impact: Optional[float] = None
-    hosp_immune_gain: Optional[float] = None
-    inf_immune_gain: Optional[float] = None
-    immune_saturation: Optional[np.ndarray] = None
-    hosp_immune_wane: Optional[float] = None
-    inf_immune_wane: Optional[float] = None
-    hosp_risk_reduce: Optional[float] = None
-    inf_risk_reduce: Optional[float] = None
-    death_risk_reduce: Optional[float] = None
+
+    inf_induced_saturation: Optional[float] = None
+    inf_induced_immune_wane: Optional[float] = None
+    vax_induced_saturation: Optional[float] = None
+    vax_induced_immune_wane: Optional[float] = None
+    inf_induced_inf_risk_reduce: Optional[float] = None
+    inf_induced_hosp_risk_reduce: Optional[float] = None
+    inf_induced_death_risk_reduce: Optional[float] = None
+    vax_induced_inf_risk_reduce: Optional[float] = None
+    vax_induced_hosp_risk_reduce: Optional[float] = None
+    vax_induced_death_risk_reduce: Optional[float] = None
+
     R_to_S_rate: Optional[float] = None
     E_to_I_rate: Optional[float] = None
     IP_to_IS_rate: Optional[float] = None
@@ -169,21 +175,23 @@ class FluSubpopParams(clt.SubpopParams):
     H_to_R_rate: Optional[float] = None
     H_to_D_rate: Optional[float] = None
     E_to_IA_prop: Optional[np.ndarray] = None
+
     IS_to_H_adjusted_prop: Optional[np.ndarray] = None
     H_to_D_adjusted_prop: Optional[np.ndarray] = None
+
     IP_relative_inf: Optional[float] = None
     IA_relative_inf: Optional[float] = None
-    viral_shed_peak: Optional[float] = None  # viral shedding parameters
-    viral_shed_magnitude: Optional[float] = None  # viral shedding parameters
-    viral_shed_duration: Optional[float] = None  # viral shedding parameters
-    viral_shed_feces_mass: Optional[float] = None  # viral shedding parameters
     relative_suscept_by_age: Optional[np.ndarray] = None
+
     prop_time_away_by_age: Optional[np.ndarray] = None
     contact_mult_travel: Optional[float] = None
     contact_mult_symp: Optional[float] = None
+
     total_contact_matrix: Optional[np.ndarray] = None
     school_contact_matrix: Optional[np.ndarray] = None
     work_contact_matrix: Optional[np.ndarray] = None
+
+    daily_vaccines_constant: Optional[int] = None
 
 
 @dataclass
@@ -226,14 +234,14 @@ class FluSubpopState(clt.SubpopState):
         D (np.ndarray of positive floats):
             dead compartment for age-risk groups
             (holds current_val of Compartment "D").
-        pop_immunity_hosp (np.ndarray of positive floats):
-            infection-induced population-level immunity against
-            hospitalization, for age-risk groups (holds current_val
-            of EpiMetric "pop_immunity_hosp").
-        pop_immunity_inf (np.ndarray of positive floats):
-            infection-induced population-level immunity against
-            infection, for age-risk groups (holds current_val
-            of EpiMetric "pop_immunity_inf").
+        M (np.ndarray of positive floats):
+            infection-induced population-level immunity
+            for age-risk groups (holds current_val
+            of EpiMetric "M").
+        Mv (np.ndarray of positive floats):
+            vaccine-induced population-level immunity
+            for age-risk groups (holds current_val
+            of EpiMetric "Mv").
         absolute_humidity (positive float):
             grams of water vapor per cubic meter g/m^3,
             used as seasonality parameter that influences
@@ -243,18 +251,19 @@ class FluSubpopState(clt.SubpopState):
             groups -- element (a, a') corresponds to the number 
             of contacts that a person in age group a
             has with people in age-risk group a'.
-        beta_reduct (float in [0,1]):
-            starting value of DynamicVal "beta_reduct" on
+        beta_reduce (float in [0,1]):
+            starting value of DynamicVal "beta_reduce" on
             starting day of simulation -- this DynamicVal
             emulates a simple staged-alert policy
-        wastewater (np.ndarray of positive floats):
-            wastewater viral load
         force_of_infection (np.ndarray of positive floats):
             total force of infection from movement within
             home location, travel to other locations,
             and visitors from other locations
-        hospital_admits (np.ndarray of int):
-            tracks IS to H
+        daily_vaccines (np.ndarray of positive ints):
+            holds current value of DailyVaccines instance,
+            corresponding number of individuals who received influenza
+            vaccine on that day, for given age-risk group
+            (generally derived from historical data)
     """
 
     S: Optional[np.ndarray] = None
@@ -265,14 +274,16 @@ class FluSubpopState(clt.SubpopState):
     H: Optional[np.ndarray] = None
     R: Optional[np.ndarray] = None
     D: Optional[np.ndarray] = None
-    pop_immunity_hosp: Optional[np.ndarray] = None
-    pop_immunity_inf: Optional[np.ndarray] = None
+
+    M: Optional[np.ndarray] = None
+    Mv: Optional[np.ndarray] = None
+
     absolute_humidity: Optional[float] = None
     flu_contact_matrix: Optional[np.ndarray] = None
-    beta_reduct: Optional[float] = 0.0
-    wastewater: Optional[np.ndarray] = None  # wastewater viral load
+    beta_reduce: Optional[float] = 0.0
     force_of_infection: Optional[np.ndarray] = None
-    hospital_admits: Optional[np.ndarray] = None
+
+    daily_vaccines: Optional[np.ndarray] = None
 
 
 class SusceptibleToExposed(clt.TransitionVariable):
@@ -315,7 +326,7 @@ class SusceptibleToExposed(clt.TransitionVariable):
 
             return compute_common_coeff_force_of_infection(state, params) * \
                    np.matmul(state.flu_contact_matrix,
-                             np.divide(np.reshape(np.sum(state.IS, axis=1), (2,1)) + wtd_presymp_asymp,
+                             np.divide(np.reshape(np.sum(state.IS, axis=1), (2, 1)) + wtd_presymp_asymp,
                                        compute_pop_by_age(params)))
 
 
@@ -451,7 +462,7 @@ class SympToHosp(clt.TransitionVariable):
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
 
-        hosp_risk_reduce = params.hosp_risk_reduce
+        hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
 
         if (np.asarray(hosp_risk_reduce) != 1).all():
             proportional_risk_reduction = hosp_risk_reduce / (1 - hosp_risk_reduce)
@@ -459,7 +470,7 @@ class SympToHosp(clt.TransitionVariable):
             proportional_risk_reduction = 1
 
         return np.asarray(params.IS_to_H_rate * params.IS_to_H_adjusted_prop /
-                          (1 + proportional_risk_reduction * state.pop_immunity_hosp))
+                          (1 + proportional_risk_reduction * state.Mv))
 
 
 class HospToDead(clt.TransitionVariable):
@@ -480,30 +491,38 @@ class HospToDead(clt.TransitionVariable):
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
 
-        death_risk_reduce = params.death_risk_reduce
+        inf_induced_death_risk_reduce = params.inf_induced_death_risk_reduce
+        vax_induced_death_risk_reduce = params.vax_induced_death_risk_reduce
 
-        if (np.asarray(death_risk_reduce) != 1).all():
-            proportional_risk_reduction = death_risk_reduce / (1 - death_risk_reduce)
+        if (np.asarray(inf_induced_death_risk_reduce) != 1).all():
+            inf_induced_proportional_risk_reduce = \
+                inf_induced_death_risk_reduce / (1 - inf_induced_death_risk_reduce)
         else:
-            proportional_risk_reduction = 1
+            inf_induced_proportional_risk_reduce = 1
+
+        if (np.asarray(vax_induced_death_risk_reduce) != 1).all():
+            vax_induced_proportional_risk_reduce = \
+                vax_induced_death_risk_reduce / (1 - vax_induced_death_risk_reduce)
+        else:
+            vax_induced_proportional_risk_reduce = 1
 
         return np.asarray(params.H_to_D_adjusted_prop * params.H_to_D_rate /
-                          (1 + proportional_risk_reduction * state.pop_immunity_hosp))
+                          (1 + inf_induced_proportional_risk_reduce * state.M +
+                           vax_induced_proportional_risk_reduce * state.Mv))
 
 
-class PopulationImmunityHosp(clt.EpiMetric):
+class InfInducedImmunity(clt.EpiMetric):
     """
-    EpiMetric-derived class for population-level immunity
-    from hospitalization.
-    
+    EpiMetric-derived class for infection-induced
+    population-level immunity.
+
     Population-level immunity increases as people move
     from "R" to "S" -- this is a design choice intended
     to avoid "double-counting." People in "R" cannot be
-    infected at all. People who move from "R" to "S" 
-    are susceptible again, but these recently-recovered people 
+    infected at all. People who move from "R" to "S"
+    are susceptible again, but these recently-recovered people
     should have partial immunity. To handle this phenomenon,
-    the population-level immunity epi metric increases as
-    people move from "R" to "S." 
+    this epi metric increases as people move from "R" to "S."
 
     Params:
         R_to_S (RecoveredToSusceptible):
@@ -518,188 +537,45 @@ class PopulationImmunityHosp(clt.EpiMetric):
     def __init__(self, init_val, R_to_S):
         super().__init__(init_val)
         self.R_to_S = R_to_S
+
+    def get_change_in_current_val(self,
+                                  state: FluSubpopState,
+                                  params: FluSubpopParams,
+                                  num_timesteps: int):
+        # Note: the current values of transition variables already include
+        #   discretization (division by the number of timesteps) -- therefore,
+        #   we do not divide the first part of this equation by the number of
+        #   timesteps -- see `TransitionVariable` class's methods for getting
+        #   various realizations for more information
+
+        return (self.R_to_S.current_val / params.total_pop_age_risk) * \
+               (1 - params.inf_induced_saturation * state.M - params.vax_induced_saturation * state.Mv) - \
+               params.inf_induced_immune_wane * state.M / num_timesteps
+
+
+class VaxInducedImmunity(clt.EpiMetric):
+    """
+    EpiMetric-derived class for vaccine-induced
+    population-level immunity.
+    """
+
+    def __init__(self, init_val):
+        super().__init__(init_val)
 
     def get_change_in_current_val(self,
                                   state: FluSubpopState,
                                   params: FluSubpopParams,
                                   num_timesteps: int) -> np.ndarray:
 
-        pop_immunity_hosp = state.pop_immunity_hosp
+        # Note: `state.daily_vaccines` (based on the value of the `DailyVaccines`
+        #   `Schedule` is NOT divided by the number of timesteps -- so we need to
+        #   do this division in the equation here.
 
-        immunity_gain_numerator = params.hosp_immune_gain * self.R_to_S.current_val
-        immunity_gain_denominator = params.total_pop_age_risk * \
-                                    (1 + params.immune_saturation * pop_immunity_hosp)
-
-        immunity_gain = immunity_gain_numerator / immunity_gain_denominator
-        immunity_loss = params.hosp_immune_wane * pop_immunity_hosp
-
-        final_change = immunity_gain - immunity_loss / num_timesteps
-
-        return np.asarray(final_change, dtype=np.float64)
+        return state.daily_vaccines / (params.total_pop_age_risk * num_timesteps) - \
+               params.vax_induced_immune_wane * state.Mv / num_timesteps
 
 
-class PopulationImmunityInf(clt.EpiMetric):
-    """
-    EpiMetric-derived class for population-level immunity
-    from infection.
-
-    Analogous to PopulationImmunityHosp -- see that class's
-    docstring for more information. Update formula is the 
-    same except for inf_immune_gain and
-    inf_immune_wane. 
-
-    Params:
-        R_to_S (RecoveredToSusceptible):
-            RecoveredToSusceptible TransitionVariable
-            in the SubpopModel -- it is an attribute
-            because the population-level immunity
-            increases as people move from "R" to "S".
-
-    See parent class docstring for other attributes.
-    """
-
-    def __init__(self, init_val, R_to_S):
-        super().__init__(init_val)
-        self.R_to_S = R_to_S
-
-    def get_change_in_current_val(self,
-                                  state: FluSubpopState,
-                                  params: FluSubpopParams,
-                                  num_timesteps: int):
-
-        pop_immunity_inf = np.float64(state.pop_immunity_inf)
-
-        immunity_gain_numerator = params.inf_immune_gain * self.R_to_S.current_val
-        immunity_gain_denominator = params.total_pop_age_risk * \
-                                    (1 + params.immune_saturation * pop_immunity_inf)
-
-        immunity_gain = immunity_gain_numerator / immunity_gain_denominator
-        immunity_loss = params.inf_immune_wane * pop_immunity_inf
-
-        final_change = immunity_gain - immunity_loss / num_timesteps
-
-        return np.asarray(final_change, dtype=np.float64)
-
-
-# test on the wastewater viral load simulation
-class Wastewater(clt.EpiMetric):
-
-    def __init__(self, init_val, S_to_E):
-        super().__init__(init_val)
-        self.S_to_E = S_to_E
-        # preprocess
-        self.flag_preprocessed = False
-        self.viral_shedding = []
-        self.viral_shed_duration = None
-        self.viral_shed_magnitude = None
-        self.viral_shed_peak = None
-        self.viral_shed_feces_mass = None
-        self.S_to_E_len = 5000  # preset to match the simulation time horizon
-        self.S_to_E_history = np.zeros(self.S_to_E_len)
-        self.cur_time_stamp = -1
-        self.num_timesteps = None
-        self.val_list_len = None
-        self.current_val_list = None
-        self.cur_idx_timestep = -1
-
-    def get_change_in_current_val(self,
-                                  state: FluSubpopState,
-                                  params: FluSubpopParams,
-                                  num_timesteps: int):
-        if not self.flag_preprocessed:  # preprocess the viral shedding function if not done yet
-            self.val_list_len = num_timesteps
-            self.current_val_list = np.zeros(self.val_list_len)
-            self.preprocess(params, num_timesteps)
-        return 0
-
-    def update_current_val(self) -> None:
-        """
-        Adds change_in_current_val attribute to current_val attribute
-            in-place.
-        """
-        # record number of exposed people per day
-        self.cur_time_stamp += 1
-        self.S_to_E_history[self.cur_time_stamp] = np.sum(self.S_to_E.current_val)
-        current_val = 0
-
-        # attribute access shortcut
-        cur_time_stamp = self.cur_time_stamp
-
-        # discrete convolution
-        len_duration = self.viral_shed_duration * self.num_timesteps
-
-        if self.cur_time_stamp >= len_duration - 1:
-            current_val = self.S_to_E_history[
-                          (cur_time_stamp - len_duration + 1):(cur_time_stamp + 1)] @ self.viral_shedding
-        else:
-            current_val = self.S_to_E_history[
-                          :(cur_time_stamp + 1)] @ self.viral_shedding[-(cur_time_stamp + 1):]
-
-        self.current_val = current_val
-        self.cur_idx_timestep += 1
-        self.current_val_list[self.cur_idx_timestep] = current_val
-
-    def preprocess(self,
-                   params: FluSubpopParams,
-                   num_timesteps: int):
-        # store the parameters locally
-        self.viral_shed_duration = copy.deepcopy(params.viral_shed_duration)
-        self.viral_shed_magnitude = copy.deepcopy(params.viral_shed_magnitude)
-        self.viral_shed_peak = copy.deepcopy(params.viral_shed_peak)
-        self.viral_shed_feces_mass = copy.deepcopy(params.viral_shed_feces_mass)
-        self.num_timesteps = copy.deepcopy(num_timesteps)
-        num_timesteps = np.float64(num_timesteps)
-        self.viral_shedding = []
-        # trapezoidal integral
-        for time_idx in range(int(params.viral_shed_duration * self.num_timesteps)):
-            cur_time_point = time_idx / num_timesteps
-            next_time_point = (time_idx + 1) / num_timesteps
-            next_time_log_viral_shedding = params.viral_shed_magnitude * next_time_point / \
-                                           (params.viral_shed_peak ** 2 + next_time_point ** 2)
-            if time_idx == 0:
-                interval_viral_shedding = params.viral_shed_feces_mass * 0.5 * (
-                        10 ** next_time_log_viral_shedding) / num_timesteps
-            else:
-                cur_time_log_viral_shedding = params.viral_shed_magnitude * cur_time_point / \
-                                              (params.viral_shed_peak ** 2 + cur_time_point ** 2)
-                interval_viral_shedding = params.viral_shed_feces_mass * 0.5 \
-                                          * (
-                                                  10 ** cur_time_log_viral_shedding + 10 ** next_time_log_viral_shedding) / num_timesteps
-            self.viral_shedding.append(interval_viral_shedding)
-        self.viral_shedding.reverse()
-        self.viral_shedding = np.array(self.viral_shedding)
-
-    def save_history(self) -> None:
-        """
-        Saves daily viral load (accumulated during one day) to history by appending current_val attribute
-            to history_vals_list in place
-
-        """
-        daily_viral_load = np.sum(self.current_val_list)
-        self.history_vals_list.append(daily_viral_load)
-        # reset the index of current_val_list
-        self.cur_idx_timestep = -1
-
-    def reset(self) -> None:
-        """
-        Resets history_vals_list attribute to empty list.
-        """
-        self.flag_preprocessed = False
-        self.viral_shedding = []
-        self.viral_shed_duration = None
-        self.viral_shed_magnitude = None
-        self.viral_shed_peak = None
-        self.viral_shed_feces_mass = None
-        self.S_to_E_len = 5000  # preset to match the simulation time horizon
-        self.S_to_E_history = np.zeros(self.S_to_E_len)
-        self.cur_time_stamp = -1
-        self.num_timesteps = None
-        self.val_list_len = None
-        self.current_val_list = None
-        self.cur_idx_timestep = -1
-
-
-class BetaReduct(clt.DynamicVal):
+class BetaReduce(clt.DynamicVal):
     """
     "Toy" function representing staged-alert policy
         that reduces transmission by 50% when more than 5%
@@ -724,6 +600,40 @@ class BetaReduct(clt.DynamicVal):
         else:
             if not self.permanent_lockdown:
                 self.current_val = 0.0
+
+
+class DailyVaccines(clt.Schedule):
+
+    def __init__(self,
+                 init_val: Optional[np.ndarray | float] = None,
+                 filepath: Optional[str] = None):
+        """
+        WARNING: THIS IS A PLACEHOLDER RIGHT NOW --
+        NEED TO REPLACE WITH REAL FUNCTION. Currently returns a
+        constant `params.daily_vaccines_constant` each day --
+        when we have historical data, we will need to use the
+        dataframe to build this class and grab the historical
+        according to the date. Then we should delete the
+        `params.daily_vaccines_constant` value.
+
+
+        Args:
+            init_val (Optional[np.ndarray | float]):
+                starting value(s) at the beginning of the simulation
+            timeseries_df (Optional[pd.DataFrame] = None):
+                has a "date" column with strings in format `"YYYY-MM-DD"`
+                of consecutive calendar days, and other columns
+                corresponding to values on those days
+        """
+
+        super().__init__(init_val)
+
+        # df = pd.read_csv(filepath)
+        # df["date"] = pd.to_datetime(df["date"], format='%m/%d/%y').dt.date
+        # self.time_series_df = df
+
+    def update_current_val(self, params, current_date: datetime.date) -> None:
+        self.current_val = params.daily_vaccines_constant
 
 
 class AbsoluteHumidity(clt.Schedule):
@@ -829,14 +739,14 @@ def compute_immunity_force(subpop_state: FluSubpopState,
         -- used in the denominator of many computations
     """
 
-    inf_risk_reduce = subpop_params.inf_risk_reduce
+    inf_risk_reduce = subpop_params.inf_induced_inf_risk_reduce
     if (np.asarray(inf_risk_reduce) != 1).all():
         proportional_risk_reduction = inf_risk_reduce / (1 - inf_risk_reduce)
     else:
         proportional_risk_reduction = 1
 
     return 1 + (proportional_risk_reduction *
-                subpop_state.pop_immunity_inf)
+                subpop_state.M)
 
 
 def compute_common_coeff_force_of_infection(subpop_state: FluSubpopState,
@@ -1321,8 +1231,8 @@ class FluSubpopModel(clt.SubpopModel):
     populated by user-specified JSON files.
 
     Key method create_transmission_model returns a SubpopModel
-    instance with S-E-I-H-R-D compartments and pop_immunity_inf
-    and pop_immunity_hosp epi metrics. 
+    instance with S-E-I-H-R-D compartments and M
+    and Mv epi metrics.
     
     The update structure is as follows:
         - S <- S + R_to_S - S_to_E
@@ -1349,8 +1259,8 @@ class FluSubpopModel(clt.SubpopModel):
         - H_out (handles H_to_R and H_to_D)
 
     The following are EpiMetric instances:
-        - pop_immunity_inf is a PopulationImmunityInf instance
-        - pop_immunity_hosp is a PopulationImmunityHosp instance
+        - M is a InfInducedImmunity instance
+        - Mv is a VaxInducedImmunity instance
 
     Transition rates and update formulas are specified in
         corresponding classes.
@@ -1365,8 +1275,7 @@ class FluSubpopModel(clt.SubpopModel):
                  calendar_df: pd.DataFrame,
                  RNG: np.random.Generator,
                  absolute_humidity_filepath: str,
-                 name: str = "",
-                 wastewater_enabled: bool = False):
+                 name: str = ""):
         """
         Args:
             compartments_epi_metrics (dict):
@@ -1398,16 +1307,12 @@ class FluSubpopModel(clt.SubpopModel):
                 class for CSV file specifications
             name (str):
                 unique name of MetapopModel instance.
-            wastewater_enabled (bool):
-                if True, includes "wastewater" EpiMetric. Otherwise,
-                excludes it.
         """
 
         # Assign config, params, and state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
 
-        self.wastewater_enabled = wastewater_enabled
         self.absolute_humidity_filepath = absolute_humidity_filepath
 
         if not all(isinstance(val, datetime.date) for val in calendar_df["date"]):
@@ -1462,7 +1367,7 @@ class FluSubpopModel(clt.SubpopModel):
 
         dynamic_vals = sc.objdict()
 
-        dynamic_vals["beta_reduct"] = BetaReduct(init_val=0.0,
+        dynamic_vals["beta_reduce"] = BetaReduce(init_val=0.0,
                                                  is_enabled=False)
 
         return dynamic_vals
@@ -1477,6 +1382,7 @@ class FluSubpopModel(clt.SubpopModel):
         schedules["absolute_humidity"] = AbsoluteHumidity(filepath=self.absolute_humidity_filepath)
         schedules["flu_contact_matrix"] = FluContactMatrix(init_val=None,
                                                            calendar_df=self.calendar_df)
+        schedules["daily_vaccines"] = DailyVaccines(filepath="")
 
         return schedules
 
@@ -1564,18 +1470,12 @@ class FluSubpopModel(clt.SubpopModel):
 
         epi_metrics = sc.objdict()
 
-        epi_metrics.pop_immunity_inf = \
-            PopulationImmunityInf(getattr(self.state, "pop_immunity_inf"),
-                                  transition_variables.R_to_S)
+        epi_metrics.M = \
+            InfInducedImmunity(getattr(self.state, "M"),
+                               transition_variables.R_to_S)
 
-        if self.wastewater_enabled:
-            epi_metrics.wastewater = \
-                Wastewater(getattr(self.state, "wastewater"),  # initial value is set to null for now
-                           transition_variables.S_to_E)
-
-        epi_metrics.pop_immunity_hosp = \
-            PopulationImmunityHosp(getattr(self.state, "pop_immunity_hosp"),
-                                   transition_variables.R_to_S)
+        epi_metrics.Mv = \
+            VaxInducedImmunity(getattr(self.state, "Mv"))
 
         return epi_metrics
 

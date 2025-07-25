@@ -23,7 +23,7 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 from dataclasses import dataclass, fields
 
-import flu_torch_components as flu_torch
+import flu_torch_det_components as flu_torch
 
 base_path = Path(__file__).parent / "flu_torch_input_files"
 
