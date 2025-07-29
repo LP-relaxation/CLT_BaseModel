@@ -17,31 +17,31 @@
   "IS_to_H_adjusted_prop": 0.5,
   "inf_induced_saturation": 0.7,
   "inf_induced_immune_wane": 0.0015,
-  "inf_induced_inf_risk_constant": 1,
-  "inf_induced_hosp_risk_constant": 1,
-  "inf_induced_death_risk_constant": 1,
+  "inf_induced_inf_risk_reduce": 1,
+  "inf_induced_hosp_risk_reduce": 1,
+  "inf_induced_death_risk_reduce": 1,
   "vax_induced_saturation": 0.095,
   "vax_induced_immune_wane": 0.0001,
-  "vax_induced_inf_risk_constant": 1.22,
-  "vax_induced_hosp_risk_constant": 1,
-  "vax_induced_death_risk_constant": 1,
+  "vax_induced_inf_risk_reduce": 1.22,
+  "vax_induced_hosp_risk_reduce": 1,
+  "vax_induced_death_risk_reduce": 1,
   "daily_vaccines": 20,
-  "relative_suscept": [
+  "relative_suscept_by_age": [[
   1.0,
   1.0,
   1.0,
   1.0,
   1.0
-],
-  "prop_time_away":
-  [
+]],
+  "prop_time_away_by_age":
+  [[
   0.1,
   0.1,
   0.1,
   0.1,
   0.1
-],
-  "travel_proportions_array":
+]],
+  "travel_proportions":
     [[0.4,0.05],
     [0.01,0.4]],
   "total_contact_matrix":

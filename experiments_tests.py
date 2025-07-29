@@ -54,7 +54,7 @@ subpopB = flu.FluSubpopModel(compartments_epi_metrics_dict,
 
 repoAB = flu.FluInterSubpopRepo({"subpopA": subpopA, "subpopB": subpopB},
                                 {"subpopA": 0, "subpopB": 1},
-                                travel_proportions["travel_proportions_array"])
+                                travel_proportions["travel_proportions"])
 
 metapopAB = flu.FluMetapopModel(repoAB)
 

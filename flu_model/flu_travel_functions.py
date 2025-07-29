@@ -45,7 +45,6 @@ def compute_active_pop_LAR(state: FluMetapopStateTensors,
 def compute_effective_pop_LA(state: FluMetapopStateTensors,
                              params: FluMetapopParamsTensors,
                              precomputed: FluPrecomputedTensors) -> torch.Tensor:
-
     active_pop_LAR = compute_active_pop_LAR(state, params, precomputed)
 
     # Nonlocal travel proportions is L x L
@@ -61,7 +60,7 @@ def compute_effective_pop_LA(state: FluMetapopStateTensors,
                               active_pop_LAR
 
     effective_pop_LA = precomputed.total_pop_LA + \
-                       params.prop_time_away[0, :, 0] * \
+                       params.prop_time_away_by_age[0, :, 0] * \
                        torch.sum(outside_visitors_LAR + traveling_residents_LAR, dim=2)
 
     return effective_pop_LA
@@ -90,32 +89,32 @@ def compute_wtd_infectious_ratio_LLA(state: FluMetapopStateTensors,
     return prop_wtd_infectious
 
 
-def compute_raw_local_to_local_foi(prop_time_away: torch.Tensor,
-                                   total_contact_matrix: torch.Tensor,
-                                   sum_residents_nonlocal_travel_prop: torch.Tensor,
-                                   wtd_infectious_ratio_LLA: torch.Tensor,
-                                   location_ix: int) -> torch.Tensor:
+def compute_local_to_local_exposure(prop_time_away_by_age: torch.Tensor,
+                                    total_contact_matrix: torch.Tensor,
+                                    sum_residents_nonlocal_travel_prop: torch.Tensor,
+                                    wtd_infectious_ratio_LLA: torch.Tensor,
+                                    location_ix: int) -> torch.Tensor:
     """
-    Raw means that this is unnormalized by `relative_suscept`
+    Raw means that this is unnormalized by `relative_suscept_by_age`
 
     Excludes beta -- that is factored in later
     """
 
-    result = (1 - prop_time_away.squeeze()[location_ix, :] * sum_residents_nonlocal_travel_prop[location_ix]) * \
+    result = (1 - prop_time_away_by_age.squeeze()[location_ix, :] * sum_residents_nonlocal_travel_prop[location_ix]) * \
              torch.matmul(total_contact_matrix[location_ix, :, :],
                           wtd_infectious_ratio_LLA[location_ix, location_ix, :])
 
     return result
 
 
-def compute_raw_outside_visitors_foi(prop_time_away: torch.Tensor,
-                                     total_contact_matrix: torch.Tensor,
-                                     travel_proportions_array: torch.Tensor,
-                                     wtd_infectious_ratio_LLA: torch.Tensor,
-                                     local_ix: int,
-                                     visitors_ix: int) -> torch.Tensor:
+def compute_outside_visitors_exposure(prop_time_away_by_age: torch.Tensor,
+                                      total_contact_matrix: torch.Tensor,
+                                      travel_proportions: torch.Tensor,
+                                      wtd_infectious_ratio_LLA: torch.Tensor,
+                                      local_ix: int,
+                                      visitors_ix: int) -> torch.Tensor:
     """
-    Computes raw (unnormalized by `relative_suscept`) force
+    Computes raw (unnormalized by `relative_suscept_by_age`) force
         of infection to local_ix, due to outside visitors from
         visitors_ix
 
@@ -127,21 +126,21 @@ def compute_raw_outside_visitors_foi(prop_time_away: torch.Tensor,
     # In location dest_ix, we are looking at the visitors from
     #   origin_ix who come to dest_ix (and infect folks in dest_ix)
 
-    result = travel_proportions_array[visitors_ix, local_ix] * \
-             torch.matmul(prop_time_away.squeeze()[visitors_ix, :] * total_contact_matrix[local_ix, :, :],
+    result = travel_proportions[visitors_ix, local_ix] * \
+             torch.matmul(prop_time_away_by_age.squeeze()[visitors_ix, :] * total_contact_matrix[local_ix, :, :],
                           wtd_infectious_ratio_LLA[visitors_ix, local_ix, :])
 
     return result
 
 
-def compute_raw_residents_traveling_foi(prop_time_away: torch.Tensor,
-                                        total_contact_matrix: torch.Tensor,
-                                        travel_proportions_array: torch.Tensor,
-                                        wtd_infectious_ratio_LLA: torch.Tensor,
-                                        local_ix: int,
-                                        dest_ix: int) -> torch.Tensor:
+def compute_residents_traveling_exposure(prop_time_away_by_age: torch.Tensor,
+                                         total_contact_matrix: torch.Tensor,
+                                         travel_proportions: torch.Tensor,
+                                         wtd_infectious_ratio_LLA: torch.Tensor,
+                                         local_ix: int,
+                                         dest_ix: int) -> torch.Tensor:
     """
-    Computes raw (unnormalized by `relative_suscept`) force
+    Computes raw (unnormalized by `relative_suscept_by_age`) force
         of infection to local_ix, due to residents of local_ix
         traveling to dest_ix and getting infected in dest_ix
 
@@ -150,61 +149,61 @@ def compute_raw_residents_traveling_foi(prop_time_away: torch.Tensor,
     Output should be size A
     """
 
-    result = prop_time_away.squeeze()[local_ix, :] * travel_proportions_array[local_ix, dest_ix] * \
+    result = prop_time_away_by_age.squeeze()[local_ix, :] * travel_proportions[local_ix, dest_ix] * \
              torch.matmul(total_contact_matrix[local_ix, :, :],
                           wtd_infectious_ratio_LLA[dest_ix, dest_ix, :])
 
     return result
 
 
-def compute_total_foi(state: FluMetapopStateTensors,
-                      params: FluMetapopParamsTensors,
-                      precomputed: FluPrecomputedTensors,
-                      beta_adjusted: torch.tensor) -> torch.Tensor:
-    """
-    Compute total force of infection! Includes beta
-    """
-
+def compute_travel_wtd_infectious(state: FluMetapopStateTensors,
+                                  params: FluMetapopParamsTensors,
+                                  precomputed: FluPrecomputedTensors) -> torch.Tensor:
     L, A, R = precomputed.L, precomputed.A, precomputed.R
 
-    prop_time_away = params.prop_time_away
+    prop_time_away_by_age = params.prop_time_away_by_age
     total_contact_matrix = params.total_contact_matrix
-    travel_proportions_array = params.travel_proportions_array
+    travel_proportions = params.travel_proportions
     sum_residents_nonlocal_travel_prop = precomputed.sum_residents_nonlocal_travel_prop
     wtd_infectious_ratio_LLA = compute_wtd_infectious_ratio_LLA(state, params, precomputed)
 
-    relative_suscept_by_age = params.relative_suscept[0, :, 0]
+    relative_suscept_by_age = params.relative_suscept_by_age[0, :, 0]
 
-    foi = torch.tensor(np.zeros((L, A, R)))
+    travel_wtd_infectious = torch.tensor(np.zeros((L, A, R)))
 
     for l in np.arange(L):
 
-        raw_foi = torch.tensor(np.zeros(A))
+        raw_travel_wtd_infectious = torch.tensor(np.zeros(A))
 
         # local-to-local force of infection
-        raw_foi = raw_foi + compute_raw_local_to_local_foi(prop_time_away,
-                                                           total_contact_matrix,
-                                                           sum_residents_nonlocal_travel_prop,
-                                                           wtd_infectious_ratio_LLA,
-                                                           l)
+        raw_travel_wtd_infectious = raw_travel_wtd_infectious + \
+                                    compute_local_to_local_exposure(prop_time_away_by_age,
+                                                                    total_contact_matrix,
+                                                                    sum_residents_nonlocal_travel_prop,
+                                                                    wtd_infectious_ratio_LLA,
+                                                                    l)
 
         for k in np.arange(L):
-            raw_foi = raw_foi + compute_raw_outside_visitors_foi(prop_time_away,
-                                                                 total_contact_matrix,
-                                                                 travel_proportions_array,
-                                                                 wtd_infectious_ratio_LLA,
-                                                                 l,
-                                                                 k)
+            raw_travel_wtd_infectious = raw_travel_wtd_infectious + \
+                                        compute_outside_visitors_exposure(
+                                            prop_time_away_by_age,
+                                            total_contact_matrix,
+                                            travel_proportions,
+                                            wtd_infectious_ratio_LLA,
+                                            l,
+                                            k)
 
-            raw_foi = raw_foi + compute_raw_residents_traveling_foi(prop_time_away,
-                                                                    total_contact_matrix,
-                                                                    travel_proportions_array,
-                                                                    wtd_infectious_ratio_LLA,
-                                                                    l,
-                                                                    k)
+            raw_travel_wtd_infectious = raw_travel_wtd_infectious + \
+                                        compute_residents_traveling_exposure(
+                                            prop_time_away_by_age,
+                                            total_contact_matrix,
+                                            travel_proportions,
+                                            wtd_infectious_ratio_LLA,
+                                            l,
+                                            k)
 
-        normalized_foi = relative_suscept_by_age * raw_foi
+        normalized_travel_wtd_infectious = relative_suscept_by_age * raw_travel_wtd_infectious
 
-        foi[l, :, :] = normalized_foi.view(A, 1).expand((A, R))
+        travel_wtd_infectious[l, :, :] = normalized_travel_wtd_infectious.view(A, 1).expand((A, R))
 
-    return beta_adjusted * foi
+    return travel_wtd_infectious

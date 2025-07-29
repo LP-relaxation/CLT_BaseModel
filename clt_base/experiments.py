@@ -28,11 +28,11 @@ def format_current_val_for_sql(subpop_model: SubpopModel,
                                rep: int) -> list:
     """
     Processes current_val of given subpop_model's `StateVariable`
-    specified by `state_var_name`. Current_val is an |A| x |R|
+    specified by `state_var_name`. Current_val is an A x R
     numpy array (for age-risk) -- this function "unpacks" it into an
-    (|A| x |R|, 1) numpy array (a column vector). Converts metadata
+    (A x R, 1) numpy array (a column vector). Converts metadata
     (subpop_name, state_var_name, `rep`, and current_simulation_day)
-    into list of |A| x |R| rows, where each row has 7 elements, for
+    into list of A x R rows, where each row has 7 elements, for
     consistent row formatting for batch SQL insertion.
 
     Params:
@@ -45,7 +45,7 @@ def format_current_val_for_sql(subpop_model: SubpopModel,
 
     Returns:
         data (list):
-            list of |A| x |R| rows, where each row is a list of 7 elements
+            list of A x R rows, where each row is a list of 7 elements
             corresponding to subpop_name, state_var_name, age_group, risk_group,
             rep, current_simulation_day, and the scalar element of current_val
             corresponding to that age-risk group.
@@ -144,7 +144,7 @@ class Experiment:
     distribution.
 
     NOTE:
-        If an input is an |A| x |R| array (for age-risk),
+        If an input is an A x R array (for age-risk),
         the current functionality does not support sampling individual
         age-risk elements separately. Instead, a single scalar value
         is sampled at a time for the entire input.
@@ -457,11 +457,11 @@ class Experiment:
                 uniform distribution.
 
         NOTE:
-            If an input is an |A| x |R| array (for age-risk),
+            If an input is an A x R array (for age-risk),
             the current functionality does not support sampling individual
             age-risk elements separately. Instead, a single scalar value
             is sampled at a time for the entire input. Consequently,
-            if an |A| x |R| input is chosen to be randomly sampled,
+            if an A x R input is chosen to be randomly sampled,
             all its elements will have the same sampled value.
 
             If a user wants to sample some age-risk elements separately,

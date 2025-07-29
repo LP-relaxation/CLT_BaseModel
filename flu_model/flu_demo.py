@@ -30,7 +30,6 @@ base_path = Path(__file__).parent / "flu_demo_input_files"
 compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
 params_filepath = base_path / "common_params.json"
 config_filepath = base_path / "config.json"
-travel_proportions_filepath = base_path / "travel_proportions.json"
 
 # Get filepaths for school-work calendar CSV and humidity CSV
 calendar_filepath = base_path / "school_work_calendar.csv"
@@ -45,7 +44,6 @@ params_dict = clt.load_json_new_dict(params_filepath)
 config_dict = clt.load_json_new_dict(config_filepath)
 
 calendar_df = pd.read_csv(calendar_filepath, index_col=0)
-travel_proportions = clt.load_json_new_dict(travel_proportions_filepath)
 
 # Create two independent bit generators
 bit_generator = np.random.MT19937(88888)
@@ -102,9 +100,7 @@ south.params.beta_baseline = 10
 # Combine two subpopulations into one metapopulation model (travel model)
 flu_demo_model = flu.FluMetapopModel([north, south])
 
-test = flu_demo_model.create_params_tensors([north, south])
 
-breakpoint()
 
 # Display written forms of both subpopulation models
 # Check that model inputs are properly formatted and sensible
@@ -115,6 +111,8 @@ breakpoint()
 
 # Simulate for 50 days
 flu_demo_model.simulate_until_day(50)
+
+breakpoint()
 
 # Get the current real date of the simulation and the
 #   current simulation day

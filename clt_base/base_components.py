@@ -43,20 +43,20 @@ def approx_binomial_probability_from_rate(rate: np.ndarray,
     e^(-`rate` * `interval_length`), so the probability of any event
     in `interval_length` is 1 - e^(-`rate` * `interval_length`).
 
-    Rate must be |A| x |R| `np.ndarray`, where |A| is the number of
-    age groups and |R| is the number of risk groups. Rate is transformed to
-    |A| x |R| `np.ndarray` corresponding to probabilities.
+    Rate must be A x R `np.ndarray`, where A is the number of
+    age groups and R is the number of risk groups. Rate is transformed to
+    A x R `np.ndarray` corresponding to probabilities.
 
     Parameters:
         rate (np.ndarray):
-            dimension |A| x |R| (number of age groups x number of risk groups),
+            dimension A x R (number of age groups x number of risk groups),
             rate parameters in a Poisson distribution.
         interval_length (positive int):
             length of time interval in simulation days.
 
     Returns:
         np.ndarray:
-            array of positive scalars, dimension |A| x |R|
+            array of positive scalars, dimension A x R
     """
 
     return 1 - np.exp(-rate * interval_length)
@@ -321,8 +321,8 @@ class TransitionVariable(ABC):
         """
         Computes and returns current rate of transition variable,
         based on current state of the simulation and epidemiological parameters.
-        Output should be a numpy array of size |A| x |R|, where |A| is the
-        number of age groups and |R| is number of risk groups.
+        Output should be a numpy array of size A x R, where A is the
+        number of age groups and R is number of risk groups.
 
         Args:
             state (SubpopState):
@@ -335,8 +335,8 @@ class TransitionVariable(ABC):
             np.ndarray:
                 holds age-risk transition rate,
                 must be same shape as origin.init_val,
-                i.e. be size |A| x |R|, where |A| is the number of age groups
-                and |R| is number of risk groups.
+                i.e. be size A x R, where A is the number of age groups
+                and R is number of risk groups.
         """
         pass
 
@@ -425,8 +425,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and
-                |R| is number of risk groups.
+                size A x R, where A is the number of age groups and
+                R is number of risk groups.
         """
 
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
@@ -451,7 +451,7 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and L
+                size A x R, where A is the number of age groups and L
                 is number of risk groups.
         """
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
@@ -476,8 +476,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and
-                |R| is number of risk groups.
+                size A x R, where A is the number of age groups and
+                R is number of risk groups.
         """
         return RNG.poisson(self.base_count * self.current_rate / float(num_timesteps))
 
@@ -502,8 +502,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and
-                |R| is number of risk groups.
+                size A x R, where A is the number of age groups and
+                R is number of risk groups.
         """
 
         return np.asarray(self.base_count *
@@ -530,8 +530,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and
-                |R| is number of risk groups.
+                size A x R, where A is the number of age groups and
+                R is number of risk groups.
         """
 
         return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
@@ -554,8 +554,8 @@ class TransitionVariable(ABC):
 
         Returns:
             np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and
-                |R| is number of risk groups.
+                size A x R, where A is the number of age groups and
+                R is number of risk groups.
         """
 
         return np.asarray(self.base_count * self.current_rate / num_timesteps, dtype=int)
@@ -594,13 +594,13 @@ class TransitionVariableGroup:
         get_joint_realization (function):
             assigned at initialization, generates realizations according
             to probability distribution given by `self._transition_type` attribute,
-            returns either (M x |A| x |R|) or ((M+1) x |A| x |R|) np.ndarray,
+            returns either (M x A x R) or ((M+1) x A x R) np.ndarray,
             where M is the length of `self.transition_variables` (i.e., number of
-            outflows from origin), |A| is the number of age groups, |R| is number of
+            outflows from origin), A is the number of age groups, R is number of
             risk groups.
         current_vals_list (list):
             used to store results from `self.get_joint_realization` --
-            has either M or M+1 arrays of size |A| x |R|.
+            has either M or M+1 arrays of size A x R.
 
     See `__init__` docstring for other attributes.
     """
@@ -995,7 +995,7 @@ class EpiMetric(StateVariable, ABC):
         change_in_current_val : (np.ndarray):
             initialized to None, but during simulation holds change in
             current value of `EpiMetric` for age-risk groups
-            (size |A| x |R|, where |A| is the number of risk groups and |R| is number
+            (size A x R, where A is the number of risk groups and R is number
             of age groups).
 
     See `__init__` docstring for other attributes.
@@ -1028,8 +1028,8 @@ class EpiMetric(StateVariable, ABC):
         NOTE:
             OUTPUT SHOULD ALREADY BE SCALED BY NUM_TIMESTEPS.
 
-        Output should be a numpy array of size |A| x |R|, where A
-        is number of age groups and |R| is number of risk groups.
+        Output should be a numpy array of size A x R, where A
+        is number of age groups and R is number of risk groups.
 
         Args:
             state (SubpopState):
@@ -1043,8 +1043,8 @@ class EpiMetric(StateVariable, ABC):
 
         Returns:
             np.ndarray:
-                size |A| x |R|, where |A| is the number of age groups and
-                |R| is number of risk groups.
+                size A x R, where A is the number of age groups and
+                R is number of risk groups.
         """
         pass
 
@@ -1380,8 +1380,6 @@ class SubpopModel(ABC):
     The "flow" and "physics" information are stored on the objects.
 
     Attributes:
-        interaction_terms (sc.objdict[str, InteractionTerm]):
-            objdict of all the subpop model's `InteractionTerm` instances.
         compartments (sc.objdict[str, Compartment]):
             objdict of all the subpop model's `Compartment` instances.
         transition_variables (sc.objdict[str, TransitionVariable]):
@@ -1454,10 +1452,8 @@ class SubpopModel(ABC):
                                                                                  self.transition_variables)
         self.epi_metrics = self.create_epi_metrics(self.transition_variables)
         self.dynamic_vals = self.create_dynamic_vals()
-        self.interaction_terms = self.create_interaction_terms()
 
-        self.all_state_variables = {**self.interaction_terms,
-                                    **self.compartments,
+        self.all_state_variables = {**self.compartments,
                                     **self.epi_metrics,
                                     **self.dynamic_vals,
                                     **self.schedules}
@@ -1466,7 +1462,6 @@ class SubpopModel(ABC):
         #   compartments, epi_metrics, dynamic_vals, and schedules --
         #   so that state can easily retrieve each object's
         #   current_val and store it
-        self.state.interaction_terms = self.interaction_terms
         self.state.compartments = self.compartments
         self.state.epi_metrics = self.epi_metrics
         self.state.dynamic_vals = self.dynamic_vals
@@ -1478,8 +1473,8 @@ class SubpopModel(ABC):
         """
         Returns:
             np.ndarray:
-                |A| x |R| array, where |A| is the number of age groups
-                and |R| is the number of risk groups, corresponding to
+                A x R array, where A is the number of age groups
+                and R is the number of risk groups, corresponding to
                 total population for that age-risk group (summed
                 over all compartments in the subpop model).
         """
@@ -1519,39 +1514,31 @@ class SubpopModel(ABC):
         return start_real_date
 
     @abstractmethod
-    def create_interaction_terms(self) -> sc.objdict[str, InteractionTerm]:
-        pass
-
-    @abstractmethod
     def create_compartments(self) -> sc.objdict[str, Compartment]:
-        pass
+        return sc.objdict()
 
     @abstractmethod
     def create_transition_variables(self,
                                     compartments_dict: sc.objdict[str, Compartment] = None) \
             -> sc.objdict[str, TransitionVariable]:
-        pass
+        return sc.objdict()
 
-    @abstractmethod
     def create_transition_variable_groups(self,
                                           compartments_dict: sc.objdict[str, Compartment] = None,
                                           transition_variables_dict: sc.objdict[str, TransitionVariable] = None) \
             -> sc.objdict[str, TransitionVariableGroup]:
-        pass
+        return sc.objdict()
 
-    @abstractmethod
     def create_epi_metrics(self,
                            transition_variables_dict: sc.objdict[str, TransitionVariable] = None)\
             -> sc.objdict[str, EpiMetric]:
-        pass
+        return sc.objdict()
 
-    @abstractmethod
     def create_dynamic_vals(self) -> sc.objdict[str, DynamicVal]:
-        pass
+        return sc.objdict()
 
-    @abstractmethod
     def create_schedules(self) -> sc.objdict[str, Schedule]:
-        pass
+        return sc.objdict()
 
     def modify_random_seed(self, new_seed_number) -> None:
         """
@@ -1773,8 +1760,7 @@ class SubpopModel(ABC):
         Update history of state variables other than `Schedule`
            instances -- schedules do not have history.
         """
-        for svar in self.interaction_terms.values() + \
-                    self.compartments.values() + \
+        for svar in self.compartments.values() + \
                     self.epi_metrics.values() + \
                     self.dynamic_vals.values():
             svar.save_history()

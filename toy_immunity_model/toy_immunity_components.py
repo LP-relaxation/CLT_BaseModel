@@ -30,10 +30,10 @@ from typing import Optional
 import clt_base as clt
 
 # The math for transitions is as follows:
-#   - S to I transition rate: I * beta / (total_pop_age_risk * (1 + inf_induced_inf_risk_constant * M +
-#                                                           vax_induced_inf_risk_constant * M_v))
+#   - S to I transition rate: I * beta / (total_pop_age_risk * (1 + inf_induced_inf_risk_reduce * M +
+#                                                           vax_induced_inf_risk_reduce * M_v))
 #   - I to H transition rate: I_to_H_rate * I_to_H_adjusted_prop /
-#                               (inf_induced_hosp_risk_constant * M + vax_induced_hosp_risk_constant * M_v))
+#                               (inf_induced_hosp_risk_reduce * M + vax_induced_hosp_risk_reduce * M_v))
 #   - I to R transition rate: I_to_R_rate * (1 - I_to_H_adjusted_prop)
 #   - H to R transition rate: H_to_R_rate
 #   - R to S transition rate: R_to_S_rate
@@ -63,10 +63,10 @@ class ToyImmunitySubpopParams(clt.SubpopParams):
     inf_induced_immune_wane: Optional[float] = None
     vax_induced_saturation: Optional[float] = None
     vax_induced_immune_wane: Optional[float] = None
-    inf_induced_inf_risk_constant: Optional[float] = None
-    inf_induced_hosp_risk_constant: Optional[float] = None
-    vax_induced_inf_risk_constant: Optional[float] = None
-    vax_induced_hosp_risk_constant: Optional[float] = None
+    inf_induced_inf_risk_reduce: Optional[float] = None
+    inf_induced_hosp_risk_reduce: Optional[float] = None
+    vax_induced_inf_risk_reduce: Optional[float] = None
+    vax_induced_hosp_risk_reduce: Optional[float] = None
     daily_vaccines: Optional[float] = None
 
 
@@ -91,8 +91,8 @@ class SusceptibleToInfected(clt.TransitionVariable):
         beta_adjusted = params.beta * (1 + params.humidity_impact * np.exp(-180 * state.absolute_humidity))
 
         return state.I * beta_adjusted / (params.total_pop_age_risk *
-                                        (1 + params.inf_induced_inf_risk_constant * state.M +
-                                         params.vax_induced_inf_risk_constant * state.Mv))
+                                        (1 + params.inf_induced_inf_risk_reduce * state.M +
+                                         params.vax_induced_inf_risk_reduce * state.Mv))
 
 
 class InfectedToHospitalized(clt.TransitionVariable):
@@ -101,8 +101,8 @@ class InfectedToHospitalized(clt.TransitionVariable):
                          state: ToyImmunitySubpopState,
                          params: ToyImmunitySubpopParams) -> np.ndarray:
         return params.I_to_H_rate * params.I_to_H_adjusted_prop / \
-               (1 + params.inf_induced_hosp_risk_constant * state.M +
-                params.vax_induced_hosp_risk_constant * state.Mv)
+               (1 + params.inf_induced_hosp_risk_reduce * state.M +
+                params.vax_induced_hosp_risk_reduce * state.Mv)
 
 
 class InfectedToRecovered(clt.TransitionVariable):

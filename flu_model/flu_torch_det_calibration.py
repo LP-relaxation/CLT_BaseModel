@@ -58,8 +58,8 @@ flu_torch.standardize_shapes(state,
 # state.save_current_vals_as_init_vals()
 
 # params.beta_baseline = torch.tensor(1.0538, dtype=torch.float32, requires_grad=True)
-# params.inf_induced_hosp_risk_constant = torch.tensor(0.9880, dtype=torch.float32, requires_grad=True)
-# params.vax_induced_hosp_risk_constant = torch.tensor(0.9235, dtype=torch.float32, requires_grad=True)
+# params.inf_induced_hosp_risk_reduce = torch.tensor(0.9880, dtype=torch.float32, requires_grad=True)
+# params.vax_induced_hosp_risk_reduce = torch.tensor(0.9235, dtype=torch.float32, requires_grad=True)
 
 true_H_history = flu_torch.simulate(state, params, 100).clone().detach()
 
@@ -75,8 +75,8 @@ true_H_history = flu_torch.simulate(state, params, 100).clone().detach()
 # state.reset_to_init_vals()
 #
 # params.beta_baseline = torch.tensor(1.5, dtype=torch.float32, requires_grad=True)
-# params.inf_induced_hosp_risk_constant = torch.tensor(1, dtype=torch.float32, requires_grad=True)
-# params.vax_induced_hosp_risk_constant = torch.tensor(1, dtype=torch.float32, requires_grad=True)
+# params.inf_induced_hosp_risk_reduce = torch.tensor(1, dtype=torch.float32, requires_grad=True)
+# params.vax_induced_hosp_risk_reduce = torch.tensor(1, dtype=torch.float32, requires_grad=True)
 #
 # full_history = flu_torch.simulate_full_history(state, params, 100)
 #
@@ -111,20 +111,20 @@ flu_torch.standardize_shapes(state,
                              params_indices)
 
 print(params.beta_baseline)
-print(params.inf_induced_hosp_risk_constant)
-print(params.vax_induced_hosp_risk_constant)
+print(params.inf_induced_hosp_risk_reduce)
+print(params.vax_induced_hosp_risk_reduce)
 
 params.beta_baseline = torch.tensor(0.5, dtype=torch.float32, requires_grad=True)
-params.inf_induced_hosp_risk_constant = torch.tensor(0.5, dtype=torch.float32, requires_grad=True)
-params.vax_induced_hosp_risk_constant = torch.tensor(0.5, dtype=torch.float32, requires_grad=True)
+params.inf_induced_hosp_risk_reduce = torch.tensor(0.5, dtype=torch.float32, requires_grad=True)
+params.vax_induced_hosp_risk_reduce = torch.tensor(0.5, dtype=torch.float32, requires_grad=True)
 
 optimizer = torch.optim.Adam([params.beta_baseline,
-                              params.inf_induced_hosp_risk_constant,
-                              params.vax_induced_hosp_risk_constant], lr=0.01)
+                              params.inf_induced_hosp_risk_reduce,
+                              params.vax_induced_hosp_risk_reduce], lr=0.01)
 
 beta_baseline_opt_history = []
-inf_induced_hosp_risk_constant_opt_history = []
-vax_induced_hosp_risk_constant_opt_history = []
+inf_induced_hosp_risk_reduce_opt_history = []
+vax_induced_hosp_risk_reduce_opt_history = []
 
 fitting_start_time = time.time()
 
@@ -136,15 +136,15 @@ for i in range(100):
     loss.backward()
     optimizer.step()
     beta_baseline_opt_history.append(params.beta_baseline.clone().detach())
-    inf_induced_hosp_risk_constant_opt_history.append(params.inf_induced_hosp_risk_constant.clone().detach())
-    vax_induced_hosp_risk_constant_opt_history.append(params.vax_induced_hosp_risk_constant.clone().detach())
+    inf_induced_hosp_risk_reduce_opt_history.append(params.inf_induced_hosp_risk_reduce.clone().detach())
+    vax_induced_hosp_risk_reduce_opt_history.append(params.vax_induced_hosp_risk_reduce.clone().detach())
 
 print(time.time() - fitting_start_time)
 
 state.reset_to_init_vals()
 params.beta_baseline = torch.tensor(0.6560, dtype=torch.float32, requires_grad=True)
-params.inf_induced_hosp_risk_constant = torch.tensor(0.8790, dtype=torch.float32, requires_grad=True)
-params.vax_induced_hosp_risk_constant = torch.tensor(0.9016, dtype=torch.float32, requires_grad=True)
+params.inf_induced_hosp_risk_reduce = torch.tensor(0.8790, dtype=torch.float32, requires_grad=True)
+params.vax_induced_hosp_risk_reduce = torch.tensor(0.9016, dtype=torch.float32, requires_grad=True)
 
 fitted_H_history = flu_torch.simulate(state, params, 200)
 
@@ -160,19 +160,19 @@ plt.show()
 breakpoint()
 
 plt.clf()
-plt.plot(inf_induced_hosp_risk_constant_opt_history, label="Estimated inf_induced_hosp_risk_constant")
+plt.plot(inf_induced_hosp_risk_reduce_opt_history, label="Estimated inf_induced_hosp_risk_reduce")
 plt.axhline(y = 1, color = 'b', label = 'True value')
 plt.legend()
-plt.savefig("inf_induced_hosp_risk_constant_plot.png", dpi=1200)
+plt.savefig("inf_induced_hosp_risk_reduce_plot.png", dpi=1200)
 plt.show()
 
 breakpoint()
 
 plt.clf()
-plt.plot(vax_induced_hosp_risk_constant_opt_history, label="Estimated vax_induced_hosp_risk_constant")
+plt.plot(vax_induced_hosp_risk_reduce_opt_history, label="Estimated vax_induced_hosp_risk_reduce")
 plt.axhline(y = 4, color = 'b', label = 'True value')
 plt.legend()
-plt.savefig("vax_induced_hosp_risk_constant_plot.png", dpi=1200)
+plt.savefig("vax_induced_hosp_risk_reduce_plot.png", dpi=1200)
 plt.show()
 
 breakpoint()

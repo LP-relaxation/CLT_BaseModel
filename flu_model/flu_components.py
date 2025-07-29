@@ -14,6 +14,7 @@ import torch
 import clt_base as clt
 
 from flu_data_structures import FluMetapopParamsTensors, FluMetapopStateTensors, FluPrecomputedTensors
+from flu_travel_functions import compute_travel_wtd_infectious
 
 base_path = Path(__file__).parent.parent / "flu_demo_input_files"
 
@@ -29,8 +30,8 @@ class FluSubpopParams(clt.SubpopParams):
     Data container for pre-specified and fixed epidemiological
     parameters in FluModel flu model.
 
-    Each field of datatype np.ndarray must be |A| x |R|,
-    where |A| is the number of age groups and |R| is the number of
+    Each field of datatype np.ndarray must be A x R,
+    where A is the number of age groups and R is the number of
     risk groups. Note: this means all arrays should be 2D.
     See FluSubpopState docstring for important formatting note
     on 2D arrays.
@@ -127,19 +128,19 @@ class FluSubpopParams(clt.SubpopParams):
         contact_mult_symp (positive float in [0,1]):
             multiplier to reduce contact rate of symptomatic individuals
         total_contact_matrix (np.ndarray of positive floats):
-            |A| x |A| contact matrix (where |A| is the number
+            A x A contact matrix (where A is the number
             of age groups), where element i,j is the average
             contacts from age group j that an individual in
             age group i has
         school_contact_matrix (np.ndarray of positive floats):
-            |A| x |A| contact matrix (where |A| is the number
+            A x A contact matrix (where A is the number
             of age groups), where element i,j is the average
             contacts from age group j that an individual in
             age group i has at school -- this matrix plus the
             work_contact_matrix must be less than the
             total_contact_matrix, element-wise
         work_contact_matrix (np.ndarray of positive floats):
-            |A| x |A| contact matrix (where |A| is the number
+            A x A contact matrix (where A is the number
             of age groups), where element i,j is the average
             contacts from age group j that an individual in
             age group i has at work -- this matrix plus the
@@ -150,6 +151,11 @@ class FluSubpopParams(clt.SubpopParams):
             class for more information. This will be deleted once
             we have historical vaccine data and set up the
             `DailyVaccines` `Schedule` properly.
+        travel_proportions (np.ndarray):
+            L x L array of floats in [0,1], where L is the number
+            of locations (subpopulations), and the i-jth element
+            is the proportion of people in subpopulation i that
+            travel to subpopulation j.
 
     """
 
@@ -185,6 +191,7 @@ class FluSubpopParams(clt.SubpopParams):
 
     IP_relative_inf: Optional[float] = None
     IA_relative_inf: Optional[float] = None
+
     relative_suscept_by_age: Optional[np.ndarray] = None
 
     prop_time_away_by_age: Optional[np.ndarray] = None
@@ -196,6 +203,7 @@ class FluSubpopParams(clt.SubpopParams):
     work_contact_matrix: Optional[np.ndarray] = None
 
     daily_vaccines_constant: Optional[int] = None
+    travel_proportions: Optional[np.ndarray] = None
 
 
 @dataclass
@@ -205,8 +213,8 @@ class FluSubpopState(clt.SubpopState):
     Compartment initial values and EpiMetric initial values
     in FluModel flu model.
 
-    Each field below should be |A| x |R| np.ndarray, where
-    |A| is the number of age groups and |R| is the number of risk groups.
+    Each field below should be A x R np.ndarray, where
+    A is the number of age groups and R is the number of risk groups.
     Note: this means all arrays should be 2D. Even if there is
     1 age group and 1 risk group (no group stratification),
     each array should be 1x1, which is two-dimensional.
@@ -251,7 +259,7 @@ class FluSubpopState(clt.SubpopState):
             used as seasonality parameter that influences
             transmission rate beta_baseline.
         flu_contact_matrix (np.ndarray of positive floats):
-            |A| x |A| array, where |A| is the number of age
+            A x A array, where A is the number of age
             groups -- element (a, a') corresponds to the number 
             of contacts that a person in age group a
             has with people in age-risk group a'.
@@ -259,10 +267,6 @@ class FluSubpopState(clt.SubpopState):
             starting value of DynamicVal "beta_reduce" on
             starting day of simulation -- this DynamicVal
             emulates a simple staged-alert policy
-        force_of_infection (np.ndarray of positive floats):
-            total force of infection from movement within
-            home location, travel to other locations,
-            and visitors from other locations
         daily_vaccines (np.ndarray of positive ints):
             holds current value of DailyVaccines instance,
             corresponding number of individuals who received influenza
@@ -285,7 +289,6 @@ class FluSubpopState(clt.SubpopState):
     absolute_humidity: Optional[float] = None
     flu_contact_matrix: Optional[np.ndarray] = None
     beta_reduce: Optional[float] = 0.0
-    force_of_infection: Optional[np.ndarray] = None
 
     daily_vaccines: Optional[np.ndarray] = None
 
@@ -304,12 +307,18 @@ class SusceptibleToExposed(clt.TransitionVariable):
 
     This is the most complicated transition variable in the
     flu model. If using metapopulation model (travel model), then
-    the rate depends on the `force_of_infection` attribute,
+    the rate depends on the `travel_wtd_infectious` attribute,
     which is a function of other subpopulations' states and
     parameters, and travel between subpopulations.
 
     If there is no metapopulation model, the rate
     is much simpler.
+
+    Attributes:
+        travel_wtd_infectious (np.ndarray of positive floats):
+            weighted infectious count (exposure) from movement
+            within home location, travel to other locations,
+            and visitors from other locations
 
     See parent class docstring for other attributes.
     """
@@ -325,24 +334,29 @@ class SusceptibleToExposed(clt.TransitionVariable):
                          transition_type,
                          is_jointly_distributed)
 
-        self.force_of_infection = None
+        self.travel_wtd_infectious = None
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
 
-        # If `force_of_infection` has not been updated,
+        # If `travel_wtd_infectious` has not been updated,
         #   then there is no travel model -- so, simulate
         #   this subpopulation entirely independently and
         #   use the simplified transition rate that does not
         #   depend on travel dynamics
 
-        if state.force_of_infection is not None:
-            return state.force_of_infection
+        beta_adjusted = compute_beta_adjusted(state, params)
+
+        immune_force = compute_immunity_force(state, params)
+
+        if self.travel_wtd_infectious is not None:
+            return beta_adjusted * self.travel_wtd_infectious / immune_force
+
         else:
             wtd_presymp_asymp = compute_wtd_presymp_asymp(state, params)
 
-            return compute_common_coeff_force_of_infection(state, params) * \
+            return (beta_adjusted / (immune_force)) * \
                    np.matmul(state.flu_contact_matrix,
                              np.divide(np.reshape(np.sum(state.IS, axis=1), (2, 1)) + wtd_presymp_asymp,
                                        compute_pop_by_age(params)))
@@ -727,7 +741,7 @@ def compute_wtd_presymp_asymp(subpop_state: FluSubpopState,
 
     Returns:
         np.ndarray:
-            |A| x 1 array -- where |A| is the number of age
+            A x 1 array -- where A is the number of age
             groups -- the ith element corresponds to the
             weighted sum of presymptomatic and asymptomatic
             individuals, also summed across all risk groups,
@@ -750,8 +764,8 @@ def compute_immunity_force(subpop_state: FluSubpopState,
     travel model calculations.
 
     Returns:
-        |A| x |R| array -- where |A| is the number of age groups
-        and |R| is the number of risk groups -- representing
+        A x R array -- where A is the number of age groups
+        and R is the number of risk groups -- representing
         the force of population-level immunity against infection
         -- used in the denominator of many computations
     """
@@ -766,34 +780,21 @@ def compute_immunity_force(subpop_state: FluSubpopState,
                 subpop_state.M)
 
 
-def compute_common_coeff_force_of_infection(subpop_state: FluSubpopState,
-                                            subpop_params: FluSubpopParams) -> np.ndarray:
+def compute_beta_adjusted(subpop_state: FluSubpopState,
+                          subpop_params: FluSubpopParams) -> np.ndarray:
     """
-    Computes a coefficient that shows up repeatedly in
-    travel model calculations.
-
-    Returns:
-        np.ndarray:
-            |A| x |R| array -- where |A| is the number of age groups
-            and |R| is the number of risk groups -- representing
-            a kind of baseline transmission rate, adjusted for
-            population-level immunity -- used as the coefficient of
-            many computations
+    Computes humidity-adjusted beta
     """
 
-    beta = subpop_params.beta_baseline * (1 + subpop_params.humidity_impact *
+    return subpop_params.beta_baseline * (1 + subpop_params.humidity_impact *
                                           np.exp(-180 * subpop_state.absolute_humidity))
-    relative_suscept_by_age = subpop_params.relative_suscept_by_age
-    immunity_force = compute_immunity_force(subpop_state, subpop_params)
-
-    return beta * np.divide(relative_suscept_by_age, immunity_force)
 
 
 def compute_pop_by_age(subpop_params: FluSubpopParams) -> np.ndarray:
     """
     Returns:
         np.ndarray:
-            |A| x 1 array -- where |A| is the number of age groups --
+            A x 1 array -- where A is the number of age groups --
             where ith element corresponds to total population
             (across all compartments, including "D", and across all risk groups)
             in age group i
@@ -931,20 +932,6 @@ class FluSubpopModel(clt.SubpopModel):
         #   (redundant) because the parent class SubpopModel's __init__()
         #   creates deep copies.
         super().__init__(state, params, config, RNG, name)
-
-    def create_interaction_terms(self) -> sc.objdict[str, clt.InteractionTerm]:
-
-        # Create interaction terms
-        # If there is no associated `MetapopModel`, then
-        #   there is no travel model, so do not create `ForceOfInfection`
-        #   instance -- there are no interaction terms for this `SubpopModel`.
-
-        interaction_terms = sc.objdict()
-
-        if self.metapop_model:
-            interaction_terms["force_of_infection"] = ForceOfInfection(self.name)
-
-        return interaction_terms
 
     def create_compartments(self) -> sc.objdict[str, clt.Compartment]:
 
@@ -1090,49 +1077,89 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         super().__init__(subpop_models,
                          name)
 
-        params_tensors = self.create_params_tensors(subpop_models)
+        self.state_tensors = FluMetapopStateTensors()
+        self.update_state_tensors()
+
+        params_tensors = self.create_params_tensors()
+        params_tensors.num_locations = torch.tensor(len(subpop_models))
         params_tensors.standardize_shapes()
 
         self.params_tensors = params_tensors
 
-        self.state_tensors = FluMetapopStateTensors()
+        self.precomputed = FluPrecomputedTensors(self.state_tensors,
+                                                 self.params_tensors)
 
+    def create_params_tensors(self) -> FluMetapopParamsTensors:
 
-    def create_params_tensors(self,
-                              subpop_models: list) -> FluMetapopParamsTensors:
+        subpop_models = self.subpop_models
 
         params_tensors = FluMetapopParamsTensors()
 
         for name in vars(subpop_models[0].params).keys():
 
-            metapop_params = []
+            metapop_vals = []
 
-            for model in subpop_models:
+            for model in subpop_models.values():
 
-                metapop_params.append(getattr(model.params, name))
+                metapop_vals.append(getattr(model.params, name))
 
-            # If all values are scalars and equal to each other, then
-            #   simply store a scalar (since its value is common
+            # If all values are equal to each other, then
+            #   simply store the first value (since its value is common
             #   across metapopulations)
-            if all(isinstance(x, (int, float)) for x in metapop_params):
-                first_val = metapop_params[0]
-                if all(x == first_val for x in metapop_params):
-                    metapop_params = first_val  # Collapse to scalar
-                    setattr(params_tensors, name, torch.tensor(metapop_params))
-            else:
-                # torch `UserWarning`: creating a tensor from a list of numpy.ndarrays is extremely slow.
-                #   Please consider converting the list to a single numpy.ndarray with numpy.array()
-                #   before converting to a tensor.
-                # Soooo we converted the list to an array!
-                setattr(params_tensors, name, torch.tensor(np.asarray(metapop_params)))
+            first_val = metapop_vals[0]
+            if all(np.allclose(x, first_val) for x in metapop_vals):
+                metapop_vals = first_val
+
+            # Converting list of arrays to tensors is slow --
+            #   better to convert to array first
+            if isinstance(metapop_vals, list):
+                metapop_vals = np.array(metapop_vals)
+
+            setattr(params_tensors, name, torch.tensor(metapop_vals))
 
         return params_tensors
 
-    def update_state_tensors(self):
+    def update_state_tensors(self) -> None:
 
-        for model in self.subpop_models:
+        subpop_models = self.subpop_models
+
+        for name in vars(self.state_tensors).keys():
+
+            # FluMetapopStateTensors has an attribute
+            #   that is a dictionary called `init_vals` --
+            #   disregard, as this only used to store
+            #   initial values for resetting, but is not
+            #   used in the travel model computation
+            if name == "init_vals":
+                continue
+
+            metapop_vals = []
+
+            for model in subpop_models.values():
+
+                current_val = getattr(model.state, name)
+
+                metapop_vals.append(current_val)
+
+            setattr(self.state_tensors, name, torch.tensor(np.asarray(metapop_vals)))
+
+    def apply_inter_subpop_updates(self) -> None:
+
+        self.update_state_tensors()
+
+        travel_wtd_infectious = compute_travel_wtd_infectious(self.state_tensors,
+                                                              self.params_tensors,
+                                                              self.precomputed)
+
+        # Again, `self.subpop_models` is an ordered dictionary --
+        #   so iterating over the dictionary like this is well-defined
+        #   and responsible -- the order is important because it
+        #   determines the order (index) in any metapopulation tensors
+        subpop_models = self.subpop_models
+
+        for i in range(len(subpop_models)):
+
+            subpop_models.values()[i].transition_variables.S_to_E.travel_wtd_infectious = \
+                np.squeeze(travel_wtd_infectious[i,:,:], axis=0)
 
 
-
-    def apply_inter_subpop_updates(self):
-        pass

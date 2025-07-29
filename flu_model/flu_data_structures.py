@@ -59,17 +59,17 @@ class FluMetapopParamsTensors:
 
     inf_induced_saturation: torch.Tensor = None
     inf_induced_immune_wane: torch.Tensor = None
-    inf_induced_inf_risk_constant: torch.Tensor = None
-    inf_induced_hosp_risk_constant: torch.Tensor = None
-    inf_induced_death_risk_constant: torch.Tensor = None
+    inf_induced_inf_risk_reduce: torch.Tensor = None
+    inf_induced_hosp_risk_reduce: torch.Tensor = None
+    inf_induced_death_risk_reduce: torch.Tensor = None
 
     vax_induced_saturation: torch.Tensor = None
     vax_induced_immune_wane: torch.Tensor = None
-    vax_induced_inf_risk_constant: torch.Tensor = None
-    vax_induced_hosp_risk_constant: torch.Tensor = None
-    vax_induced_death_risk_constant: torch.Tensor = None
+    vax_induced_inf_risk_reduce: torch.Tensor = None
+    vax_induced_hosp_risk_reduce: torch.Tensor = None
+    vax_induced_death_risk_reduce: torch.Tensor = None
 
-    daily_vaccines: torch.Tensor = None
+    daily_vaccines_constant: torch.Tensor = None
 
     total_contact_matrix: torch.Tensor = None
     school_contact_matrix: torch.Tensor = None
@@ -78,10 +78,10 @@ class FluMetapopParamsTensors:
     IP_relative_inf: torch.Tensor = None
     IA_relative_inf: torch.Tensor = None
 
-    relative_suscept: torch.Tensor = None
-    prop_time_away: torch.Tensor = None
+    relative_suscept_by_age: torch.Tensor = None
+    prop_time_away_by_age: torch.Tensor = None
 
-    travel_proportions_array: torch.Tensor = None
+    travel_proportions: torch.Tensor = None
 
     def standardize_shapes(self) -> None:
         """
@@ -92,7 +92,7 @@ class FluMetapopParamsTensors:
         Special variables that are exempted:
             - `total_contact_matrix`, `school_contact_matrix`,
                 `work_contact_matrix` -- all of these must be dimension A x A
-            - `travel_proportions_array`: this must be L x L
+            - `travel_proportions`: this must be L x L
 
         Valid values for the `indices_dict` are: "age", "age_risk",
             "location", and "location_age" -- other combinations
@@ -118,7 +118,7 @@ class FluMetapopParamsTensors:
             # This includes:
             #   "school_contact_matrix",
             #   "work_contact_matrix",
-            #   "travel_proportions_array"
+            #   "travel_proportions"
             elif "contact_matrix" in name:
                 # Need nested if-statements because user may
                 #   have already converted contact matrix to L x A x A
@@ -127,7 +127,7 @@ class FluMetapopParamsTensors:
                         raise Exception(str(name) + error_str)
                     setattr(self, name, value.view(1, A, A).expand(L, A, A))
 
-            elif name == "travel_proportions_array":
+            elif name == "travel_proportions":
                 if value.size() != torch.Size([L, L]):
                     raise Exception(str(name) + error_str)
 
@@ -142,6 +142,9 @@ class FluMetapopParamsTensors:
             elif value.size() == torch.Size([L]):
                 setattr(self, name, value.view(L, 1, 1).expand(L, A, R))
 
+            elif value.size() == torch.Size([A, R]):
+                setattr(self, name, value.view(1, A, R).expand(L, A, R))
+
 
 class FluPrecomputedTensors:
     """
@@ -152,14 +155,17 @@ class FluPrecomputedTensors:
     def __init__(self,
                  state: FluMetapopStateTensors,
                  params: FluMetapopParamsTensors) -> None:
-        self.total_pop_LAR = torch.tensor(state.S +
-                                          state.E +
-                                          state.IP +
-                                          state.IS +
-                                          state.IA +
-                                          state.H +
-                                          state.R +
-                                          state.D)
+
+        self.total_pop_LAR = self.total_pop_LAR = (
+            state.S +
+            state.E +
+            state.IP +
+            state.IS +
+            state.IA +
+            state.H +
+            state.R +
+            state.D
+        ).clone().detach()
 
         self.L = int(params.num_locations.item())
         self.A = int(params.num_age_groups.item())
@@ -168,7 +174,7 @@ class FluPrecomputedTensors:
         self.total_pop_LA = torch.sum(self.total_pop_LAR, dim=2)
 
         # Remove the diagonal!
-        self.nonlocal_travel_prop = params.travel_proportions_array.clone().fill_diagonal_(0.0)
+        self.nonlocal_travel_prop = params.travel_proportions.clone().fill_diagonal_(0.0)
 
         # We don't need einsum for residents traveling
         #   -- Dave and Remy helped me check this

@@ -32,7 +32,7 @@ from collections import defaultdict
 from dataclasses import dataclass, fields, field
 
 from flu_data_structures import FluMetapopStateTensors, FluMetapopParamsTensors, FluPrecomputedTensors
-from flu_travel_functions import compute_total_foi
+from flu_travel_functions import compute_travel_wtd_infectious
 
 base_path = Path(__file__).parent / "flu_torch_input_files"
 
@@ -81,9 +81,9 @@ def compute_S_to_E(state: FluMetapopStateTensors,
 
     beta_adjusted = compute_beta_adjusted(state, params, day_counter)
 
-    force_of_infection = compute_total_foi(state, params, precomputed, beta_adjusted)
+    travel_wtd_infectious = compute_travel_wtd_infectious(state, params, precomputed)
 
-    if force_of_infection.size() != torch.Size([precomputed.L,
+    if travel_wtd_infectious.size() != torch.Size([precomputed.L,
                                                 precomputed.A,
                                                 precomputed.R]):
         raise Exception("force_of_infection must be L x A x R corresponding \n"
@@ -92,9 +92,9 @@ def compute_S_to_E(state: FluMetapopStateTensors,
 
     # print("FOI", force_of_infection.sum())
 
-    S_to_E = state.S * force_of_infection / \
-             (precomputed.total_pop_LAR * (1 + params.inf_induced_inf_risk_constant * state.M +
-                                           params.vax_induced_inf_risk_constant * state.Mv))
+    S_to_E = state.S * beta_adjusted * travel_wtd_infectious / \
+             (precomputed.total_pop_LAR * (1 + params.inf_induced_inf_risk_reduce * state.M +
+                                           params.vax_induced_inf_risk_reduce * state.Mv))
 
     return S_to_E
 
@@ -125,8 +125,8 @@ def compute_IS_to_R(state: FluMetapopStateTensors, params: FluMetapopParamsTenso
 
 def compute_IS_to_H(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
     IS_to_H = state.IS * params.IS_to_H_rate * params.IS_to_H_adjusted_prop / \
-              (1 + params.inf_induced_hosp_risk_constant * state.M +
-               params.vax_induced_hosp_risk_constant * state.Mv)
+              (1 + params.inf_induced_hosp_risk_reduce * state.M +
+               params.vax_induced_hosp_risk_reduce * state.Mv)
 
     return IS_to_H
 
@@ -145,8 +145,8 @@ def compute_H_to_R(state: FluMetapopStateTensors, params: FluMetapopParamsTensor
 
 def compute_H_to_D(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
     H_to_D = state.H * params.H_to_D_rate * params.H_to_D_adjusted_prop / \
-             (1 + params.inf_induced_death_risk_constant * state.M +
-              params.vax_induced_death_risk_constant * state.Mv)
+             (1 + params.inf_induced_death_risk_reduce * state.M +
+              params.vax_induced_death_risk_reduce * state.Mv)
 
     return H_to_D
 

@@ -36,5 +36,8 @@
 	"prop_time_away_by_age": [[0.3],[0.2]],
 	"contact_mult_travel":1.0,
 	"contact_mult_symp": 1.0,
-	"daily_vaccines_constant": 100
+	"daily_vaccines_constant": 100,
+	"travel_proportions":
+		[[0.4,0.05],
+		[0.01,0.4]]
 }
