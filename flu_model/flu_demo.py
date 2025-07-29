@@ -1,5 +1,4 @@
 # Simple demo with flu model with "toy" (not fitted or realistic) parameters
-# Wastewater addition from Sonny is still in progress
 
 ###########################################################
 ######################## IMPORTS ##########################
@@ -17,7 +16,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import clt_base as clt
 
 # Import flu model module, which contains customized subclasses
-import flu_components as flu
+from flu_model import flu_components as flu
 
 ###########################################################
 ################# READ INPUT FILES ########################
@@ -100,19 +99,15 @@ south.params.beta_baseline = 10
 ############# CREATE METAPOPULATION MODEL #################
 ###########################################################
 
-# Create FluInterSubpopRepo instance that manages the subpopulation models
-#   and the travel dynamics that link them together
-flu_inter_subpop_repo = flu.FluInterSubpopRepo({"north": north, "south": south},
-                                               travel_proportions["subpop_names_mapping"],
-                                               travel_proportions["travel_proportions_array"])
-
 # Combine two subpopulations into one metapopulation model (travel model)
-flu_demo_model = flu.FluMetapopModel(flu_inter_subpop_repo)
+flu_demo_model = flu.FluMetapopModel([north, south])
+
+test = flu_demo_model.create_params_tensors([north, south])
+
+breakpoint()
 
 # Display written forms of both subpopulation models
 # Check that model inputs are properly formatted and sensible
-flu_demo_model.display()
-flu_demo_model.run_model_checks()
 
 ###########################################################
 ################# SIMULATE & ANALYZE ######################

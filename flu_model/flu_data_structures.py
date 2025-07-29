@@ -4,6 +4,7 @@ from dataclasses import dataclass, fields, field
 
 @dataclass
 class FluMetapopStateTensors:
+
     S: torch.Tensor = None
     E: torch.Tensor = None
     IP: torch.Tensor = None
@@ -35,7 +36,7 @@ class FluMetapopStateTensors:
 
 @dataclass
 class FluMetapopParamsTensors:
-    dt: float = None
+
     num_locations: int = None
     num_age_groups: int = None
     num_risk_groups: int = None
@@ -79,10 +80,70 @@ class FluMetapopParamsTensors:
 
     relative_suscept: torch.Tensor = None
     prop_time_away: torch.Tensor = None
+
     travel_proportions_array: torch.Tensor = None
 
+    def standardize_shapes(self) -> None:
+        """
+        If field is not a scalar or L x A x R, or is not a special variable
+            listed below, then apply dimension expansion so that fields are
+            L x A x R for tensor multiplication.
 
-class PrecomputedTensors:
+        Special variables that are exempted:
+            - `total_contact_matrix`, `school_contact_matrix`,
+                `work_contact_matrix` -- all of these must be dimension A x A
+            - `travel_proportions_array`: this must be L x L
+
+        Valid values for the `indices_dict` are: "age", "age_risk",
+            "location", and "location_age" -- other combinations
+            are not considered because they do not make sense --
+            we assume that we only have risk IF we have age, for example
+        """
+
+        L = int(self.num_locations.item())
+        A = int(self.num_age_groups.item())
+        R = int(self.num_risk_groups.item())
+
+        error_str = "Each SubpopParams field's size must be scalar or L x A x R " \
+                    "(for location-age-risk groups)  -- please check files " \
+                    "and inputs, then try again."
+
+        for name, value in vars(self).items():
+
+            # Ignore the field that corresponds to a dictionary
+            if name == "init_vals":
+                continue
+
+            # Contact matrices should be A x A
+            # This includes:
+            #   "school_contact_matrix",
+            #   "work_contact_matrix",
+            #   "travel_proportions_array"
+            elif "contact_matrix" in name:
+                # Need nested if-statements because user may
+                #   have already converted contact matrix to L x A x A
+                if value.size() != torch.Size([L, A, A]):
+                    if value.size() != torch.Size([A, A]):
+                        raise Exception(str(name) + error_str)
+                    setattr(self, name, value.view(1, A, A).expand(L, A, A))
+
+            elif name == "travel_proportions_array":
+                if value.size() != torch.Size([L, L]):
+                    raise Exception(str(name) + error_str)
+
+            # If scalar or already L x A x R, do not need to adjust
+            #   dimensions
+            elif value.size() == torch.Size([]):
+                continue
+
+            elif value.size() == torch.Size([L, A, R]):
+                continue
+
+            elif value.size() == torch.Size([L]):
+                setattr(self, name, value.view(L, 1, 1).expand(L, A, R))
+
+
+class FluPrecomputedTensors:
     """
     Stores precomputed quantities that are repeatedly
     used, for computational efficiency.

@@ -110,60 +110,6 @@ class SubpopParams(ABC):
     pass
 
 
-class InterSubpopRepo(ABC):
-    """
-    Holds collection of `SubpopState` instances, with
-        actions to query and interact with them.
-
-    Attributes:
-        subpop_models (sc.objdict):
-            keys are unique names of subpopulation models,
-            values are their respective `SubpopModel` instances --
-            this dictionary contains all `SubpopModel` instances
-            that comprise a `MetapopModel` instance.
-    """
-
-    def __init__(self,
-                 subpop_models: Optional[dict] = None):
-        self.subpop_models = sc.objdict(subpop_models)
-
-        # The "name" argument for instantiating a SubpopModel
-        #   is optional -- but SubpopModel instances must have
-        #   names when used in a MetapopModel
-        # So, we assign names to each SubpopModel based on
-        #   the keys of the dictionary that creates the InterSubpopRepo
-        for name, model in subpop_models.items():
-            model.name = name
-
-    @abstractmethod
-    def compute_shared_quantities(self):
-        """
-        Subclasses must provide concrete implementation. This method
-        is called by the `MetapopModel` instance at the beginning of
-        each simulation day, before each `SubpopModel` simulates that day.
-
-        Note: often, `InteractionTerm`s across `SubpopModel`s share similar
-        terms in their computation. This `self.compute_shared_quantities`
-        method computes such similar terms up front to reduce redundant
-        computation.
-        """
-
-        pass
-
-    def update_all_interaction_terms(self):
-        """
-        Updates `SubpopState` of each `SubpopModel` in
-        `self.subpop_models` to reflect current values of each
-        `InteractionTerm` on that `SubpopModel`.
-        """
-
-        for subpop_model in self.subpop_models.values():
-            for iterm in subpop_model.interaction_terms.values():
-                iterm.update_current_val(self,
-                                         subpop_model.params)
-            subpop_model.state.sync_to_current_vals(subpop_model.interaction_terms)
-
-
 @dataclass
 class SubpopState(ABC):
     """
@@ -1217,12 +1163,6 @@ class InteractionTerm(StateVariable, ABC):
     `SubpopState`). These variables are functions of how subpopulations
     interact.
 
-    In contrast to other state variables, each `InteractionTerm`
-    takes in an `InterSubpopRepo` instance to update its `self.current_val`.
-    Other state variables that are "local" and depend on
-    exactly one subpopulation only need to take in one `SubpopState`
-    and one `SubpopParams` instance to update its current value.
-
     Inherits attributes from `StateVariable`.
 
     See `__init__` docstring for other attributes.
@@ -1230,16 +1170,13 @@ class InteractionTerm(StateVariable, ABC):
 
     @abstractmethod
     def update_current_val(self,
-                           inter_subpop_repo: InterSubpopRepo,
+                           subpop_state: SubpopState,
                            subpop_params: SubpopParams) -> None:
         """
         Subclasses must provide a concrete implementation of
         updating `self.current_val` in-place.
 
         Args:
-            inter_subpop_repo (InterSubpopRepo):
-                manages collection of subpop models with
-                methods for querying information.
             subpop_params (SubpopParams):
                 holds values of subpopulation's epidemiological parameters.
         """
@@ -1252,53 +1189,34 @@ class MetapopModel(ABC):
     Abstract base class that bundles `SubpopModel`s linked using
         a travel model.
 
-    Params:
-        inter_subpop_repo (InterSubpopRepo):
-            Accesses and manages `SubpopState` instances
-            of corresponding `SubpopModel`s, and provides
-            methods to query current values.
-
     See `__init__` docstring for other attributes.
     """
 
     def __init__(self,
-                 inter_subpop_repo,
+                 subpop_models: list = [],
                  name: str = ""):
         """
         Params:
-            inter_subpop_repo (InterSubpopRepo):
-                manages collection of subpopulation models with
-                methods for querying information.
             name (str):
                 unique identifier for `MetapopModel`.
         """
 
-        self.subpop_models = inter_subpop_repo.subpop_models
+        # Ordered dictionary to preserve the order!
+        #   Because the order of the subpopulation model
+        #   in `subpop_models` is important, since it
+        #   determines the corresponding index in the
+        #   state and params tensors!
+        subpop_models_dict = sc.odict()
 
-        self.inter_subpop_repo = inter_subpop_repo
+        for model in subpop_models:
+            subpop_models_dict[model.name] = model
+
+        self.subpop_models = subpop_models_dict
 
         self.name = name
 
         for model in self.subpop_models.values():
             model.metapop_model = self
-            model.interaction_terms = model.create_interaction_terms()
-            model.state.interaction_terms = model.interaction_terms
-
-    def extract_states_dict_from_models_dict(self,
-                                             models_dict: sc.objdict) -> sc.objdict:
-        """
-        (Currently unused utility function.)
-
-        Takes objdict of subpop models, where keys are subpop model names and
-            values are the subpop model instances, and returns objdict of
-            subpop model states, where keys are subpop model names and
-            values are the subpop model `SubpopState` instances.
-        """
-
-        states_dict = \
-            sc.objdict({name: model.state for name, model in models_dict.items()})
-
-        return states_dict
 
     def simulate_until_day(self,
                            simulation_end_day: int) -> None:
@@ -1316,17 +1234,19 @@ class MetapopModel(ABC):
 
         - First, each `SubpopModel` updates its daily state (computing
             `Schedule` and `DynamicVal` instances).
-        - Second, the `MetapopModel`'s `InterSubpopRepo` computes any shared
-            terms used across subpopulations (to reduce computational overhead),
-            and then updates each `SubpopModel`'s associated `InteractionTerm`
-            instances.
+        - Second, the `MetapopModel` computes quantities that depend
+            on more than one subpopulation (i.e. inter-subpop quantities,
+            such as the force of infection to each subpopulation in a travel
+            model, where these terms depend on the number infected in
+            other subpopulations) and then applies the update to each
+            `SubpopModel` according to the user-implemented method
+            `apply_inter_subpop_updates.`
         - Third, each `SubpopModel` simulates discretized timesteps (sampling
             `TransitionVariable`s, updating `EpiMetric`s, and updating `Compartment`s).
 
-        Note: we only update the `InterSubpopRepo` shared quantities
-            once a day, not at every timestep -- in other words,
-            the travel model state-dependent values are only updated daily
-            -- this is to avoid severe computation inefficiency
+        Note: we only update inter-subpop quantities once a day, not at every timestep
+            -- in other words, the travel model state-dependent values are only
+            updated daily -- this is to avoid severe computation inefficiency
 
         Args:
             simulation_end_day (positive int):
@@ -1350,8 +1270,7 @@ class MetapopModel(ABC):
             for subpop_model in self.subpop_models.values():
                 subpop_model.prepare_daily_state()
 
-            self.inter_subpop_repo.compute_shared_quantities()
-            self.inter_subpop_repo.update_all_interaction_terms()
+            self.apply_inter_subpop_updates()
 
             for subpop_model in self.subpop_models.values():
 
@@ -1365,14 +1284,25 @@ class MetapopModel(ABC):
 
                 subpop_model.increment_simulation_day()
 
-    def display(self):
+
+    @abstractmethod
+    def apply_inter_subpop_updates(self):
+
         """
-        Prints structure (compartments and linkages), transition variables,
-        epi metrics, schedules, and dynamic values for each `SubpopModel`
-        instance in `self.subpop_models`.
+        MetapopModel classes must provide a concrete implementation of
+        this method.
+
+        Once a day (not for each discretized timestep), after each
+        SubpopModel's daily state is prepared, and before each SubpopModel's
+        discretized transitions are computed, the MetapopModel calls this
+        method to compute quantities that depend on multiple subpopulations
+        (e.g. this is where a travel model should be implemented).
+
+        See `simulate_until_day` method for more details.
         """
-        for subpop_model in self.subpop_models.values():
-            subpop_model.display()
+
+        pass
+
 
     def reset_simulation(self):
         """
@@ -1518,13 +1448,13 @@ class SubpopModel(ABC):
         self.name = name
 
         self.schedules = self.create_schedules()
-        self.interaction_terms = self.create_interaction_terms()
         self.compartments = self.create_compartments()
         self.transition_variables = self.create_transition_variables(self.compartments)
         self.transition_variable_groups = self.create_transition_variable_groups(self.compartments,
                                                                                  self.transition_variables)
         self.epi_metrics = self.create_epi_metrics(self.transition_variables)
         self.dynamic_vals = self.create_dynamic_vals()
+        self.interaction_terms = self.create_interaction_terms()
 
         self.all_state_variables = {**self.interaction_terms,
                                     **self.compartments,
@@ -1724,9 +1654,7 @@ class SubpopModel(ABC):
         #   because schedules do not depend on other state variables,
         #   but dynamic vals may depend on schedules
         # Interaction terms may depend on both schedules
-        #   and dynamic vals (but interaction terms are updated by
-        #   the InterSubpopRepo, not on individual SubpopModel
-        #   instances).
+        #   and dynamic vals.
 
         schedules = self.schedules
         dynamic_vals = self.dynamic_vals
@@ -1908,59 +1836,4 @@ class SubpopModel(ABC):
             if compartment == target_compartment:
                 return name
 
-    def display(self) -> None:
-        """
-        Prints structure of model (compartments and linkages),
-            transition variables, epi metrics, schedules,
-            and dynamic values.
-        """
 
-        # We build origin_dict so that we can print
-        #   compartment transitions in an easy-to-read way --
-        #   for connections between origin --> destination,
-        #   we print all connections with the same origin
-        #   consecutively
-        origin_dict = defaultdict(list)
-
-        # Each key in origin_dict is a string corresponding to
-        #   an origin (Compartment) name
-        # Each val in origin_dict is a list of 3-tuples
-        # Each 3-tuple has the name of a destination (Compartment)
-        #   connected to the given origin, the name of the transition
-        #   variable connecting the origin and destination,
-        #   and Boolean indicating if the transition variable is jointly
-        #   distributed
-        for tvar_name, tvar in self.transition_variables.items():
-            origin_dict[self.find_name_by_compartment(tvar.origin)].append(
-                (self.find_name_by_compartment(tvar.destination),
-                 tvar_name, tvar.is_jointly_distributed))
-
-        print(f"\n>>> Displaying SubpopModel {self.name}")
-
-        print("\nCompartments and transition variables")
-        print("=====================================")
-        for origin_name, origin in self.compartments.items():
-            for output in origin_dict[origin_name]:
-                if output[2]:
-                    print(f"{origin_name} --> {output[0]}, via {output[1]}: jointly distributed")
-                else:
-                    print(f"{origin_name} --> {output[0]}, via {output[1]}")
-
-        print("\nEpi metrics")
-        print("===========")
-        for name in self.epi_metrics.keys():
-            print(f"{name}")
-
-        print("\nSchedules")
-        print("=========")
-        for name in self.schedules.keys():
-            print(f"{name}")
-
-        print("\nDynamic values")
-        print("==============")
-        for name, dynamic_val in self.dynamic_vals.items():
-            if dynamic_val.is_enabled:
-                print(f"{name}: enabled")
-            else:
-                print(f"{name}: disabled")
-        print("\n")

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 
 from flu_data_structures import FluMetapopStateTensors, \
-    FluMetapopParamsTensors, PrecomputedTensors
+    FluMetapopParamsTensors, FluPrecomputedTensors
 
 
 def compute_wtd_infected(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
@@ -27,7 +27,7 @@ def compute_wtd_infectious_LA(state: FluMetapopStateTensors,
 
 def compute_active_pop_LAR(state: FluMetapopStateTensors,
                            _params: FluMetapopParamsTensors,
-                           precomputed: PrecomputedTensors) -> torch.Tensor:
+                           precomputed: FluPrecomputedTensors) -> torch.Tensor:
     """
     Active population refers to those who are not
         symptomatic infectious or hospitalized (i.e. to
@@ -44,7 +44,7 @@ def compute_active_pop_LAR(state: FluMetapopStateTensors,
 
 def compute_effective_pop_LA(state: FluMetapopStateTensors,
                              params: FluMetapopParamsTensors,
-                             precomputed: PrecomputedTensors) -> torch.Tensor:
+                             precomputed: FluPrecomputedTensors) -> torch.Tensor:
 
     active_pop_LAR = compute_active_pop_LAR(state, params, precomputed)
 
@@ -69,7 +69,7 @@ def compute_effective_pop_LA(state: FluMetapopStateTensors,
 
 def compute_wtd_infectious_ratio_LLA(state: FluMetapopStateTensors,
                                      params: FluMetapopParamsTensors,
-                                     precomputed: PrecomputedTensors) -> torch.Tensor:
+                                     precomputed: FluPrecomputedTensors) -> torch.Tensor:
     """
     Returns L x L x A array -- element i,j,a corresponds to
         ratio of weighted infectious people in location i, age group a
@@ -159,7 +159,7 @@ def compute_raw_residents_traveling_foi(prop_time_away: torch.Tensor,
 
 def compute_total_foi(state: FluMetapopStateTensors,
                       params: FluMetapopParamsTensors,
-                      precomputed: PrecomputedTensors,
+                      precomputed: FluPrecomputedTensors,
                       beta_adjusted: torch.tensor) -> torch.Tensor:
     """
     Compute total force of infection! Includes beta

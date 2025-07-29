@@ -7,7 +7,6 @@ import clt_base as clt
 
 import numpy as np
 import pandas as pd
-import copy
 import pytest
 
 from pathlib import Path

@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 from dataclasses import dataclass, fields, field
 
-from flu_data_structures import FluMetapopStateTensors, FluMetapopParamsTensors, PrecomputedTensors
+from flu_data_structures import FluMetapopStateTensors, FluMetapopParamsTensors, FluPrecomputedTensors
 from flu_travel_functions import compute_total_foi
 
 base_path = Path(__file__).parent / "flu_torch_input_files"
@@ -59,91 +59,6 @@ def create_dict_of_tensors(d: dict,
 
     return {k: to_tensor(k, v) for k, v in d.items()}
 
-def standardize_shapes(state: FluMetapopStateTensors,
-                       states_indices: dict,
-                       params: FluMetapopParamsTensors,
-                       params_indices: dict) -> None:
-    """
-    For all fields in `input`, if field is not a scalar or L x A x R,
-        or is not a special variable listed below, then apply dimension
-        expansion so that fields are L x A x R for tensor multiplication.
-
-    Special variables that are exempted:
-        - `total_contact_matrix`, `school_contact_matrix`, `work_contact_matrix`:
-            all of these must be dimension A x A
-        - `travel_proportions_array`: this must be L x L
-
-    Valid values for the `indices_dict` are: "age", "age_risk",
-        "location", and "location_age" -- other combinations
-        are not considered because they do not make sense --
-        we assume that we only have risk IF we have age, for example
-    """
-
-    L = int(params.num_locations.item())
-    A = int(params.num_age_groups.item())
-    R = int(params.num_risk_groups.item())
-
-    error_str = " size does not match index specification in \n" \
-                "indices dictionary -- please check files and inputs, \n" \
-                "then try again."
-
-    for dc, indices_dict in zip([state, params], [states_indices, params_indices]):
-        for name, value in vars(dc).items():
-
-            # Ignore the field that corresponds to a dictionary
-            if name == "init_vals":
-                continue
-
-            # Contact matrices should be A x A
-            # This includes:
-            #   "school_contact_matrix",
-            #   "work_contact_matrix",
-            #   "travel_proportions_array"
-            elif "contact_matrix" in name:
-                # Need nested if-statements because user may
-                #   have already converted contact matrix to L x A x A
-                if value.size() != torch.Size([L, A, A]):
-                    if value.size() != torch.Size([A, A]):
-                        raise Exception(str(name) + error_str)
-                    setattr(dc, name, value.view(1, A, A).expand(L, A, A))
-
-            elif name == "travel_proportions_array":
-                if value.size() != torch.Size([L, L]):
-                    raise Exception(str(name) + error_str)
-
-            # If scalar or already L x A x R, do not need to adjust
-            #   dimensions
-            elif value.size() == torch.Size([]):
-                continue
-
-            elif value.size() == torch.Size([L, A, R]):
-                continue
-
-            elif indices_dict[name] == "age":
-                if value.size() != torch.Size([A]):
-                    raise Exception(str(name) + error_str)
-                else:
-                    setattr(dc, name, value.view(1, A, 1).expand(L, A, R))
-
-            elif getattr(indices_dict, name) == "age_risk":
-                if value.size() != torch.Size([A, R]):
-                    raise Exception(str(name) + error_str)
-                else:
-                    setattr(dc, name, value.view(1, A, R).expand(L, A, R))
-
-            # We probably won't use this, but just in case...
-            elif getattr(indices_dict, name) == "location":
-                if value.size() != torch.Size([L]):
-                    raise Exception(str(name) + error_str)
-                else:
-                    setattr(dc, name, value.view(L, 1, 1).expand(L, A, R))
-
-            elif getattr(indices_dict, name) == "location_age":
-                if value.size() != torch.Size([L, A]):
-                    raise Exception(str(name) + error_str)
-                else:
-                    setattr(dc, name, value.view(L, A, 1).expand(L, A, R))
-
 
 humidity_df = pd.read_csv(base_path / "humidity_austin_2023_2024.csv")
 humidity_df["date"] = pd.to_datetime(humidity_df["date"], format="%m/%d/%y").dt.date
@@ -151,9 +66,9 @@ humidity_df["date"] = pd.to_datetime(humidity_df["date"], format="%m/%d/%y").dt.
 
 def compute_beta_adjusted(_state: FluMetapopStateTensors,
                           params: FluMetapopParamsTensors,
-                          timestep_counter: int) -> torch.Tensor:
+                          day_counter: int) -> torch.Tensor:
     absolute_humidity = \
-        humidity_df.iloc[int(np.floor(timestep_counter * params.dt.item()))]["humidity"]
+        humidity_df.iloc[day_counter]["humidity"]
     beta_adjusted = params.beta_baseline * \
                     (1 + params.humidity_impact * np.exp(-180 * absolute_humidity))
     return beta_adjusted
@@ -161,10 +76,10 @@ def compute_beta_adjusted(_state: FluMetapopStateTensors,
 
 def compute_S_to_E(state: FluMetapopStateTensors,
                    params: FluMetapopParamsTensors,
-                   precomputed: PrecomputedTensors,
-                   timestep_counter: int) -> torch.Tensor:
+                   precomputed: FluPrecomputedTensors,
+                   day_counter: int) -> torch.Tensor:
 
-    beta_adjusted = compute_beta_adjusted(state, params, timestep_counter)
+    beta_adjusted = compute_beta_adjusted(state, params, day_counter)
 
     force_of_infection = compute_total_foi(state, params, precomputed, beta_adjusted)
 
@@ -177,7 +92,7 @@ def compute_S_to_E(state: FluMetapopStateTensors,
 
     # print("FOI", force_of_infection.sum())
 
-    S_to_E = params.dt * state.S * force_of_infection / \
+    S_to_E = state.S * force_of_infection / \
              (precomputed.total_pop_LAR * (1 + params.inf_induced_inf_risk_constant * state.M +
                                            params.vax_induced_inf_risk_constant * state.Mv))
 
@@ -185,31 +100,31 @@ def compute_S_to_E(state: FluMetapopStateTensors,
 
 
 def compute_E_to_IP(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
-    E_to_IP = params.dt * state.E * params.E_to_I_rate * (1 - params.E_to_IA_prop)
+    E_to_IP = state.E * params.E_to_I_rate * (1 - params.E_to_IA_prop)
 
     return E_to_IP
 
 
 def compute_E_to_IA(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
-    E_to_IA = params.dt * state.E * params.E_to_I_rate * params.E_to_IA_prop
+    E_to_IA = state.E * params.E_to_I_rate * params.E_to_IA_prop
 
     return E_to_IA
 
 
 def compute_IP_to_IS(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
-    IP_to_IS = params.dt * state.IP * params.IP_to_IS_rate
+    IP_to_IS = state.IP * params.IP_to_IS_rate
 
     return IP_to_IS
 
 
 def compute_IS_to_R(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
-    IS_to_R = params.dt * state.IS * params.IS_to_R_rate * (1 - params.IS_to_H_adjusted_prop)
+    IS_to_R = state.IS * params.IS_to_R_rate * (1 - params.IS_to_H_adjusted_prop)
 
     return IS_to_R
 
 
 def compute_IS_to_H(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
-    IS_to_H = params.dt * state.IS * params.IS_to_H_rate * params.IS_to_H_adjusted_prop / \
+    IS_to_H = state.IS * params.IS_to_H_rate * params.IS_to_H_adjusted_prop / \
               (1 + params.inf_induced_hosp_risk_constant * state.M +
                params.vax_induced_hosp_risk_constant * state.Mv)
 
@@ -217,19 +132,19 @@ def compute_IS_to_H(state: FluMetapopStateTensors, params: FluMetapopParamsTenso
 
 
 def compute_IA_to_R(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
-    IA_to_R = params.dt * state.IA * params.IA_to_R_rate
+    IA_to_R = state.IA * params.IA_to_R_rate
 
     return IA_to_R
 
 
 def compute_H_to_R(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
-    H_to_R = params.dt * state.H * params.H_to_R_rate * (1 - params.H_to_D_adjusted_prop)
+    H_to_R = state.H * params.H_to_R_rate * (1 - params.H_to_D_adjusted_prop)
 
     return H_to_R
 
 
 def compute_H_to_D(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
-    H_to_D = params.dt * state.H * params.H_to_D_rate * params.H_to_D_adjusted_prop / \
+    H_to_D = state.H * params.H_to_D_rate * params.H_to_D_adjusted_prop / \
              (1 + params.inf_induced_death_risk_constant * state.M +
               params.vax_induced_death_risk_constant * state.Mv)
 
@@ -237,7 +152,7 @@ def compute_H_to_D(state: FluMetapopStateTensors, params: FluMetapopParamsTensor
 
 
 def compute_R_to_S(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
-    R_to_S = params.dt * state.R * params.R_to_S_rate
+    R_to_S = state.R * params.R_to_S_rate
 
     return R_to_S
 
@@ -248,25 +163,26 @@ def compute_R_to_S(state: FluMetapopStateTensors, params: FluMetapopParamsTensor
 #   - dMv/dt = (new vaccinations at time t - delta)/ N - vax_induced_immune_wane
 
 
-def compute_M_change(state: FluMetapopStateTensors, params: FluMetapopParamsTensors, precomputed: PrecomputedTensors) -> torch.Tensor:
+def compute_M_change(state: FluMetapopStateTensors, params: FluMetapopParamsTensors, precomputed: FluPrecomputedTensors) -> torch.Tensor:
     M_change = (params.R_to_S_rate * state.R / precomputed.total_pop_LAR) * \
                (1 - params.inf_induced_saturation * state.M - params.vax_induced_saturation * state.Mv) - \
                params.inf_induced_immune_wane * state.M
 
-    return M_change * params.dt
+    return M_change
 
 
-def compute_Mv_change(state: FluMetapopStateTensors, params: FluMetapopParamsTensors, precomputed: PrecomputedTensors) -> torch.Tensor:
+def compute_Mv_change(state: FluMetapopStateTensors, params: FluMetapopParamsTensors, precomputed: FluPrecomputedTensors) -> torch.Tensor:
     Mv_change = params.daily_vaccines / precomputed.total_pop_LAR - \
                 params.vax_induced_immune_wane * state.Mv
 
-    return Mv_change * params.dt
+    return Mv_change
 
 
 def step(state: FluMetapopStateTensors,
          params: FluMetapopParamsTensors,
-         precomputed: PrecomputedTensors,
-         timestep_counter: int):
+         precomputed: FluPrecomputedTensors,
+         day_counter: int,
+         dt: float):
     # WARNING: do NOT use in-place operations such as +=
     #   on leaf tensors with requires_grad = True --
     #   this breaks the computational graph --
@@ -276,29 +192,29 @@ def step(state: FluMetapopStateTensors,
     #   leaf tensors), but here we do non-in-place operations
     #   just in case
 
-    S_to_E = compute_S_to_E(state, params, precomputed, timestep_counter)
+    S_to_E = compute_S_to_E(state, params, precomputed, day_counter) * dt
 
-    E_to_IP = compute_E_to_IP(state, params)
+    E_to_IP = compute_E_to_IP(state, params) * dt
 
-    E_to_IA = compute_E_to_IA(state, params)
+    E_to_IA = compute_E_to_IA(state, params) * dt
 
-    IP_to_IS = compute_IP_to_IS(state, params)
+    IP_to_IS = compute_IP_to_IS(state, params) * dt
 
-    IS_to_R = compute_IS_to_R(state, params)
+    IS_to_R = compute_IS_to_R(state, params) * dt
 
-    IS_to_H = compute_IS_to_H(state, params)
+    IS_to_H = compute_IS_to_H(state, params) * dt
 
-    IA_to_R = compute_IA_to_R(state, params)
+    IA_to_R = compute_IA_to_R(state, params) * dt
 
-    H_to_R = compute_H_to_R(state, params)
+    H_to_R = compute_H_to_R(state, params) * dt
 
-    H_to_D = compute_H_to_D(state, params)
+    H_to_D = compute_H_to_D(state, params) * dt
 
-    R_to_S = compute_R_to_S(state, params)
+    R_to_S = compute_R_to_S(state, params) * dt
 
-    M_change = compute_M_change(state, params, precomputed)
+    M_change = compute_M_change(state, params, precomputed) * dt
 
-    Mv_change = compute_Mv_change(state, params, precomputed)
+    Mv_change = compute_Mv_change(state, params, precomputed) * dt
 
     S_new = state.S + R_to_S - S_to_E
 
@@ -329,7 +245,7 @@ def simulate_full_history(state: FluMetapopStateTensors, params: FluMetapopParam
     """
     history_dict = defaultdict(list)
 
-    precomputed = PrecomputedTensors(state, params)
+    precomputed = FluPrecomputedTensors(state, params)
 
     for timestep in range(num_timesteps):
         state = step(state, params, precomputed, timestep)
@@ -344,14 +260,18 @@ def simulate_full_history(state: FluMetapopStateTensors, params: FluMetapopParam
 
 def simulate(state: FluMetapopStateTensors,
              params: FluMetapopParamsTensors,
-             num_timesteps: int) -> torch.Tensor:
+             num_days: int,
+             timesteps_per_day: int) -> torch.Tensor:
     history = []
 
-    precomputed = PrecomputedTensors(state, params)
+    precomputed = FluPrecomputedTensors(state, params)
 
-    for timestep in range(num_timesteps):
-        state = step(state, params, precomputed, timestep)
-        history.append(state.H.clone())
+    dt = 1/float(timesteps_per_day)
+
+    for day in range(num_days):
+        for timestep in range(timesteps_per_day):
+            state = step(state, params, precomputed, day, dt)
+            history.append(state.H.clone())
 
     return torch.stack(history)
 

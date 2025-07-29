@@ -8,8 +8,12 @@ import sciris as sc
 from dataclasses import dataclass
 from typing import Optional
 from pathlib import Path
+from abc import ABC, abstractmethod
 
+import torch
 import clt_base as clt
+
+from flu_data_structures import FluMetapopParamsTensors, FluMetapopStateTensors, FluPrecomputedTensors
 
 base_path = Path(__file__).parent.parent / "flu_demo_input_files"
 
@@ -300,20 +304,34 @@ class SusceptibleToExposed(clt.TransitionVariable):
 
     This is the most complicated transition variable in the
     flu model. If using metapopulation model (travel model), then
-    the rate depends on an ForceOfInfection instance that is
-    a function of other subpopulations' states and parameters,
-    and travel between subpopulations.
+    the rate depends on the `force_of_infection` attribute,
+    which is a function of other subpopulations' states and
+    parameters, and travel between subpopulations.
 
-    If there is no metapopulation model, then there is no
-    ForceOfInfection InteractionTerm instance, and the rate
+    If there is no metapopulation model, the rate
     is much simpler.
+
+    See parent class docstring for other attributes.
     """
+
+    def __init__(self,
+                 origin: clt.Compartment,
+                 destination: clt.Compartment,
+                 transition_type: clt.TransitionTypes,
+                 is_jointly_distributed: str = False):
+
+        super().__init__(origin,
+                         destination,
+                         transition_type,
+                         is_jointly_distributed)
+
+        self.force_of_infection = None
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
 
-        # If there is no ForceOfInfection InteractionTerm instance,
+        # If `force_of_infection` has not been updated,
         #   then there is no travel model -- so, simulate
         #   this subpopulation entirely independently and
         #   use the simplified transition rate that does not
@@ -566,7 +584,6 @@ class VaxInducedImmunity(clt.EpiMetric):
                                   state: FluSubpopState,
                                   params: FluSubpopParams,
                                   num_timesteps: int) -> np.ndarray:
-
         # Note: `state.daily_vaccines` (based on the value of the `DailyVaccines`
         #   `Schedule` is NOT divided by the number of timesteps -- so we need to
         #   do this division in the equation here.
@@ -785,421 +802,6 @@ def compute_pop_by_age(subpop_params: FluSubpopParams) -> np.ndarray:
     return np.sum(subpop_params.total_pop_age_risk, axis=1, keepdims=True)
 
 
-class FluInterSubpopRepo(clt.InterSubpopRepo):
-    """
-    Holds collection of SubpopState instances, with
-        actions to query and interact with them.
-
-    Attributes:
-        subpop_models (dict):
-            dictionary where keys are SubpopModel names and values are the
-            SubpopModel instances -- whole dictionary contains all SubpopModel
-            instances that comprise the associated MetapopModel
-        subpop_names_mapping (dict):
-            keys are names of SubpopModel instances and values are integers
-            0, 1, ..., |L|-1, where |L| is the nubmer of subpopulations
-            (associated SubpopModel instances). Provides a mapping between
-            the name of the subpopulation and the row/column position in
-            travel_proportions_array (and other associated indices used for
-            intermediate computation on this class).
-        travel_proportions_array (np.ndarray):
-            |L| x |L| array, where |L| is the number of subpopulations
-            (associated SubpopModel instances). Element i,j corresponds to
-            proportion of subpopulation i that travels to subpopulation j
-            (elements must be in [0,1]). The mapping of subpopulations is given by
-            subpop_names_mapping.
-        sum_prop_residents_traveling_out_array (np.ndarray):
-            |L| x 1 array, where |L| is the number of subpopulations (associated
-            SubpopModel instances). Element l is the  sum of the proportion of
-            residents in given subpopulation who travel to a destination subpopulation,
-            summed over all destinations but excluding residents' within-subpopulation
-            traveling. Note that this value may be greater than 1.
-        force_of_infection_array (np.ndarray):
-            |L| x |A| x |R| array, where |L| is the number of subpopulations 
-            (associated SubpopModel instances), |A| is the number of age groups, 
-            and |R| is the number of risk groups. Element l,a,r corresponds to the
-            total infection rate to residents of subpopulation l. The mapping of indices
-            to the subpopulation is given by the ordering of subpop names in the "subpop_name" 
-            column of the travel_proportions dataframe -- so that the l,a,r element
-            in force_of_infection_array corresponds to the subpopulation whose name is ith 
-            in the "subpop_name" column of  travel_proportions.
-
-    See parent class InterSubpopRepo's docstring for
-        attributes and additional methods.
-    """
-
-    def __init__(self,
-                 subpop_models: dict,
-                 subpop_names_mapping: dict,
-                 travel_proportions_array: np.ndarray):
-
-        super().__init__(subpop_models)
-
-        self.subpop_names_mapping = subpop_names_mapping
-        self.travel_proportions_array = travel_proportions_array
-
-        self.sum_prop_residents_traveling_out_array = \
-            self.compute_sum_prop_residents_traveling_out()
-
-        #   This attribute will be set to an array using method compute_shared_quantities()
-        #   during the associated MetapopModel's simulate_until_day() method.
-        self.force_of_infection_array = None
-
-    def compute_shared_quantities(self):
-        """
-        Updates force_of_infection_array attribute in-place.
-        """
-
-        force_of_infection_array = []
-
-        wtd_no_symp_by_age_cache = self.create_wtd_no_symp_by_age_cache()
-        effective_pop_by_age_cache = self.create_effective_pop_by_age_cache()
-
-        # Extract subpop names in correct order corresponding to their mapping
-        subpop_names_ordered = sorted(self.subpop_names_mapping, key=self.subpop_names_mapping.get)
-
-        for subpop_name in subpop_names_ordered:
-            force_of_infection = \
-                self.inf_from_home_region_movement(subpop_name,
-                                                   wtd_no_symp_by_age_cache,
-                                                   effective_pop_by_age_cache) + \
-                self.inf_from_visitors(subpop_name,
-                                       wtd_no_symp_by_age_cache,
-                                       effective_pop_by_age_cache) + \
-                self.inf_from_residents_traveling(subpop_name,
-                                                  wtd_no_symp_by_age_cache,
-                                                  effective_pop_by_age_cache)
-
-            force_of_infection_array.append(force_of_infection)
-
-        self.force_of_infection_array = np.asarray(force_of_infection_array)
-
-    def prop_residents_traveling_pairwise(self,
-                                          origin_subpop_name: str,
-                                          dest_subpop_name: str) -> float:
-        """
-        Returns:
-             (float):
-                the proportion in [0,1] of residents in given origin subpopulation
-                who travel to the given destination subpopulation.
-        """
-
-        subpop_names_mapping = self.subpop_names_mapping
-
-        return self.travel_proportions_array[subpop_names_mapping[origin_subpop_name],
-                                             subpop_names_mapping[dest_subpop_name]]
-
-    def compute_sum_prop_residents_traveling_out(self) -> np.ndarray:
-        """
-        Returns |L| x 1 array, where |L| is the number of subpopulations,
-        corresponding to the sum of the proportion of residents in given subpopulation
-        who travel to a destination subpopulation, summed over all destinations
-        but excluding residents' within-subpopulation traveling.
-
-        Note that each element's value may be greater than 1!
-        """
-
-        travel_proportions_array = self.travel_proportions_array
-
-        # For each subpopulation (row index), sum the travel proportions
-        #   in that row but subtract the diagonal element (because
-        #   we are excluding residents who travel within their home subpopulation).
-        return np.sum(travel_proportions_array, axis=1, keepdims=True) - \
-               np.diag(travel_proportions_array).reshape(-1, 1)
-
-    def create_wtd_no_symp_by_age_cache(self) -> dict:
-        """
-        Creates cache (dictionary) of weighted sum of
-        non-symptomatic infectious people (IP and IA),
-        weighted by relative infectiousness, summed over risk
-        groups and categorized by age, for a given subpopulation.
-
-        Keys are the subpopulation name, values are the
-        |A| x |1| array corresponding to the above weighted sum,
-        where |A| is the number of age groups.
-        """
-
-        wtd_no_symp_by_age_cache = {}
-
-        for subpop_model in self.subpop_models.values():
-            wtd_no_symp_by_age_cache[subpop_model.name] = \
-                compute_wtd_presymp_asymp(subpop_model.state,
-                                          subpop_model.params)
-
-        return wtd_no_symp_by_age_cache
-
-    def create_pop_by_age_cache(self) -> dict:
-        """
-        Creates cache (dictionary) of total population
-        for a given subpopulation, summed over risk groups
-        and categorized by age.
-
-        Keys are the subpopulation name, values are the
-        |A| x |1| array corresponding to the above population sum,
-        where |A| is the number of age groups.
-        """
-
-        pop_by_age_cache = {}
-
-        for subpop_model in self.subpop_models.values():
-            pop_by_age_cache[subpop_model.name] = \
-                compute_pop_by_age(subpop_model.params)
-
-        return pop_by_age_cache
-
-    def create_pop_healthy_by_age(self) -> dict:
-        """
-        Creates cache (dictionary) of weighted sum of
-        "healthy-presenting" people (those not in compartments
-        IS and H). Corresponds to total population minus
-        IS and H populations weighted by multiplier that reduces
-        contact rates of sick individuals, summed over risk groups
-        and categorized by age, for a given subpopulation.
-
-        Keys are the subpopulation name, values are the
-        |A| x |1| array corresponding to the above population sum,
-        where |A| is the number of age groups.
-        """
-
-        pop_healthy_by_age = {}
-
-        pop_by_age_cache = self.create_pop_by_age_cache()
-
-        for subpop_model in self.subpop_models.values():
-            subpop_name = subpop_model.name
-            subpop_state = subpop_model.state
-
-            pop_healthy_by_age[subpop_name] = \
-                pop_by_age_cache[subpop_name] - \
-                (1 - subpop_model.params.contact_mult_symp) * \
-                np.sum(subpop_state.IS, axis=1, keepdims=True) - \
-                np.sum(subpop_state.H, axis=1, keepdims=True)
-
-        return pop_healthy_by_age
-
-    def sum_wtd_visitors_by_age(self,
-                                subpop_name: str,
-                                pop_healthy_by_age: dict) -> np.ndarray:
-        """
-        Returns |A| x 1 array corresponding to weighted visitors
-        to given subpopulation, where |A| is the number of age groups.
-        """
-
-        wtd_visitors_by_origin = []
-
-        for origin_subpop_name in self.subpop_models.keys():
-            if origin_subpop_name == subpop_name:
-                continue
-            else:
-                wtd_visitors_by_origin.append(
-                    self.prop_residents_traveling_pairwise(origin_subpop_name,
-                                                           subpop_name) *
-                    pop_healthy_by_age[origin_subpop_name])
-
-        return np.sum(wtd_visitors_by_origin, axis=1)
-
-    def create_effective_pop_by_age_cache(self):
-        """
-        Creates cache (dictionary) of effective population
-        for each subpopulation, which corresponds to a population
-        adjustment to account for non-traveling sick residents,
-        traveling residents, and outside visitors.
-
-        Keys are the subpopulation name, values are the
-        |A| x |1| array corresponding to the above population sum,
-        where |A| is the number of age groups.
-        """
-
-        pop_by_age_cache = self.create_pop_by_age_cache()
-        pop_healthy_by_age = self.create_pop_healthy_by_age()
-
-        effective_pop_by_age_cache = {}
-
-        subpop_names_mapping = self.subpop_names_mapping
-
-        for subpop_model in self.subpop_models.values():
-            subpop_name = subpop_model.name
-            subpop_params = subpop_model.params
-
-            effective_pop_by_age_cache[subpop_name] = \
-                pop_by_age_cache[subpop_name] + \
-                subpop_params.prop_time_away_by_age * \
-                (self.sum_wtd_visitors_by_age(subpop_name, pop_healthy_by_age) -
-                 self.sum_prop_residents_traveling_out_array[subpop_names_mapping[subpop_name]] *
-                 pop_healthy_by_age[subpop_name])
-
-        return effective_pop_by_age_cache
-
-    def inf_from_home_region_movement(self,
-                                      subpop_name: str,
-                                      wtd_no_symp_by_age_cache: dict,
-                                      effective_pop_by_age_cache: dict) -> np.ndarray:
-        """
-        Returns |A| x 1 array corresponding to infection rate due to
-        residents in given subpopulation traveling within their own
-        subpopulation, where |A| is the number of age groups.
-        """
-
-        # Math reminder -- other than the summation over proportion of residents
-        #   traveling, there is only ONE subpopulation index here.
-
-        subpop_model = self.subpop_models[subpop_name]
-        subpop_state = subpop_model.state
-        subpop_params = subpop_model.params
-        subpop_names_mapping = self.subpop_names_mapping
-
-        prop_time_away_by_age = subpop_params.prop_time_away_by_age
-        sum_prop_residents_traveling_out = \
-            self.sum_prop_residents_traveling_out_array[subpop_names_mapping[subpop_name]]
-
-        contact_matrix = subpop_state.flu_contact_matrix
-        wtd_infected_by_age = \
-            wtd_no_symp_by_age_cache[subpop_name] + \
-            np.sum(subpop_state.IS, axis=1, keepdims=True)
-
-        wtd_infected_to_pop_ratio = np.divide(wtd_infected_by_age,
-                                              effective_pop_by_age_cache[subpop_name])
-
-        common_coeff = compute_common_coeff_force_of_infection(subpop_state, subpop_params)
-
-        return common_coeff * (1 - prop_time_away_by_age * sum_prop_residents_traveling_out) * \
-               np.matmul(contact_matrix, wtd_infected_to_pop_ratio)
-
-    def inf_from_visitors(self,
-                          subpop_name: str,
-                          wtd_no_symp_by_age_cache: dict,
-                          effective_pop_by_age_cache: dict) -> np.ndarray:
-        """
-        Returns |L| x |A| x 1 array corresponding to infection rate to given
-        subpopulation, due to outside visitors from other subpopulations,
-        where |A| is the number of age groups.
-        """
-
-        subpop_model = self.subpop_models[subpop_name]
-        subpop_state = subpop_model.state
-        subpop_params = subpop_model.params
-
-        all_subpop_models_names = self.subpop_models.keys()
-
-        # Create a list to store all pairwise values
-        # Each element corresponds to the infection rate due to
-        #   visitors from another subpopulation
-        # These elements are summed to obtain the overall infection rate
-        #   from outside visitors from ALL other subpopulations
-        inf_from_visitors_pairwise = []
-
-        for visitors_subpop_name in all_subpop_models_names:
-
-            # Do not include residential travel within same subpopulation
-            #   -- this is handled with inf_from_home_region_movement
-            if visitors_subpop_name == subpop_name:
-                continue
-
-            else:
-                # Math reminder -- the weighted sum of infected people is for
-                #   other subpopulations, but the other indices/values are for
-                #   the input subpopulation.
-
-                contact_mult_symp = subpop_params.contact_mult_symp
-
-                prop_residents_traveling_pairwise = \
-                    self.prop_residents_traveling_pairwise(visitors_subpop_name,
-                                                           subpop_name)
-
-                prop_time_away_by_age = subpop_params.prop_time_away_by_age
-
-                contact_matrix = subpop_state.flu_contact_matrix
-
-                visitors_subpop_model = self.subpop_models[visitors_subpop_name]
-                visitors_subpop_state = visitors_subpop_model.state
-
-                wtd_infected_visitors_by_age = \
-                    wtd_no_symp_by_age_cache[visitors_subpop_name] + \
-                    contact_mult_symp * np.sum(visitors_subpop_state.IS, axis=1, keepdims=True)
-
-                wtd_infected_to_pop_ratio = \
-                    np.divide(wtd_infected_visitors_by_age,
-                              effective_pop_by_age_cache[subpop_name])
-
-                inf_from_visitors_pairwise.append(
-                    prop_residents_traveling_pairwise *
-                    np.matmul(contact_matrix,
-                              prop_time_away_by_age * wtd_infected_to_pop_ratio))
-
-        common_coeff = compute_common_coeff_force_of_infection(subpop_state, subpop_params)
-
-        return np.sum(common_coeff * subpop_params.contact_mult_travel *
-                      np.asarray(inf_from_visitors_pairwise), axis=0)
-
-    def inf_from_residents_traveling(self,
-                                     subpop_name: str,
-                                     wtd_no_symp_by_age_cache: dict,
-                                     effective_pop_by_age_cache: dict) -> np.ndarray:
-        """
-        Returns |A| x 1 array corresponding to infection rate to given
-        subpopulation, due to residents getting infected while visiting
-        other subpopulations and then bringing the infections back home,
-        where |A| is the number of age groups.
-        """
-
-        subpop_model = self.subpop_models[subpop_name]
-        subpop_state = subpop_model.state
-        subpop_params = subpop_model.params
-
-        all_subpop_models_names = self.subpop_models.keys()
-
-        # Create a list to store all pairwise values
-        # Each element corresponds to the infection rate due to
-        #   residents visiting another subpopulation
-        # These elements are summed to obtain the overall infection rate
-        #   from residents getting infected in ALL other subpopulations
-        inf_from_residents_traveling_pairwise = []
-
-        for dest_subpop_name in all_subpop_models_names:
-
-            if dest_subpop_name == subpop_name:
-                continue
-
-            else:
-                # Math reminder -- the weighted sum of infected people AND
-                #   the effective population refers to the OTHER subpopulation
-                #   -- because we are dealing with residents that get
-                #   infected in OTHER subpopulations
-
-                prop_residents_traveling_pairwise = self.prop_residents_traveling_pairwise(
-                    subpop_name, dest_subpop_name
-                )
-
-                prop_time_away_by_age = subpop_params.prop_time_away_by_age
-
-                contact_matrix = subpop_state.flu_contact_matrix
-
-                dest_subpop_model = self.subpop_models[dest_subpop_name]
-                dest_subpop_state = dest_subpop_model.state
-
-                # Weighted infected at DESTINATION subpopulation
-                wtd_infected_dest_by_age = \
-                    wtd_no_symp_by_age_cache[dest_subpop_name] + \
-                    np.sum(dest_subpop_state.IS, axis=1, keepdims=True)
-
-                # Ratio of weighted infected (at destination) to
-                #   effective population (at destination)
-                wtd_infected_to_pop_dest_ratio = \
-                    np.divide(wtd_infected_dest_by_age,
-                              effective_pop_by_age_cache[dest_subpop_name])
-
-                inf_from_residents_traveling_pairwise.append(
-                    prop_residents_traveling_pairwise *
-                    wtd_infected_to_pop_dest_ratio *
-                    np.matmul(contact_matrix,
-                              prop_time_away_by_age))
-
-        common_coeff = compute_common_coeff_force_of_infection(subpop_state, subpop_params)
-
-        return np.sum(common_coeff * subpop_params.contact_mult_travel *
-                      inf_from_residents_traveling_pairwise, axis=0)
-
-
 class ForceOfInfection(clt.InteractionTerm):
     """
     InteractionTerm-derived class for modeling S_to_E transition rate
@@ -1214,14 +816,10 @@ class ForceOfInfection(clt.InteractionTerm):
         super().__init__()
         self.subpop_name = subpop_name
 
-    def update_current_val(self,
-                           inter_subpop_repo: FluInterSubpopRepo,
-                           subpop_params: FluSubpopParams) -> None:
-        subpop_name = self.subpop_name
-        subpop_names_mapping = inter_subpop_repo.subpop_names_mapping
+    def update_current_val(self) -> None:
+        pass
 
-        self.current_val = \
-            inter_subpop_repo.force_of_infection_array[subpop_names_mapping[subpop_name]]
+        # self.current_val = None
 
 
 class FluSubpopModel(clt.SubpopModel):
@@ -1479,150 +1077,62 @@ class FluSubpopModel(clt.SubpopModel):
 
         return epi_metrics
 
-    def run_model_checks(self,
-                         include_printing=True):
-        """
-        Run flu model checks.
 
-        Input checks:
-            - SubpopState and SubpopParams instances should have
-                fields with nonnegative values.
-            - Initial values of compartments should be nonnegative
-                integers.
-            - Population sum of compartments should match
-                total population computed at initialization
-                (user should not change initial values
-                after initialization).
-        """
-
-        if include_printing:
-            print(">>> Running FluSubpopModel checks... \n")
-            print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-
-        error_counter = 0
-
-        state = self.state
-        params = self.params
-
-        for name, val in list(vars(state).items()) + list(vars(params).items()):
-            if isinstance(val, np.ndarray):
-                flattened_array = val.flatten()
-                for val in flattened_array:
-                    if val < 0:
-                        if include_printing:
-                            print(f"STOP! INPUT ERROR: {name} should not have negative values.")
-                        error_counter += 1
-            elif isinstance(val, float):
-                if val < 0:
-                    if include_printing:
-                        print(f"STOP! INPUT ERROR: {name} should not be negative.")
-                    error_counter += 1
-
-        compartment_population_sum = np.zeros((self.params.num_age_groups,
-                                               self.params.num_risk_groups))
-
-        for name, compartment in self.compartments.items():
-            compartment_population_sum += compartment.current_val
-            flattened_current_val = compartment.current_val.flatten()
-            for val in flattened_current_val:
-                if val != int(val):
-                    if include_printing:
-                        print(f"STOP! INPUT ERROR: {name} should not have non-integer values.")
-                    error_counter += 1
-                if val < 0:
-                    if include_printing:
-                        print(f"STOP! INPUT ERROR: {name} should not have negative values.")
-                    error_counter += 1
-
-        if (compartment_population_sum != self.params.total_pop_age_risk).any():
-            if include_printing:
-                print(f"STOP! INPUT ERROR: sum of population in compartments must \n"
-                      f"match specified total population value. Check \n"
-                      f"\"total_pop_age_risk\" in model's \"params\" attribute \n"
-                      f"and check compartments in state variables' init vals JSON.")
-            error_counter += 1
-
-        if error_counter == 0:
-            if include_printing:
-                print("OKAY! FluSubpopModel instance has passed input checks: \n"
-                      "Compartment populations are nonnegative whole numbers \n"
-                      "and add up to \"total_pop_age_risk\" in model's \n"
-                      "\"params attribute.\" Fixed parameters are nonnegative.")
-            return True
-        else:
-            if include_printing:
-                print(f"Need to fix {error_counter} errors before simulating model.")
-            return False
-
-
-class FluMetapopModel(clt.MetapopModel):
+class FluMetapopModel(clt.MetapopModel, ABC):
     """
     MetapopModel-derived class specific to flu model.
-    Assigns an instance of FluInterSubpopRepo to model --
-    the repository holds all subpopulation models included
-    in the metapopulation model, and also a DataFrame with
-    travel proportions information.
     """
 
-    def check_travel_proportions(self,
-                                 include_printing=True):
-        """
-        Checks to make sure travel_proportions_mapping and
-        travel_proportions_array (located on InterSubpopRepo instance)
-        have correct format on MetapopModel.
+    def __init__(self,
+                 subpop_models: list = [],
+                 name: str = ""):
 
-        Validates that subpop_names_mapping is a dictionary
-        whose keys are names of associated SubpopModel instances and
-        whose length matches both the number of rows and columns of
-        travel_proportions_array (is a square matrix). Makes sure that
-        numerical values in travel_proportions_array are between [0,1].
-        """
+        super().__init__(subpop_models,
+                         name)
 
-        if include_printing:
-            print(">>> Running travel proportions checks... \n")
-            print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        params_tensors = self.create_params_tensors(subpop_models)
+        params_tensors.standardize_shapes()
 
-        error_counter = 0
+        self.params_tensors = params_tensors
 
-        # Extract unique subpop_name values
-        # Ensure uniqueness
-        # Ensure they match the unique string IDs of each associated
-        #   SubpopModel instance
-        subpop_names = self.inter_subpop_repo.subpop_names_mapping
-        num_subpop_names = len(subpop_names)
-        travel_proportions_array = self.inter_subpop_repo.travel_proportions_array
-        if np.shape(travel_proportions_array) != \
-                (num_subpop_names, num_subpop_names):
-            error_counter += 1
-            if include_printing:
-                print("Length of subpop_names_mapping dictionary must equal "
-                      "number of rows and number of columns of travel_proportions_array.")
-        if set(subpop_names) != set(self.subpop_models.keys()):
-            error_counter += 1
-            if include_printing:
-                print("Each key in subpop_names_mapping must match a "
-                      "name of an associated SubpopModel instance.")
+        self.state_tensors = FluMetapopStateTensors()
 
-        # Check if other values are between 0 and 1
-        if not ((travel_proportions_array >= 0).all() and (travel_proportions_array <= 1).all()):
-            error_counter += 1
-            if include_printing:
-                print("All numerical values must be between 0 and 1 "
-                      "because they represent proportions.")
 
-        if error_counter == 0:
-            if include_printing:
-                print("OKAY! Travel proportions input into FluMetapopModel is "
-                      "correctly formatted.")
-            return True
-        else:
-            if include_printing:
-                print(f"Need to fix {error_counter} errors before simulating model.")
-            return False
+    def create_params_tensors(self,
+                              subpop_models: list) -> FluMetapopParamsTensors:
 
-    def run_model_checks(self):
+        params_tensors = FluMetapopParamsTensors()
 
-        self.check_travel_proportions()
+        for name in vars(subpop_models[0].params).keys():
 
-        for subpop_model in self.subpop_models.values():
-            subpop_model.run_model_checks()
+            metapop_params = []
+
+            for model in subpop_models:
+
+                metapop_params.append(getattr(model.params, name))
+
+            # If all values are scalars and equal to each other, then
+            #   simply store a scalar (since its value is common
+            #   across metapopulations)
+            if all(isinstance(x, (int, float)) for x in metapop_params):
+                first_val = metapop_params[0]
+                if all(x == first_val for x in metapop_params):
+                    metapop_params = first_val  # Collapse to scalar
+                    setattr(params_tensors, name, torch.tensor(metapop_params))
+            else:
+                # torch `UserWarning`: creating a tensor from a list of numpy.ndarrays is extremely slow.
+                #   Please consider converting the list to a single numpy.ndarray with numpy.array()
+                #   before converting to a tensor.
+                # Soooo we converted the list to an array!
+                setattr(params_tensors, name, torch.tensor(np.asarray(metapop_params)))
+
+        return params_tensors
+
+    def update_state_tensors(self):
+
+        for model in self.subpop_models:
+
+
+
+    def apply_inter_subpop_updates(self):
+        pass
