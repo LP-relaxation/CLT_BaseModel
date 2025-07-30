@@ -23,11 +23,11 @@ from flu_model import flu_components as flu
 ###########################################################
 
 # Obtain path to folder with JSON input files
-base_path = Path(__file__).parent / "flu_demo_input_files"
+base_path = Path(__file__).parent / "texas_input_files"
 
 # Get filepaths for initial values of compartments and epi metrics, fixed parameters,
 #   configuration, and travel proportions
-compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
+compartments_epi_metrics_init_vals_filepath = base_path / "init_vals.json"
 params_filepath = base_path / "common_params.json"
 config_filepath = base_path / "config.json"
 
@@ -100,19 +100,12 @@ south.params.beta_baseline = 10
 # Combine two subpopulations into one metapopulation model (travel model)
 flu_demo_model = flu.FluMetapopModel([north, south])
 
-
-
-# Display written forms of both subpopulation models
-# Check that model inputs are properly formatted and sensible
-
 ###########################################################
 ################# SIMULATE & ANALYZE ######################
 ###########################################################
 
 # Simulate for 50 days
 flu_demo_model.simulate_until_day(50)
-
-breakpoint()
 
 # Get the current real date of the simulation and the
 #   current simulation day

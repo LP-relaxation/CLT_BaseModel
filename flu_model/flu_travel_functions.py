@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 
-from flu_data_structures import FluMetapopStateTensors, \
+from .flu_data_structures import FluMetapopStateTensors, \
     FluMetapopParamsTensors, FluPrecomputedTensors
 
 
@@ -59,8 +59,12 @@ def compute_effective_pop_LA(state: FluMetapopStateTensors,
     traveling_residents_LAR = precomputed.sum_residents_nonlocal_travel_prop[:, None, None] * \
                               active_pop_LAR
 
-    effective_pop_LA = precomputed.total_pop_LA + \
-                       params.prop_time_away_by_age[0, :, 0] * \
+    if params.prop_time_away_by_age.size() == torch.Size([]):
+        prop_time_away = params.prop_time_away_by_age
+    else:
+        prop_time_away = params.prop_time_away_by_age[0, :, 0]
+
+    effective_pop_LA = precomputed.total_pop_LA + prop_time_away * \
                        torch.sum(outside_visitors_LAR + traveling_residents_LAR, dim=2)
 
     return effective_pop_LA
@@ -100,7 +104,12 @@ def compute_local_to_local_exposure(prop_time_away_by_age: torch.Tensor,
     Excludes beta -- that is factored in later
     """
 
-    result = (1 - prop_time_away_by_age.squeeze()[location_ix, :] * sum_residents_nonlocal_travel_prop[location_ix]) * \
+    if prop_time_away_by_age.size() == torch.Size([]):
+        prop_time_away = prop_time_away_by_age
+    else:
+        prop_time_away = prop_time_away_by_age.squeeze()[location_ix, :]
+
+    result = (1 - prop_time_away * sum_residents_nonlocal_travel_prop[location_ix]) * \
              torch.matmul(total_contact_matrix[location_ix, :, :],
                           wtd_infectious_ratio_LLA[location_ix, location_ix, :])
 
@@ -126,8 +135,13 @@ def compute_outside_visitors_exposure(prop_time_away_by_age: torch.Tensor,
     # In location dest_ix, we are looking at the visitors from
     #   origin_ix who come to dest_ix (and infect folks in dest_ix)
 
+    if prop_time_away_by_age.size() == torch.Size([]):
+        prop_time_away = prop_time_away_by_age
+    else:
+        prop_time_away = prop_time_away_by_age.squeeze()[visitors_ix, :]
+
     result = travel_proportions[visitors_ix, local_ix] * \
-             torch.matmul(prop_time_away_by_age.squeeze()[visitors_ix, :] * total_contact_matrix[local_ix, :, :],
+             torch.matmul(prop_time_away * total_contact_matrix[local_ix, :, :],
                           wtd_infectious_ratio_LLA[visitors_ix, local_ix, :])
 
     return result
@@ -149,7 +163,12 @@ def compute_residents_traveling_exposure(prop_time_away_by_age: torch.Tensor,
     Output should be size A
     """
 
-    result = prop_time_away_by_age.squeeze()[local_ix, :] * travel_proportions[local_ix, dest_ix] * \
+    if prop_time_away_by_age.size() == torch.Size([]):
+        prop_time_away = prop_time_away_by_age
+    else:
+        prop_time_away = prop_time_away_by_age.squeeze()[local_ix, :]
+
+    result = prop_time_away * travel_proportions[local_ix, dest_ix] * \
              torch.matmul(total_contact_matrix[local_ix, :, :],
                           wtd_infectious_ratio_LLA[dest_ix, dest_ix, :])
 
@@ -167,7 +186,10 @@ def compute_travel_wtd_infectious(state: FluMetapopStateTensors,
     sum_residents_nonlocal_travel_prop = precomputed.sum_residents_nonlocal_travel_prop
     wtd_infectious_ratio_LLA = compute_wtd_infectious_ratio_LLA(state, params, precomputed)
 
-    relative_suscept_by_age = params.relative_suscept_by_age[0, :, 0]
+    if params.relative_suscept_by_age.size() == torch.Size([]):
+        relative_suscept = params.relative_suscept_by_age
+    else:
+        relative_suscept = params.relative_suscept_by_age[0, :, 0]
 
     travel_wtd_infectious = torch.tensor(np.zeros((L, A, R)))
 
@@ -202,7 +224,7 @@ def compute_travel_wtd_infectious(state: FluMetapopStateTensors,
                                             l,
                                             k)
 
-        normalized_travel_wtd_infectious = relative_suscept_by_age * raw_travel_wtd_infectious
+        normalized_travel_wtd_infectious = relative_suscept * raw_travel_wtd_infectious
 
         travel_wtd_infectious[l, :, :] = normalized_travel_wtd_infectious.view(A, 1).expand((A, R))
 

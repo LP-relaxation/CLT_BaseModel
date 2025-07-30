@@ -31,10 +31,10 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 from dataclasses import dataclass, fields, field
 
-from flu_data_structures import FluMetapopStateTensors, FluMetapopParamsTensors, FluPrecomputedTensors
-from flu_travel_functions import compute_travel_wtd_infectious
+from .flu_data_structures import FluMetapopStateTensors, FluMetapopParamsTensors, FluPrecomputedTensors
+from .flu_travel_functions import compute_travel_wtd_infectious
 
-base_path = Path(__file__).parent / "flu_torch_input_files"
+base_path = Path(__file__).parent / "texas_input_files"
 
 
 def to_tensor(x: np.ndarray,
@@ -281,23 +281,10 @@ with states_path.open("r") as f:
     states_data = json.load(f)
 state = FluMetapopStateTensors(**create_dict_of_tensors(states_data, False))
 
-states_indices_path = base_path / "init_vals_indices.json"
-with states_indices_path.open("r") as f:
-    states_indices = json.load(f)
-
 params_path = base_path / "params.json"
 with params_path.open("r") as f:
     params_data = json.load(f)
 params = FluMetapopParamsTensors(**create_dict_of_tensors(params_data, True))
-
-params_indices_path = base_path / "params_indices.json"
-with params_indices_path.open("r") as f:
-    params_indices = json.load(f)
-
-standardize_shapes(state,
-                   states_indices,
-                   params,
-                   params_indices)
 
 start = time.time()
 true_H_history = simulate(state, params, 10).clone().detach()

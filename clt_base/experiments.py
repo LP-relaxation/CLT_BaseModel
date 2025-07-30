@@ -1,7 +1,6 @@
 from .utils import np, sc, Optional, List, sqlite3, functools, os, pd, fields
 from .base_components import SubpopModel, MetapopModel
 
-
 class ExperimentError(Exception):
     """Custom exceptions for experiment errors."""
     pass

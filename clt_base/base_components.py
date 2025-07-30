@@ -1201,17 +1201,35 @@ class MetapopModel(ABC):
                 unique identifier for `MetapopModel`.
         """
 
-        # Ordered dictionary to preserve the order!
-        #   Because the order of the subpopulation model
-        #   in `subpop_models` is important, since it
+        # Important! Here is why we have an objdict
+        #   and an odict (ordered dictionary)...
+        # With the sciris package, objdict supports
+        #   dot notation access but odict does not...
+        #   we want subpop model access using dot notation
+        #   for convenience and consistency (because we use
+        #   objdicts for everything else).
+        # HOWEVER, we need an ordered dictionary to
+        #   preserve the order! Because the order of the
+        #   subpopulation model in the original
+        #   `subpop_models` list is important, since it
         #   determines the corresponding index in the
         #   state and params tensors!
-        subpop_models_dict = sc.odict()
+        # So, we have both... we have an objdict (which is
+        #   "outwards-facing") for user access, and internally
+        #   we have the ORDERED dictionary so we can be
+        #   very careful about preserving order (for example
+        #   when building metapopulation tensors)
 
+        subpop_models_dict = sc.objdict()
         for model in subpop_models:
             subpop_models_dict[model.name] = model
 
+        _subpop_models_ordered_dict = sc.odict()
+        for model in subpop_models:
+            _subpop_models_ordered_dict[model.name] = model
+
         self.subpop_models = subpop_models_dict
+        self._subpop_models_ordered = _subpop_models_ordered_dict
 
         self.name = name
 

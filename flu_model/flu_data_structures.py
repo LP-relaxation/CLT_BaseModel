@@ -1,5 +1,273 @@
 import torch
+import numpy as np
+from dataclasses import dataclass
+from typing import Optional
 from dataclasses import dataclass, fields, field
+
+import clt_base as clt
+
+
+@dataclass
+class FluSubpopState(clt.SubpopState):
+    """
+    Data container for pre-specified and fixed set of
+    Compartment initial values and EpiMetric initial values
+    in FluModel flu model.
+
+    Each field below should be A x R np.ndarray, where
+    A is the number of age groups and R is the number of risk groups.
+    Note: this means all arrays should be 2D. Even if there is
+    1 age group and 1 risk group (no group stratification),
+    each array should be 1x1, which is two-dimensional.
+    For example, np.array([[100]]) is correct --
+    np.array([100]) is wrong.
+
+    Attributes:
+        S (np.ndarray of positive floats):
+            susceptible compartment for age-risk groups --
+            (holds current_val of Compartment "S").
+        E (np.ndarray of positive floats):
+            exposed compartment for age-risk groups --
+            (holds current_val of Compartment "E").
+        IP (np.ndarray of positive floats):
+            infected pre-symptomatic compartment for age-risk groups
+            (holds current_val of Compartment "IP").
+        IS (np.ndarray of positive floats):
+            infected symptomatic compartment for age-risk groups
+            (holds current_val of Compartment "IS").
+        IA (np.ndarray of positive floats):
+            infected asymptomatic compartment for age-risk groups
+            (holds current_val of Compartment "IA").
+        H (np.ndarray of positive floats):
+            hospital compartment for age-risk groups
+            (holds current_val of Compartment "H").
+        R (np.ndarray of positive floats):
+            recovered compartment for age-risk groups
+            (holds current_val of Compartment "R").
+        D (np.ndarray of positive floats):
+            dead compartment for age-risk groups
+            (holds current_val of Compartment "D").
+        M (np.ndarray of positive floats):
+            infection-induced population-level immunity
+            for age-risk groups (holds current_val
+            of EpiMetric "M").
+        Mv (np.ndarray of positive floats):
+            vaccine-induced population-level immunity
+            for age-risk groups (holds current_val
+            of EpiMetric "Mv").
+        absolute_humidity (positive float):
+            grams of water vapor per cubic meter g/m^3,
+            used as seasonality parameter that influences
+            transmission rate beta_baseline.
+        flu_contact_matrix (np.ndarray of positive floats):
+            A x A array, where A is the number of age
+            groups -- element (a, a') corresponds to the number
+            of contacts that a person in age group a
+            has with people in age-risk group a'.
+        beta_reduce (float in [0,1]):
+            starting value of DynamicVal "beta_reduce" on
+            starting day of simulation -- this DynamicVal
+            emulates a simple staged-alert policy
+        daily_vaccines (np.ndarray of positive ints):
+            holds current value of DailyVaccines instance,
+            corresponding number of individuals who received influenza
+            vaccine on that day, for given age-risk group
+            (generally derived from historical data)
+    """
+
+    S: Optional[np.ndarray] = None
+    E: Optional[np.ndarray] = None
+    IP: Optional[np.ndarray] = None
+    IS: Optional[np.ndarray] = None
+    IA: Optional[np.ndarray] = None
+    H: Optional[np.ndarray] = None
+    R: Optional[np.ndarray] = None
+    D: Optional[np.ndarray] = None
+
+    M: Optional[np.ndarray] = None
+    Mv: Optional[np.ndarray] = None
+
+    absolute_humidity: Optional[float] = None
+    flu_contact_matrix: Optional[np.ndarray] = None
+    beta_reduce: Optional[float] = 0.0
+
+    daily_vaccines: Optional[np.ndarray] = None
+
+
+@dataclass
+class FluSubpopParams(clt.SubpopParams):
+    """
+    Data container for pre-specified and fixed epidemiological
+    parameters in FluModel flu model.
+
+    Each field of datatype np.ndarray must be A x R,
+    where A is the number of age groups and R is the number of
+    risk groups. Note: this means all arrays should be 2D.
+    See FluSubpopState docstring for important formatting note
+    on 2D arrays.
+
+    TODO:
+        when adding multiple strains, need to add subscripts
+        to math of attributes and add strain-specific description
+
+    Attributes:
+        num_age_groups (positive int):
+            number of age groups.
+        num_risk_groups (positive int):
+            number of risk groups.
+        beta_baseline (positive float): transmission rate.
+        total_pop_age_risk (np.ndarray of positive ints):
+            total number in population, summed across all
+            age-risk groups.
+        humidity_impact (positive float):
+            coefficient that determines how much absolute
+            humidity affects beta_baseline.
+        inf_induced_saturation (np.ndarray of positive floats):
+            constant(s) modeling saturation of antibody
+            production of infected individuals.
+        inf_induced_immune_wane (positive float):
+            rate at which infection-induced immunity
+            against infection wanes.
+        vax_induced_saturation (np.ndarray of positive floats):
+            constant(s) modeling saturation of antibody
+            production of vaccinated individuals.
+        vax_induced_immune_wane (positive float):
+            rate at which vaccine-induced immunity
+            against infection wanes.
+        inf_induced_inf_risk_reduce (positive float):
+            reduction in risk of getting infected
+            after getting infected
+        inf_induced_hosp_risk_reduce (positive float):
+            reduction in risk of hospitalization
+            after getting infected
+        inf_induced_death_risk_reduce (positive float):
+            reduction in risk of death
+            after getting infected
+        vax_induced_inf_risk_reduce (positive float):
+            reduction in risk of getting infected
+            after getting vaccinated
+        vax_induced_hosp_risk_reduce (positive float):
+            reduction in risk of hospitalization
+            after getting vaccinated
+        vax_induced_death_risk_reduce (positive float):
+            reduction in risk of death
+            after getting vaccinated
+        R_to_S_rate (positive float):
+            rate at which people in R move to S.
+        E_to_I_rate (positive float):
+            rate at which people in E move to I (both
+            IP and IA, infected pre-symptomatic and infected
+            asymptomatic)
+        IP_to_IS_rate (positive float):
+            rate a which people in IP (infected pre-symptomatic)
+            move to IS (infected symptomatic)
+        IS_to_R_rate (positive float):
+            rate at which people in IS (infected symptomatic)
+            move to R.
+        IA_to_R_rate (positive float):
+            rate at which people in IA (infected asymptomatic)
+            move to R
+        IS_to_H_rate (positive float):
+            rate at which people in IS (infected symptomatic)
+            move to H.
+        H_to_R_rate (positive float):
+            rate at which people in H move to R.
+        H_to_D_rate (positive float):
+            rate at which people in H move to D.
+        E_to_IA_prop (np.ndarray of positive floats in [0,1]):
+            proportion exposed who are asymptomatic based on
+            age-risk groups.
+        IS_to_H_adjusted_prop (np.ndarray of positive floats in [0,1]):
+            rate-adjusted proportion infected who are hospitalized
+            based on age-risk groups.
+        H_to_D_adjusted_prop (np.ndarray of positive floats in [0,1]):
+            rate-adjusted proportion hospitalized who die based on
+            age-risk groups.
+        IP_relative_inf (positive float):
+            relative infectiousness of pre-symptomatic to symptomatic
+            people (IP to IS compartment).
+        IA_relative_inf (positive float):
+            relative infectiousness of asymptomatic to symptomatic
+            people (IA to IS compartment).
+        relative_suscept_by_age (np.ndarray of positive floats in [0,1]):
+            relative susceptibility to infection by age group
+        prop_time_away_by_age (np.ndarray of positive floats in [0,1]):
+            total proportion of time spent away from home by age group
+        total_contact_matrix (np.ndarray of positive floats):
+            A x A contact matrix (where A is the number
+            of age groups), where element i,j is the average
+            contacts from age group j that an individual in
+            age group i has
+        school_contact_matrix (np.ndarray of positive floats):
+            A x A contact matrix (where A is the number
+            of age groups), where element i,j is the average
+            contacts from age group j that an individual in
+            age group i has at school -- this matrix plus the
+            work_contact_matrix must be less than the
+            total_contact_matrix, element-wise
+        work_contact_matrix (np.ndarray of positive floats):
+            A x A contact matrix (where A is the number
+            of age groups), where element i,j is the average
+            contacts from age group j that an individual in
+            age group i has at work -- this matrix plus the
+            work_contact_matrix must be less than the
+            total_contact_matrix, element-wise
+        daily_vaccines (int):
+            WARNING: THIS IS A PLACEHOLDER. See `DailyVaccines`
+            class for more information. This will be deleted once
+            we have historical vaccine data and set up the
+            `DailyVaccines` `Schedule` properly.
+        travel_proportions (np.ndarray):
+            L x L array of floats in [0,1], where L is the number
+            of locations (subpopulations), and the i-jth element
+            is the proportion of people in subpopulation i that
+            travel to subpopulation j.
+
+    """
+
+    num_age_groups: Optional[int] = None
+    num_risk_groups: Optional[int] = None
+    beta_baseline: Optional[float] = None
+    total_pop_age_risk: Optional[np.ndarray] = None
+    humidity_impact: Optional[float] = None
+
+    inf_induced_saturation: Optional[float] = None
+    inf_induced_immune_wane: Optional[float] = None
+    vax_induced_saturation: Optional[float] = None
+    vax_induced_immune_wane: Optional[float] = None
+    inf_induced_inf_risk_reduce: Optional[float] = None
+    inf_induced_hosp_risk_reduce: Optional[float] = None
+    inf_induced_death_risk_reduce: Optional[float] = None
+    vax_induced_inf_risk_reduce: Optional[float] = None
+    vax_induced_hosp_risk_reduce: Optional[float] = None
+    vax_induced_death_risk_reduce: Optional[float] = None
+
+    R_to_S_rate: Optional[float] = None
+    E_to_I_rate: Optional[float] = None
+    IP_to_IS_rate: Optional[float] = None
+    IS_to_R_rate: Optional[float] = None
+    IA_to_R_rate: Optional[float] = None
+    IS_to_H_rate: Optional[float] = None
+    H_to_R_rate: Optional[float] = None
+    H_to_D_rate: Optional[float] = None
+    E_to_IA_prop: Optional[np.ndarray] = None
+
+    IS_to_H_adjusted_prop: Optional[np.ndarray] = None
+    H_to_D_adjusted_prop: Optional[np.ndarray] = None
+
+    IP_relative_inf: Optional[float] = None
+    IA_relative_inf: Optional[float] = None
+
+    relative_suscept_by_age: Optional[np.ndarray] = None
+
+    prop_time_away_by_age: Optional[np.ndarray] = None
+
+    total_contact_matrix: Optional[np.ndarray] = None
+    school_contact_matrix: Optional[np.ndarray] = None
+    work_contact_matrix: Optional[np.ndarray] = None
+
+    daily_vaccines_constant: Optional[int] = None
+    travel_proportions: Optional[np.ndarray] = None
 
 
 @dataclass

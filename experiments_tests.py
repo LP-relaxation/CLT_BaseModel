@@ -124,7 +124,7 @@ def test_subpop_random_sampling_reproducibility():
                                  ["IS", "IP", "IA"],
                                  "results1.db")
 
-    spec = {"subpopA": {"contact_mult_travel": [0.4, 0.6]}}
+    spec = {"subpopA": {"beta_baseline": [0.4, 0.6]}}
 
     experiment1.run_random_inputs(num_reps=1,
                                   simulation_end_day=20,

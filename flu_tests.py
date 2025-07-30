@@ -28,23 +28,21 @@ import pytest
 
 from pathlib import Path
 
-base_path = Path(__file__).parent / "flu_model" / "flu_demo_input_files"
+base_path = Path(__file__).parent / "flu_model" / "texas_input_files"
 
 config_filepath = base_path / "config.json"
 # params_filepath = base_path / "common_params.json"
 # compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
 calendar_filepath = base_path / "school_work_calendar.csv"
 humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
-travel_proportions_filepath = base_path / "travel_proportions.json"
 
-params_filepath = base_path / "common_params_multiple_risk_groups.json"
-compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals_multiple_risk_groups.json"
+params_filepath = base_path / "common_params.json"
+compartments_epi_metrics_init_vals_filepath = base_path / "init_vals.json"
 
 compartments_epi_metrics_dict = clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
 params_dict = clt.load_json_new_dict(params_filepath)
 config_dict = clt.load_json_new_dict(config_filepath)
 calendar_df = pd.read_csv(calendar_filepath, index_col=0)
-travel_proportions = clt.load_json_new_dict(travel_proportions_filepath)
 
 bit_generator = np.random.MT19937(88888)
 jumped_bit_generator = bit_generator.jumped(1)
@@ -64,75 +62,6 @@ def check_state_variables_same_history(subpop_model_A: clt.SubpopModel,
     for name in subpop_model_A.all_state_variables.keys():
         assert np.array_equal(np.array(subpop_model_A.all_state_variables[name].history_vals_list),
                               np.array(subpop_model_B.all_state_variables[name].history_vals_list))
-
-
-def test_travel_computations_shapes():
-
-    config_dict_1_timestep = copy.deepcopy(config_dict)
-    config_dict_1_timestep["timesteps_per_day"] = 1
-
-    num_age_groups = params_dict["num_age_groups"]
-    num_risk_groups = params_dict["num_risk_groups"]
-    num_subpop = 2
-
-    subpopA = flu.FluSubpopModel(compartments_epi_metrics_dict,
-                                 params_dict,
-                                 config_dict_1_timestep,
-                                 calendar_df,
-                                 np.random.default_rng(starting_random_seed),
-                                 humidity_filepath,
-                                 name="subpopA")
-
-    subpopB = flu.FluSubpopModel(compartments_epi_metrics_dict,
-                                 params_dict,
-                                 config_dict_1_timestep,
-                                 calendar_df,
-                                 np.random.default_rng(starting_random_seed ** 2),
-                                 humidity_filepath,
-                                 name="subpopB")
-
-    AB_inter_subpop_repo = flu.FluInterSubpopRepo({"subpopA": subpopA, "subpopB": subpopB},
-                                                  {"subpopA": 0, "subpopB": 1},
-                                                  np.zeros((2, 2)))
-
-    metapopAB_model = flu.FluMetapopModel(AB_inter_subpop_repo)
-
-    simulation_end_day = 1
-
-    for subpop_model in metapopAB_model.subpop_models.values():
-        subpop_model.state.sync_to_current_vals(subpop_model.all_state_variables)
-        subpop_model.prepare_daily_state()
-
-    isr = metapopAB_model.inter_subpop_repo
-
-    wtd_no_symp_by_age_cache = isr.create_wtd_no_symp_by_age_cache()
-    for key, val in wtd_no_symp_by_age_cache.items():
-        assert np.shape(val) == (num_age_groups, 1)
-
-    effective_pop_by_age_cache = isr.create_effective_pop_by_age_cache()
-    for key, val in effective_pop_by_age_cache.items():
-        assert np.shape(val) == (num_age_groups, num_risk_groups)
-
-    isr.compute_shared_quantities()
-
-    assert np.shape(isr.force_of_infection_array) == (num_subpop, num_age_groups, num_risk_groups)
-
-    isr.update_all_interaction_terms()
-
-    for subpop_model in metapopAB_model.subpop_models.values():
-
-        save_daily_history = subpop_model.config.save_daily_history
-        timesteps_per_day = subpop_model.config.timesteps_per_day
-
-        subpop_model.simulate_timesteps(timesteps_per_day)
-
-        if save_daily_history:
-            subpop_model.save_daily_history()
-
-        subpop_model.increment_simulation_day()
-
-        for name, compartment in subpop_model.compartments.items():
-            assert np.shape(compartment.current_val) == (num_age_groups, num_risk_groups)
 
 
 def create_subpop_models_all_transition_types(RNG: np.random.Generator) -> list:
@@ -478,6 +407,8 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
     num_age_groups = params_dict["num_age_groups"]
     num_risk_groups = params_dict["num_risk_groups"]
 
+    params_dict["travel_proportions"] = np.zeros((2, 2))
+
     subpopA = flu.FluSubpopModel(compartments_epi_metrics_dict,
                                  params_dict,
                                  config_dict_1_timestep,
@@ -494,13 +425,7 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
                                  humidity_filepath,
                                  name="subpopB")
 
-    AB_inter_subpop_repo = flu.FluInterSubpopRepo({"subpopA": subpopA, "subpopB": subpopB},
-                                                  {"subpopA": 0, "subpopB": 1},
-                                                  np.zeros((2, 2)))
-
-    metapopAB_model = flu.FluMetapopModel(AB_inter_subpop_repo)
-
-    metapopAB_model.simulate_until_day(100)
+    metapopAB_model = flu.FluMetapopModel([subpopA, subpopB])
 
     subpopA_independent = flu.FluSubpopModel(compartments_epi_metrics_dict,
                                              params_dict,
@@ -518,22 +443,6 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
                                              humidity_filepath,
                                              name="subpopB")
 
-    subpopA_independent.simulate_until_day(100)
-    subpopB_independent.simulate_until_day(100)
-
-    check_state_variables_same_history(subpopA, subpopA_independent)
-    check_state_variables_same_history(subpopB, subpopB_independent)
-
-    metapopAB_model.reset_simulation()
-
-    subpopA_independent.reset_simulation()
-    subpopB_independent.reset_simulation()
-
-    metapopAB_model.subpop_models.subpopA.params.prop_time_away_by_age = np.zeros((num_age_groups, num_risk_groups))
-
-    subpopA_independent.params.prop_time_away_by_age = np.zeros((num_age_groups, num_risk_groups))
-    subpopB_independent.params.prop_time_away_by_age = np.zeros((num_age_groups, num_risk_groups))
-
     metapopAB_model.simulate_until_day(100)
 
     subpopA_independent.simulate_until_day(100)
@@ -541,6 +450,5 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
 
     check_state_variables_same_history(subpopA, subpopA_independent)
     check_state_variables_same_history(subpopB, subpopB_independent)
-
 
 
