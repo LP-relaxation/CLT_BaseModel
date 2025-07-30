@@ -281,13 +281,13 @@ with states_path.open("r") as f:
     states_data = json.load(f)
 state = FluMetapopStateTensors(**create_dict_of_tensors(states_data, False))
 
-params_path = base_path / "params.json"
+params_path = base_path / "common_params.json"
 with params_path.open("r") as f:
     params_data = json.load(f)
 params = FluMetapopParamsTensors(**create_dict_of_tensors(params_data, True))
 
 start = time.time()
-true_H_history = simulate(state, params, 10).clone().detach()
+true_H_history = simulate(state, params, 10, 1).clone().detach()
 print(time.time() - start)
 
 breakpoint()

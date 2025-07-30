@@ -11,14 +11,19 @@ from abc import ABC, abstractmethod
 import torch
 import clt_base as clt
 
-from .flu_data_structures import FluSubpopState, FluSubpopParams,\
-    FluMetapopStateTensors, FluMetapopParamsTensors, FluPrecomputedTensors
+from .flu_data_structures import FluSubpopState, FluSubpopParams, \
+    FluMetapopStateTensors, FluMetapopParamsTensors, FluPrecomputedTensors, \
+    FluMixingParams
 from .flu_travel_functions import compute_travel_wtd_infectious
 
 
 # Note: for dataclasses, Optional is used to help with static type checking
 # -- it means that an attribute can either hold a value with the specified
 # datatype or it can be None
+
+class FluMetapopModelError(clt.MetapopModelError):
+    """Custom exceptions for flu metapopulation simulation model errors."""
+    pass
 
 
 class SusceptibleToExposed(clt.TransitionVariable):
@@ -800,39 +805,108 @@ class FluMetapopModel(clt.MetapopModel, ABC):
     """
 
     def __init__(self,
-                 subpop_models: list = [],
+                 subpop_models: list[dict],
+                 mixing_params: dict = {},
                  name: str = ""):
 
         super().__init__(subpop_models,
+                         mixing_params,
                          name)
+
+        if not isinstance(mixing_params, dict):
+            raise FluMetapopModelError("'mixing_params' argument must be a dictionary.")
+        try:
+            num_locations = mixing_params["num_locations"]
+        except KeyError:
+            raise FluMetapopModelError("'mixing_params' must contain the key 'num_locations'. \n"
+                                       "Please specify it before continuing.")
+
+        if num_locations != len(subpop_models):
+            raise FluMetapopModelError("'num_locations' should equal the number of items in \n"
+                                       "'subpop_models'. Please amend before continuing.")
 
         self.state_tensors = FluMetapopStateTensors()
         self.update_state_tensors()
 
-        params_tensors = self.create_params_tensors()
-        params_tensors.num_locations = torch.tensor(len(subpop_models))
-        params_tensors.standardize_shapes()
+        self.params_tensors = FluMetapopParamsTensors()
+        self.params_tensors.num_locations = torch.tensor(mixing_params["num_locations"])
+        self.params_tensors.travel_proportions = torch.tensor(mixing_params["travel_proportions"])
+        self.update_params_tensors()
 
-        self.params_tensors = params_tensors
+        total_pop_LAR = self.compute_total_pop_LAR()
 
-        self.precomputed = FluPrecomputedTensors(self.state_tensors,
+        self.precomputed = FluPrecomputedTensors(total_pop_LAR,
+                                                 self.state_tensors,
                                                  self.params_tensors)
 
-    def create_params_tensors(self) -> FluMetapopParamsTensors:
+        self.mixing_params = clt.make_dataclass_from_dict(FluMixingParams, mixing_params)
+
+    def compute_total_pop_LAR(self):
+
+        # ORDER MATTERS! USE ORDERED DICTIONARY HERE
+        #   to preserve correct index order in tensors!
+        #   See `update_params_tensors` for detailed note.
+        subpop_models_ordered = self._subpop_models_ordered
+
+        total_pop_LAR = torch.zeros(self.params_tensors.num_locations,
+                                    self.params_tensors.num_age_groups,
+                                    self.params_tensors.num_risk_groups)
+
+        # All subpop models should have the same compartments' keys
+        for name in subpop_models_ordered[0].compartments.keys():
+
+            metapop_vals = []
+
+            for model in subpop_models_ordered.values():
+
+                compartment = getattr(model.compartments, name)
+                metapop_vals.append(compartment.current_val)
+
+            total_pop_LAR = total_pop_LAR + torch.tensor(np.asarray(metapop_vals))
+
+        return total_pop_LAR
+
+    def update_state_tensors(self) -> None:
+
+        # ORDER MATTERS! USE ORDERED DICTIONARY HERE
+        #   to preserve correct index order in tensors!
+        #   See `update_params_tensors` for detailed note.
+        subpop_models_ordered = self._subpop_models_ordered
+
+        for name in vars(self.state_tensors).keys():
+
+            # FluMetapopStateTensors has an attribute
+            #   that is a dictionary called `init_vals` --
+            #   disregard, as this only used to store
+            #   initial values for resetting, but is not
+            #   used in the travel model computation
+            if name == "init_vals":
+                continue
+
+            metapop_vals = []
+
+            for model in subpop_models_ordered.values():
+
+                current_val = getattr(model.state, name)
+
+                metapop_vals.append(current_val)
+
+            setattr(self.state_tensors, name, torch.tensor(np.asarray(metapop_vals)))
+
+    def update_params_tensors(self) -> FluMetapopParamsTensors:
 
         # USE THE ORDERED DICTIONARY HERE FOR SAFETY!
         #   AGAIN, ORDER MATTERS BECAUSE ORDER DETERMINES
         #   THE SUBPOPULATION INDEX IN THE METAPOPULATION
         #   TENSOR!
-        subpop_models = self._subpop_models_ordered
+        subpop_models_ordered = self._subpop_models_ordered
 
-        params_tensors = FluMetapopParamsTensors()
-
-        for name in vars(subpop_models[0].params).keys():
+        # All subpop models should have the same params' keys
+        for name in vars(subpop_models_ordered[0].params).keys():
 
             metapop_vals = []
 
-            for model in subpop_models.values():
+            for model in subpop_models_ordered.values():
 
                 metapop_vals.append(getattr(model.params, name))
 
@@ -848,14 +922,14 @@ class FluMetapopModel(clt.MetapopModel, ABC):
             if isinstance(metapop_vals, list):
                 metapop_vals = np.array(metapop_vals)
 
-            setattr(params_tensors, name, torch.tensor(metapop_vals))
+            setattr(self.params_tensors, name, torch.tensor(metapop_vals))
 
-        return params_tensors
+        self.params_tensors.standardize_shapes()
 
     def update_state_tensors(self) -> None:
 
         # ORDER MATTERS! USE ORDERED DICTIONARY HERE!
-        #   See `create_params_tensors` for detailed note.
+        #   See `update_params_tensors` for detailed note.
         subpop_models = self._subpop_models_ordered
 
         for name in vars(self.state_tensors).keys():

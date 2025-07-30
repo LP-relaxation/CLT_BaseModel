@@ -6,7 +6,6 @@ from dataclasses import dataclass, fields, field
 
 import clt_base as clt
 
-
 @dataclass
 class FluSubpopState(clt.SubpopState):
     """
@@ -217,11 +216,6 @@ class FluSubpopParams(clt.SubpopParams):
             class for more information. This will be deleted once
             we have historical vaccine data and set up the
             `DailyVaccines` `Schedule` properly.
-        travel_proportions (np.ndarray):
-            L x L array of floats in [0,1], where L is the number
-            of locations (subpopulations), and the i-jth element
-            is the proportion of people in subpopulation i that
-            travel to subpopulation j.
 
     """
 
@@ -267,22 +261,15 @@ class FluSubpopParams(clt.SubpopParams):
     work_contact_matrix: Optional[np.ndarray] = None
 
     daily_vaccines_constant: Optional[int] = None
-    travel_proportions: Optional[np.ndarray] = None
 
 
 @dataclass
 class FluMetapopStateTensors:
 
-    S: torch.Tensor = None
-    E: torch.Tensor = None
     IP: torch.Tensor = None
     IS: torch.Tensor = None
     IA: torch.Tensor = None
     H: torch.Tensor = None
-    R: torch.Tensor = None
-    D: torch.Tensor = None
-    M: torch.Tensor = None
-    Mv: torch.Tensor = None
 
     init_vals: dict = field(default_factory=dict)
 
@@ -308,36 +295,6 @@ class FluMetapopParamsTensors:
     num_locations: int = None
     num_age_groups: int = None
     num_risk_groups: int = None
-
-    beta_baseline: torch.Tensor = None
-    humidity_impact: torch.Tensor = None
-
-    R_to_S_rate: torch.Tensor = None
-    E_to_I_rate: torch.Tensor = None
-    IP_to_IS_rate: torch.Tensor = None
-    IS_to_R_rate: torch.Tensor = None
-    IA_to_R_rate: torch.Tensor = None
-    IS_to_H_rate: torch.Tensor = None
-    H_to_R_rate: torch.Tensor = None
-    H_to_D_rate: torch.Tensor = None
-
-    E_to_IA_prop: torch.Tensor = None
-    H_to_D_adjusted_prop: torch.Tensor = None
-    IS_to_H_adjusted_prop: torch.Tensor = None
-
-    inf_induced_saturation: torch.Tensor = None
-    inf_induced_immune_wane: torch.Tensor = None
-    inf_induced_inf_risk_reduce: torch.Tensor = None
-    inf_induced_hosp_risk_reduce: torch.Tensor = None
-    inf_induced_death_risk_reduce: torch.Tensor = None
-
-    vax_induced_saturation: torch.Tensor = None
-    vax_induced_immune_wane: torch.Tensor = None
-    vax_induced_inf_risk_reduce: torch.Tensor = None
-    vax_induced_hosp_risk_reduce: torch.Tensor = None
-    vax_induced_death_risk_reduce: torch.Tensor = None
-
-    daily_vaccines_constant: torch.Tensor = None
 
     total_contact_matrix: torch.Tensor = None
     school_contact_matrix: torch.Tensor = None
@@ -407,8 +364,8 @@ class FluMetapopParamsTensors:
             elif value.size() == torch.Size([L, A, R]):
                 continue
 
-            elif value.size() == torch.Size([L]):
-                setattr(self, name, value.view(L, 1, 1).expand(L, A, R))
+            elif value.size() == torch.Size([A]):
+                setattr(self, name, value.view(1, A, 1).expand(L, A, R))
 
             elif value.size() == torch.Size([A, R]):
                 setattr(self, name, value.view(1, A, R).expand(L, A, R))
@@ -421,19 +378,11 @@ class FluPrecomputedTensors:
     """
 
     def __init__(self,
+                 total_pop_LAR: torch.Tensor,
                  state: FluMetapopStateTensors,
                  params: FluMetapopParamsTensors) -> None:
 
-        self.total_pop_LAR = self.total_pop_LAR = (
-            state.S +
-            state.E +
-            state.IP +
-            state.IS +
-            state.IA +
-            state.H +
-            state.R +
-            state.D
-        ).clone().detach()
+        self.total_pop_LAR = total_pop_LAR
 
         self.L = int(params.num_locations.item())
         self.A = int(params.num_age_groups.item())
@@ -450,3 +399,21 @@ class FluPrecomputedTensors:
         # Note we already have k \not = \ell because we set the diagonal of
         #   nonlocal_travel_prop to 0
         self.sum_residents_nonlocal_travel_prop = self.nonlocal_travel_prop.sum(dim=1)
+
+
+@dataclass
+class FluMixingParams:
+    """
+    Params:
+        num_locations (int):
+            Number of locations (subpopulations) in the
+            metapopulation model.
+        travel_proportions (np.ndarray):
+            L x L array of floats in [0,1], where L is the number
+            of locations (subpopulations), and the i-jth element
+            is the proportion of people in subpopulation i that
+            travel to subpopulation j.
+    """
+
+    num_locations: Optional[int]
+    travel_proportions: Optional[np.ndarray]

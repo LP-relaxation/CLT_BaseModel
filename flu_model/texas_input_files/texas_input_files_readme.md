@@ -1,5 +1,3 @@
-
-
 Notes
 - "B&B 2025" refers to Bi & Bandekar et al's paper draft for influenza burden averted, using the immunoSEIRS model. 
 - "CLT Lit Review" refers to the literature review that the whole group did to identify fixed values or reasonable ranges for various parameters.
@@ -13,9 +11,9 @@ Note: the order that the parameter values are described in this README may not n
 
 # `humidity_austin_2023_2024.csv`
 
-From Remy. 
+From Remy!
 
-# `common_params.json`
+# `common_subpop_params.json`
 
 This `JSON` file has parameter values currently used in calibration attempts. A simple initial calibration attempt is to obtain a sensible `beta_baseline` (and potentially sensible population-level immunity parameter values and initial values) for one subpopulation.
 
@@ -44,12 +42,9 @@ Note that many of the fixed parameters will likely be common across city models,
 - `inf_induced_saturation`, `vax_induced_saturation` -- Anass 2025
 - `inf_induced_inf_risk_reduce`, `vax_induced_inf_risk_reduce` -- Anass 2025
 
-### Parameters that are set to placeholder values (need to be updated)
-- `daily_vaccines_constant` -- once we use a vaccine time series, we do not need this parameter anymore 
-- `travel_proportions` -- these need to be replaced by mobility data-driven estimates
-- `prop_time_away_by_age` -- same as above
-
-## Parameters that need to be fit or reassessed
+## Parameters that need to be changed or fit
+- `daily_vaccines_constant` (placeholder, needs to be updated) -- once we use a vaccine time series, we do not need this parameter anymore
+- `prop_time_away_by_age` -- need to be replaced by mobility data-driven estimates
 - `beta_baseline` -- we are trying to fit this parameter. B&B 2025 list their calibrated value as `0.0493`
 - `R_to_S_rate` -- CLT Lit Review (Oluwasegun) -- will probably have to wiggle this for our new population-level immunity equations -- also, based on very preliminary calibration, it seems like this rate is too fast for sensible results
 - `inf_induced_immune_wane`, `vax_induced_immune_wane` -- CLT Lit Review (Linda, but had group discussion, and ended up using similar B&B 2025 values) -- specifically for infection-induced immunity waning, LP is suspicious because we only have literature on the half-life of antibodies, but that is not the same as half-life of protection against infection... may want to consider fitting these parameters.
@@ -65,11 +60,16 @@ These parameters are not being included, at least in the first pass (simpler mod
 # `init_vals.json`
 
 ## Fixed parameters
-
 - `S` -- population estimates from ACS 2023 1-year -- can also be taken from data source described in `README.md` in `derived_inputs_computation` folder.
 - `R`, `D` -- starting off with zero-matrices.
 
-## Parameters that need to be fit or re-assessed
+## Parameters that need to be changed or fit
 - `E`, `IP`, `IS`, `IA`, `H` -- B&B 2025
 	- `E` for each age-risk group is simply set to 10, and the 3 infected compartments and `H` for each age-risk group are set to 1
 	- City-level models should adjust these initial values based on population counts in their city.
+
+# `mixing_params.json`
+
+## Parameters that need to be changed or fit
+- `num_locations` -- aka number of subpopulations -- this depends on the city
+- `travel_proportions` -- need to be replaced by mobility data-driven estimates

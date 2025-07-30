@@ -15,13 +15,12 @@ from pathlib import Path
 #################### SETUP ######################
 #################################################
 
-base_path = Path(__file__).parent / "flu_model" / "flu_demo_input_files"
+base_path = Path(__file__).parent / "flu_model" / "texas_input_files"
 
 params_filepath = base_path / "common_params.json"
-compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
+compartments_epi_metrics_init_vals_filepath = base_path / "init_vals.json"
 calendar_filepath = base_path / "school_work_calendar.csv"
 humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
-travel_proportions_filepath = base_path / "travel_proportions.json"
 
 config_dict = {}
 config_dict["timesteps_per_day"] = 2
@@ -32,7 +31,6 @@ config_dict["save_daily_history"] = False
 compartments_epi_metrics_dict = clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
 params_dict = clt.load_json_new_dict(params_filepath)
 calendar_df = pd.read_csv(calendar_filepath, index_col=0)
-travel_proportions = clt.load_json_new_dict(travel_proportions_filepath)
 
 bit_generator = np.random.MT19937(88888)
 jumped_bit_generator = bit_generator.jumped(1)
@@ -43,20 +41,18 @@ subpopA = flu.FluSubpopModel(compartments_epi_metrics_dict,
                              config_dict,
                              calendar_df,
                              np.random.Generator(bit_generator),
-                             humidity_filepath)
+                             humidity_filepath,
+                             name="subpopA")
 
 subpopB = flu.FluSubpopModel(compartments_epi_metrics_dict,
                              params_dict,
                              config_dict,
                              calendar_df,
                              np.random.Generator(jumped_bit_generator),
-                             humidity_filepath)
+                             humidity_filepath,
+                             name="subpopB")
 
-repoAB = flu.FluInterSubpopRepo({"subpopA": subpopA, "subpopB": subpopB},
-                                {"subpopA": 0, "subpopB": 1},
-                                travel_proportions["travel_proportions"])
-
-metapopAB = flu.FluMetapopModel(repoAB)
+metapopAB = flu.FluMetapopModel([subpopA, subpopB])
 
 # Test on both SubpopModel and on MetapopModel
 experiment_models_list = [subpopA, metapopAB]

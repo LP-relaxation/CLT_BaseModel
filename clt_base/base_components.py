@@ -1193,7 +1193,8 @@ class MetapopModel(ABC):
     """
 
     def __init__(self,
-                 subpop_models: list = [],
+                 subpop_models: list[dict],
+                 mixing_params: dict,
                  name: str = ""):
         """
         Params:
@@ -1232,6 +1233,11 @@ class MetapopModel(ABC):
         self._subpop_models_ordered = _subpop_models_ordered_dict
 
         self.name = name
+
+        # Concrete implementations of MetapopModel will generally
+        #   do something more with these parameters -- but this is
+        #   just default storage here
+        self.mixing_params = mixing_params
 
         for model in self.subpop_models.values():
             model.metapop_model = self
@@ -1370,10 +1376,11 @@ class MetapopModel(ABC):
             current_real_dates_list.append(subpop_model.current_real_date)
 
         if len(set(current_real_dates_list)) > 1:
-            raise MetapopModelError("Subpopulation models are on different real dates "
-                                    "and are out-of-sync. This may be caused by simulating "
-                                    "a subpopulation model independently from the "
-                                    "metapopulation model. Fix error and try again.")
+            raise MetapopModelError("Subpopulation models are on different real dates \n"
+                                    "and are out-of-sync. This may be caused by simulating \n"
+                                    "a subpopulation model independently from the \n"
+                                    "metapopulation model. Please reset and restart simulation, \n"
+                                    "and try again.")
         else:
             return current_real_dates_list[0]
 

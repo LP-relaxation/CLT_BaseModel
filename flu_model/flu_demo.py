@@ -25,10 +25,10 @@ from flu_model import flu_components as flu
 # Obtain path to folder with JSON input files
 base_path = Path(__file__).parent / "texas_input_files"
 
-# Get filepaths for initial values of compartments and epi metrics, fixed parameters,
-#   configuration, and travel proportions
+# Get filepaths
 compartments_epi_metrics_init_vals_filepath = base_path / "init_vals.json"
-params_filepath = base_path / "common_params.json"
+subpop_params_filepath = base_path / "common_subpop_params.json"
+mixing_params_filepath = base_path / "mixing_params.json"
 config_filepath = base_path / "config.json"
 
 # Get filepaths for school-work calendar CSV and humidity CSV
@@ -40,7 +40,8 @@ humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
 #   rather than reading from a predefined input data file
 compartments_epi_metrics_dict = \
     clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
-params_dict = clt.load_json_new_dict(params_filepath)
+subpop_params_dict = clt.load_json_new_dict(subpop_params_filepath)
+mixing_params_dict = clt.load_json_new_dict(mixing_params_filepath)
 config_dict = clt.load_json_new_dict(config_filepath)
 
 calendar_df = pd.read_csv(calendar_filepath, index_col=0)
@@ -63,7 +64,7 @@ jumped_bit_generator = bit_generator.jumped(1)
 #   we could read in two separate sets of files -- one
 #   for each subpopulation
 north = flu.FluSubpopModel(compartments_epi_metrics_dict,
-                           params_dict,
+                           subpop_params_dict,
                            config_dict,
                            calendar_df,
                            np.random.Generator(bit_generator),
@@ -71,7 +72,7 @@ north = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            name="north")
 
 south = flu.FluSubpopModel(compartments_epi_metrics_dict,
-                           params_dict,
+                           subpop_params_dict,
                            config_dict,
                            calendar_df,
                            np.random.Generator(jumped_bit_generator),
@@ -98,7 +99,8 @@ south.params.beta_baseline = 10
 ###########################################################
 
 # Combine two subpopulations into one metapopulation model (travel model)
-flu_demo_model = flu.FluMetapopModel([north, south])
+flu_demo_model = flu.FluMetapopModel([north, south],
+                                     mixing_params_dict)
 
 ###########################################################
 ################# SIMULATE & ANALYZE ######################

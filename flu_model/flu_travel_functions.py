@@ -104,10 +104,7 @@ def compute_local_to_local_exposure(prop_time_away_by_age: torch.Tensor,
     Excludes beta -- that is factored in later
     """
 
-    if prop_time_away_by_age.size() == torch.Size([]):
-        prop_time_away = prop_time_away_by_age
-    else:
-        prop_time_away = prop_time_away_by_age.squeeze()[location_ix, :]
+    prop_time_away = prop_time_away_by_age.squeeze()[location_ix, :]
 
     result = (1 - prop_time_away * sum_residents_nonlocal_travel_prop[location_ix]) * \
              torch.matmul(total_contact_matrix[location_ix, :, :],
@@ -135,10 +132,7 @@ def compute_outside_visitors_exposure(prop_time_away_by_age: torch.Tensor,
     # In location dest_ix, we are looking at the visitors from
     #   origin_ix who come to dest_ix (and infect folks in dest_ix)
 
-    if prop_time_away_by_age.size() == torch.Size([]):
-        prop_time_away = prop_time_away_by_age
-    else:
-        prop_time_away = prop_time_away_by_age.squeeze()[visitors_ix, :]
+    prop_time_away = prop_time_away_by_age.squeeze()[visitors_ix, :]
 
     result = travel_proportions[visitors_ix, local_ix] * \
              torch.matmul(prop_time_away * total_contact_matrix[local_ix, :, :],
@@ -163,10 +157,7 @@ def compute_residents_traveling_exposure(prop_time_away_by_age: torch.Tensor,
     Output should be size A
     """
 
-    if prop_time_away_by_age.size() == torch.Size([]):
-        prop_time_away = prop_time_away_by_age
-    else:
-        prop_time_away = prop_time_away_by_age.squeeze()[local_ix, :]
+    prop_time_away = prop_time_away_by_age.squeeze()[local_ix, :]
 
     result = prop_time_away * travel_proportions[local_ix, dest_ix] * \
              torch.matmul(total_contact_matrix[local_ix, :, :],
@@ -186,10 +177,7 @@ def compute_travel_wtd_infectious(state: FluMetapopStateTensors,
     sum_residents_nonlocal_travel_prop = precomputed.sum_residents_nonlocal_travel_prop
     wtd_infectious_ratio_LLA = compute_wtd_infectious_ratio_LLA(state, params, precomputed)
 
-    if params.relative_suscept_by_age.size() == torch.Size([]):
-        relative_suscept = params.relative_suscept_by_age
-    else:
-        relative_suscept = params.relative_suscept_by_age[0, :, 0]
+    relative_suscept = params.relative_suscept_by_age[0, :, 0]
 
     travel_wtd_infectious = torch.tensor(np.zeros((L, A, R)))
 

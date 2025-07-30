@@ -18,7 +18,7 @@
 #   Binomial Taylor Approximation transition type may not reliably
 #   pass all tests with arbitrary Config values.
 
-from flu_model import flu_components as flu
+import flu_model as flu
 import clt_base as clt
 
 import numpy as np
@@ -31,17 +31,17 @@ from pathlib import Path
 base_path = Path(__file__).parent / "flu_model" / "texas_input_files"
 
 config_filepath = base_path / "config.json"
-# params_filepath = base_path / "common_params.json"
-# compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
 calendar_filepath = base_path / "school_work_calendar.csv"
 humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
-
-params_filepath = base_path / "common_params.json"
+params_filepath = base_path / "common_subpop_params.json"
 compartments_epi_metrics_init_vals_filepath = base_path / "init_vals.json"
+mixing_params_filepath = base_path / "mixing_params.json"
 
 compartments_epi_metrics_dict = clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
 params_dict = clt.load_json_new_dict(params_filepath)
 config_dict = clt.load_json_new_dict(config_filepath)
+mixing_params_dict = clt.load_json_new_dict(mixing_params_filepath)
+
 calendar_df = pd.read_csv(calendar_filepath, index_col=0)
 
 bit_generator = np.random.MT19937(88888)
@@ -407,8 +407,6 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
     num_age_groups = params_dict["num_age_groups"]
     num_risk_groups = params_dict["num_risk_groups"]
 
-    params_dict["travel_proportions"] = np.zeros((2, 2))
-
     subpopA = flu.FluSubpopModel(compartments_epi_metrics_dict,
                                  params_dict,
                                  config_dict_1_timestep,
@@ -425,7 +423,11 @@ def test_metapop_no_travel(subpop_model: flu.FluSubpopModel):
                                  humidity_filepath,
                                  name="subpopB")
 
-    metapopAB_model = flu.FluMetapopModel([subpopA, subpopB])
+    mixing_params_dict["travel_proportions"] = np.zeros((2, 2))
+
+
+    metapopAB_model = flu.FluMetapopModel([subpopA, subpopB],
+                                          mixing_params_dict)
 
     subpopA_independent = flu.FluSubpopModel(compartments_epi_metrics_dict,
                                              params_dict,
