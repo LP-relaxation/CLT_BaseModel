@@ -1,6 +1,8 @@
 from .utils import np, sc, copy, ABC, abstractmethod, dataclass, \
     Optional, Enum, datetime, pd, TypedDict
 from collections import defaultdict
+from .base_data_structures import SubpopState, SubpopParams, Config, \
+    TransitionTypes, JointTransitionTypes
 
 
 class MetapopModelError(Exception):
@@ -11,24 +13,6 @@ class MetapopModelError(Exception):
 class SubpopModelError(Exception):
     """Custom exceptions for subpopulation simulation model errors."""
     pass
-
-
-class TransitionTypes(str, Enum):
-    BINOMIAL = "binomial"
-    BINOMIAL_DETERMINISTIC = "binomial_deterministic"
-    BINOMIAL_TAYLOR_APPROX = "binomial_taylor_approx"
-    BINOMIAL_TAYLOR_APPROX_DETERMINISTIC = "binomial_taylor_approx_deterministic"
-    POISSON = "poisson"
-    POISSON_DETERMINISTIC = "poisson_deterministic"
-
-
-class JointTransitionTypes(str, Enum):
-    MULTINOMIAL = "multinomial"
-    MULTINOMIAL_DETERMINISTIC = "multinomial_deterministic"
-    MULTINOMIAL_TAYLOR_APPROX = "multinomial_taylor_approx"
-    MULTINOMIAL_TAYLOR_APPROX_DETERMINISTIC = "multinomial_taylor_approx_deterministic"
-    POISSON = "poisson"
-    POISSON_DETERMINISTIC = "poisson_deterministic"
 
 
 def approx_binomial_probability_from_rate(rate: np.ndarray,
@@ -60,71 +44,6 @@ def approx_binomial_probability_from_rate(rate: np.ndarray,
     """
 
     return 1 - np.exp(-rate * interval_length)
-
-
-@dataclass
-class Config:
-    """
-    Stores simulation configuration values.
-
-    Attributes:
-        timesteps_per_day (int):
-            number of discretized timesteps within a simulation
-            day -- more `timesteps_per_day` mean smaller discretization
-            time intervals, which may cause the model to run slower.
-        transition_type (str):
-            valid value must be from `TransitionTypes`, specifying
-            the probability distribution of transitions between
-            compartments.
-        start_real_date (datetime.date):
-            actual date that aligns with the beginning of the simulation.
-        save_daily_history (bool):
-            set to `True` to save `current_val` of `StateVariable` to history after each
-            simulation day -- set to `False` if want speedier performance.
-        save_transition_variables_history (bool):
-            set to `True` to save `current_val` of `TransitionVariable` to history
-            after each TIMESTEP -- note that this makes the simulation execution time
-            extremely slow -- set to `False` if want speedier performance.
-    """
-
-    timesteps_per_day: int = 7
-    transition_type: str = TransitionTypes.BINOMIAL
-    start_real_date: datetime.time = datetime.datetime.strptime("2024-10-31",
-                                                                "%Y-%m-%d").date()
-    save_daily_history: bool = True
-    save_transition_variables_history: bool = False
-
-
-@dataclass
-class SubpopParams(ABC):
-    """
-    Data container for pre-specified and fixed epidemiological
-    parameters in model.
-
-    Assume that `SubpopParams` fields are constant or piecewise
-    constant throughout the simulation. For variables that
-    are more complicated and time-dependent, use an `EpiMetric`
-    instead.
-    """
-
-    pass
-
-
-@dataclass
-class SubpopState(ABC):
-    """
-    Holds current values of `SubpopModel`'s simulation state.
-    """
-
-    def sync_to_current_vals(self, lookup_dict: dict):
-        """
-        Updates `SubpopState`'s attributes according to
-        data in `lookup_dict.` Keys of `lookup_dict` must match
-        names of attributes of `SubpopState` instance.
-        """
-
-        for name, item in lookup_dict.items():
-            setattr(self, name, item.current_val)
 
 
 class StateVariable:
@@ -1301,13 +1220,12 @@ class MetapopModel(ABC):
                 save_daily_history = subpop_model.config.save_daily_history
                 timesteps_per_day = subpop_model.config.timesteps_per_day
 
-                subpop_model.simulate_timesteps(timesteps_per_day)
+                subpop_model._simulate_timesteps(timesteps_per_day)
 
                 if save_daily_history:
                     subpop_model.save_daily_history()
 
                 subpop_model.increment_simulation_day()
-
 
     @abstractmethod
     def apply_inter_subpop_updates(self):
@@ -1326,7 +1244,6 @@ class MetapopModel(ABC):
         """
 
         pass
-
 
     def reset_simulation(self):
         """
@@ -1434,7 +1351,7 @@ class SubpopModel(ABC):
                  params: SubpopParams,
                  config: Config,
                  RNG: np.random.Generator,
-                 name: str = "",
+                 name: str,
                  metapop_model: MetapopModel = None):
 
         """
@@ -1555,7 +1472,7 @@ class SubpopModel(ABC):
         return sc.objdict()
 
     def create_epi_metrics(self,
-                           transition_variables_dict: sc.objdict[str, TransitionVariable] = None)\
+                           transition_variables_dict: sc.objdict[str, TransitionVariable] = None) \
             -> sc.objdict[str, EpiMetric]:
         return sc.objdict()
 
@@ -1613,15 +1530,15 @@ class SubpopModel(ABC):
 
             self.prepare_daily_state()
 
-            self.simulate_timesteps(timesteps_per_day)
+            self._simulate_timesteps(timesteps_per_day)
 
             if save_daily_history:
                 self.save_daily_history()
 
             self.increment_simulation_day()
 
-    def simulate_timesteps(self,
-                           num_timesteps: int) -> None:
+    def _simulate_timesteps(self,
+                            num_timesteps: int) -> None:
         """
         Subroutine for `self.simulate_until_day`.
 
@@ -1846,5 +1763,3 @@ class SubpopModel(ABC):
         for name, compartment in self.compartments.items():
             if compartment == target_compartment:
                 return name
-
-

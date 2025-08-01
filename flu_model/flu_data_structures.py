@@ -6,6 +6,17 @@ from dataclasses import dataclass, fields, field
 
 import clt_base as clt
 
+
+class FluSubpopModelError(clt.SubpopModelError):
+    """Custom exceptions for flu subpopulation simulation model errors."""
+    pass
+
+
+class FluMetapopModelError(clt.MetapopModelError):
+    """Custom exceptions for flu metapopulation simulation model errors."""
+    pass
+
+
 @dataclass
 class FluSubpopState(clt.SubpopState):
     """
@@ -22,35 +33,35 @@ class FluSubpopState(clt.SubpopState):
     np.array([100]) is wrong.
 
     Attributes:
-        S (np.ndarray of positive floats):
+        S (np.ndarray of nonnegative integers):
             susceptible compartment for age-risk groups --
             (holds current_val of Compartment "S").
-        E (np.ndarray of positive floats):
+        E (np.ndarray of nonnegative integers):
             exposed compartment for age-risk groups --
             (holds current_val of Compartment "E").
-        IP (np.ndarray of positive floats):
+        IP (np.ndarray of nonnegative integers):
             infected pre-symptomatic compartment for age-risk groups
             (holds current_val of Compartment "IP").
-        IS (np.ndarray of positive floats):
+        IS (np.ndarray of nonnegative integers):
             infected symptomatic compartment for age-risk groups
             (holds current_val of Compartment "IS").
-        IA (np.ndarray of positive floats):
+        IA (np.ndarray of nonnegative integers):
             infected asymptomatic compartment for age-risk groups
             (holds current_val of Compartment "IA").
-        H (np.ndarray of positive floats):
+        H (np.ndarray of nonnegative integers):
             hospital compartment for age-risk groups
             (holds current_val of Compartment "H").
-        R (np.ndarray of positive floats):
+        R (np.ndarray of nonnegative integers):
             recovered compartment for age-risk groups
             (holds current_val of Compartment "R").
-        D (np.ndarray of positive floats):
+        D (np.ndarray of nonnegative integers):
             dead compartment for age-risk groups
             (holds current_val of Compartment "D").
-        M (np.ndarray of positive floats):
+        M (np.ndarray of nonnegative floats):
             infection-induced population-level immunity
             for age-risk groups (holds current_val
             of EpiMetric "M").
-        Mv (np.ndarray of positive floats):
+        Mv (np.ndarray of nonnegative floats):
             vaccine-induced population-level immunity
             for age-risk groups (holds current_val
             of EpiMetric "Mv").
@@ -188,9 +199,9 @@ class FluSubpopParams(clt.SubpopParams):
         IA_relative_inf (positive float):
             relative infectiousness of asymptomatic to symptomatic
             people (IA to IS compartment).
-        relative_suscept_by_age (np.ndarray of positive floats in [0,1]):
+        relative_suscept (np.ndarray of positive floats in [0,1]):
             relative susceptibility to infection by age group
-        prop_time_away_by_age (np.ndarray of positive floats in [0,1]):
+        prop_time_away (np.ndarray of positive floats in [0,1]):
             total proportion of time spent away from home by age group
         total_contact_matrix (np.ndarray of positive floats):
             A x A contact matrix (where A is the number
@@ -252,9 +263,9 @@ class FluSubpopParams(clt.SubpopParams):
     IP_relative_inf: Optional[float] = None
     IA_relative_inf: Optional[float] = None
 
-    relative_suscept_by_age: Optional[np.ndarray] = None
+    relative_suscept: Optional[np.ndarray] = None
 
-    prop_time_away_by_age: Optional[np.ndarray] = None
+    prop_time_away: Optional[np.ndarray] = None
 
     total_contact_matrix: Optional[np.ndarray] = None
     school_contact_matrix: Optional[np.ndarray] = None
@@ -265,11 +276,56 @@ class FluSubpopParams(clt.SubpopParams):
 
 @dataclass
 class FluMetapopStateTensors:
+    """
+    Data container for tensors -- used to store L x A x R
+    arrays (collected from each location/subpopulation model).
+    Note that not all fields in `FluSubpopState` are included --
+    we only include compartments needed for the travel model
+    computation, for efficiency.
+
+    Attributes:
+        IP (torch.Tensor of nonnegative integers):
+            presymptomatic infected compartment for location-age-risk
+            groups -- the lth element holds current_val of
+            Compartment "IP" on the lth location / subpopulation
+            on the associated `MetapopModel`.
+        IS (torch.Tensor of nonnegative integers):
+            symptomatic infected compartment for location-age-risk
+            groups -- the lth element holds current_val of
+            Compartment "IS" on the lth location / subpopulation
+            on the associated `MetapopModel`.
+        IA (torch.Tensor of nonnegative integers):
+            asymptomatic infected compartment for location-age-risk
+            groups -- the lth element holds current_val of
+            Compartment "IA" on the lth location / subpopulation
+            on the associated `MetapopModel`.
+        H (torch.Tensor of nonnegative integers):
+            hospital compartment for location-age-risk
+            groups -- the lth element holds current_val of
+            Compartment "H" on the lth location / subpopulation
+            on the associated `MetapopModel`.
+        flu_contact_matrix (torch.Tensor of nonnegative integers):
+            contact matrix for location-age-risk groups -- the
+            lth element holds current_val of `FluContactMatrix`
+            `Schedule` for subpopulation l -- this value is a
+            combination of the total contact matrix, the
+            work contact matrix, and the school contact matrix
+            (and the value is adjusted depending on whether
+            the date is a work or school day)
+
+        init_vals (dict):
+            dictionary of torch.Tensor instances, where keys
+            correspond to "IP", "IS", "IA", and "H", and values
+            correspond to their initial values for location-age-risk
+            groups.
+    """
 
     IP: torch.Tensor = None
     IS: torch.Tensor = None
     IA: torch.Tensor = None
     H: torch.Tensor = None
+
+    flu_contact_matrix: torch.Tensor = None
 
     init_vals: dict = field(default_factory=dict)
 
@@ -291,22 +347,39 @@ class FluMetapopStateTensors:
 
 @dataclass
 class FluMetapopParamsTensors:
+    """
+    Data container for tensors -- used to store L x A x R
+    arrays (collected from parameters on each location/subpopulation
+    model, as well as from the metapopulation's associated
+    `FluMixingParams` instance). Note that not all fields in
+    `FluSubpopParams` are included -- we only include parameters
+    needed for the travel model computation, for efficiency.
 
-    num_locations: int = None
-    num_age_groups: int = None
-    num_risk_groups: int = None
+    Attributes:
+        num_locations (torch.Tensor, 0-dimensional):
+            number of locations (subpopulations) in the
+            metapopulation model and therefore the travel
+            model.
+        travel_proportions (torch.Tensor):
+            L x L array, where L is the number of locations
+            or subpopulations, where element i,j corresponds
+            to the proportion of the population in location i
+            who travels to location j (on average).
 
-    total_contact_matrix: torch.Tensor = None
-    school_contact_matrix: torch.Tensor = None
-    work_contact_matrix: torch.Tensor = None
+    See `FluSubpopParams` docstring for other attributes.
+    """
+
+    num_locations: torch.Tensor = None
+    num_age_groups: torch.Tensor = None
+    num_risk_groups: torch.Tensor = None
+
+    travel_proportions: torch.Tensor = None
 
     IP_relative_inf: torch.Tensor = None
     IA_relative_inf: torch.Tensor = None
 
-    relative_suscept_by_age: torch.Tensor = None
-    prop_time_away_by_age: torch.Tensor = None
-
-    travel_proportions: torch.Tensor = None
+    relative_suscept: torch.Tensor = None
+    prop_time_away: torch.Tensor = None
 
     def standardize_shapes(self) -> None:
         """
@@ -339,19 +412,6 @@ class FluMetapopParamsTensors:
             if name == "init_vals":
                 continue
 
-            # Contact matrices should be A x A
-            # This includes:
-            #   "school_contact_matrix",
-            #   "work_contact_matrix",
-            #   "travel_proportions"
-            elif "contact_matrix" in name:
-                # Need nested if-statements because user may
-                #   have already converted contact matrix to L x A x A
-                if value.size() != torch.Size([L, A, A]):
-                    if value.size() != torch.Size([A, A]):
-                        raise Exception(str(name) + error_str)
-                    setattr(self, name, value.view(1, A, A).expand(L, A, A))
-
             elif name == "travel_proportions":
                 if value.size() != torch.Size([L, L]):
                     raise Exception(str(name) + error_str)
@@ -379,7 +439,6 @@ class FluPrecomputedTensors:
 
     def __init__(self,
                  total_pop_LAR: torch.Tensor,
-                 state: FluMetapopStateTensors,
                  params: FluMetapopParamsTensors) -> None:
 
         self.total_pop_LAR = total_pop_LAR
@@ -401,7 +460,7 @@ class FluPrecomputedTensors:
         self.sum_residents_nonlocal_travel_prop = self.nonlocal_travel_prop.sum(dim=1)
 
 
-@dataclass
+@dataclass(frozen=True)
 class FluMixingParams:
     """
     Params:

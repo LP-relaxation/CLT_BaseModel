@@ -32,7 +32,7 @@ from collections import defaultdict
 from dataclasses import dataclass, fields, field
 
 from .flu_data_structures import FluMetapopStateTensors, FluMetapopParamsTensors, FluPrecomputedTensors
-from .flu_travel_functions import compute_travel_wtd_infectious
+from .flu_travel_functions import compute_total_mixing_exposure
 
 base_path = Path(__file__).parent / "texas_input_files"
 
@@ -81,9 +81,9 @@ def compute_S_to_E(state: FluMetapopStateTensors,
 
     beta_adjusted = compute_beta_adjusted(state, params, day_counter)
 
-    travel_wtd_infectious = compute_travel_wtd_infectious(state, params, precomputed)
+    total_mixing_exposure = compute_total_mixing_exposure(state, params, precomputed)
 
-    if travel_wtd_infectious.size() != torch.Size([precomputed.L,
+    if total_mixing_exposure.size() != torch.Size([precomputed.L,
                                                 precomputed.A,
                                                 precomputed.R]):
         raise Exception("force_of_infection must be L x A x R corresponding \n"
@@ -92,7 +92,7 @@ def compute_S_to_E(state: FluMetapopStateTensors,
 
     # print("FOI", force_of_infection.sum())
 
-    S_to_E = state.S * beta_adjusted * travel_wtd_infectious / \
+    S_to_E = state.S * beta_adjusted * total_mixing_exposure / \
              (precomputed.total_pop_LAR * (1 + params.inf_induced_inf_risk_reduce * state.M +
                                            params.vax_induced_inf_risk_reduce * state.Mv))
 

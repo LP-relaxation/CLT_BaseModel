@@ -7,6 +7,7 @@ import sciris as sc
 from typing import Optional
 from pathlib import Path
 from abc import ABC, abstractmethod
+from dataclasses import fields
 
 import torch
 import clt_base as clt
@@ -14,16 +15,15 @@ import clt_base as clt
 from .flu_data_structures import FluSubpopState, FluSubpopParams, \
     FluMetapopStateTensors, FluMetapopParamsTensors, FluPrecomputedTensors, \
     FluMixingParams
-from .flu_travel_functions import compute_travel_wtd_infectious
+from .flu_travel_functions import compute_total_mixing_exposure
+from .flu_data_structures import FluSubpopState, FluSubpopParams, \
+    FluMetapopStateTensors, FluMetapopParamsTensors, FluSubpopModelError, \
+    FluMetapopModelError
 
 
 # Note: for dataclasses, Optional is used to help with static type checking
 # -- it means that an attribute can either hold a value with the specified
 # datatype or it can be None
-
-class FluMetapopModelError(clt.MetapopModelError):
-    """Custom exceptions for flu metapopulation simulation model errors."""
-    pass
 
 
 class SusceptibleToExposed(clt.TransitionVariable):
@@ -40,7 +40,7 @@ class SusceptibleToExposed(clt.TransitionVariable):
 
     This is the most complicated transition variable in the
     flu model. If using metapopulation model (travel model), then
-    the rate depends on the `travel_wtd_infectious` attribute,
+    the rate depends on the `total_mixing_exposure` attribute,
     which is a function of other subpopulations' states and
     parameters, and travel between subpopulations.
 
@@ -48,7 +48,7 @@ class SusceptibleToExposed(clt.TransitionVariable):
     is much simpler.
 
     Attributes:
-        travel_wtd_infectious (np.ndarray of positive floats):
+        total_mixing_exposure (np.ndarray of positive floats):
             weighted infectious count (exposure) from movement
             within home location, travel to other locations,
             and visitors from other locations
@@ -67,13 +67,13 @@ class SusceptibleToExposed(clt.TransitionVariable):
                          transition_type,
                          is_jointly_distributed)
 
-        self.travel_wtd_infectious = None
+        self.total_mixing_exposure = None
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
 
-        # If `travel_wtd_infectious` has not been updated,
+        # If `total_mixing_exposure` has not been updated,
         #   then there is no travel model -- so, simulate
         #   this subpopulation entirely independently and
         #   use the simplified transition rate that does not
@@ -83,17 +83,31 @@ class SusceptibleToExposed(clt.TransitionVariable):
 
         immune_force = compute_immunity_force(state, params)
 
-        if self.travel_wtd_infectious is not None:
+        if self.total_mixing_exposure is not None:
+
+            # Note here `self.total_mixing_exposure` includes
+            #   `suscept_by_age` -- see `compute_total_mixing_exposure_prop`
+            #   in `flu_travel_functions`
+
+            # breakpoint()
+
             # Need to convert tensor into array because combining np.ndarrays and
             #   tensors doesn't work, and everything else is an array
-            return np.asarray(beta_adjusted * self.travel_wtd_infectious / immune_force)
+            return np.asarray(beta_adjusted * self.total_mixing_exposure / immune_force)
 
         else:
-            wtd_presymp_asymp = compute_wtd_presymp_asymp(state, params)
+            wtd_presymp_asymp_by_age = compute_wtd_presymp_asymp_by_age(state, params)
 
-            return (beta_adjusted / immune_force) * \
-                   np.matmul(state.flu_contact_matrix,
-                             np.divide(state.IS + wtd_presymp_asymp, compute_pop_by_age(params)))
+            # Super confusing syntax... but this is the pain of having A x R,
+            #   but having the contact matrix (contact patterns) be for
+            #   ONLY age groups
+            wtd_infectious_prop = np.divide(np.sum(state.IS, axis=1, keepdims=True) + wtd_presymp_asymp_by_age,
+                                            compute_pop_by_age(params))
+
+            raw_total_exposure = np.matmul(state.flu_contact_matrix, wtd_infectious_prop)
+
+            # The total rate is only age-dependent -- it's the same rate across age groups
+            return params.relative_suscept * (beta_adjusted * raw_total_exposure / immune_force)
 
 
 class RecoveredToSusceptible(clt.TransitionVariable):
@@ -174,8 +188,18 @@ class SympToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-        return np.full((params.num_age_groups, params.num_risk_groups),
-                       (1 - params.IS_to_H_adjusted_prop) * params.IS_to_R_rate)
+
+        hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
+
+        if (np.asarray(hosp_risk_reduce) != 1).all():
+            proportional_risk_reduction = hosp_risk_reduce / (1 - hosp_risk_reduce)
+        else:
+            raise FluMetapopModelError("'inf_induced_hosp_risk_reduce' cannot be exactly 1, \n"
+                                       "otherwise the formula is not defined. Please amend \n"
+                                       "and try again.")
+
+        return np.asarray(((1 - params.IS_to_H_adjusted_prop) * params.IS_to_R_rate) /
+                          (1 + proportional_risk_reduction * state.Mv))
 
 
 class AsympToRecovered(clt.TransitionVariable):
@@ -233,7 +257,9 @@ class SympToHosp(clt.TransitionVariable):
         if (np.asarray(hosp_risk_reduce) != 1).all():
             proportional_risk_reduction = hosp_risk_reduce / (1 - hosp_risk_reduce)
         else:
-            proportional_risk_reduction = 1
+            raise FluMetapopModelError("'inf_induced_hosp_risk_reduce' cannot be exactly 1, \n"
+                                       "otherwise the formula is not defined. Please amend \n"
+                                       "and try again.")
 
         return np.asarray(params.IS_to_H_rate * params.IS_to_H_adjusted_prop /
                           (1 + proportional_risk_reduction * state.Mv))
@@ -465,8 +491,8 @@ class FluContactMatrix(clt.Schedule):
             self.current_val = subpop_params.total_contact_matrix
 
 
-def compute_wtd_presymp_asymp(subpop_state: FluSubpopState,
-                              subpop_params: FluSubpopParams) -> np.ndarray:
+def compute_wtd_presymp_asymp_by_age(subpop_state: FluSubpopState,
+                                     subpop_params: FluSubpopParams) -> np.ndarray:
     """
     Returns weighted sum of IP and IA compartment for
         subpopulation with given state and parameters.
@@ -608,7 +634,7 @@ class FluSubpopModel(clt.SubpopModel):
                  calendar_df: pd.DataFrame,
                  RNG: np.random.Generator,
                  absolute_humidity_filepath: str,
-                 name: str = ""):
+                 name: str):
         """
         Args:
             compartments_epi_metrics (dict):
@@ -826,7 +852,14 @@ class FluMetapopModel(clt.MetapopModel, ABC):
                                        "'subpop_models'. Please amend before continuing.")
 
         self.state_tensors = FluMetapopStateTensors()
-        self.update_state_tensors()
+        # state_tensors gets updated in `apply_inter_subpop_updates`,
+        #   which is called at the beginning of each simulation day
+        #   (see `simulate_until_day` method on `MetapopModel`
+        #   in `base_components`) -- there is no need to update
+        #   here -- also, schedule values such as the value of
+        #   `flu_contact_matrix` for each subpopulation are not
+        #   defined yet, and we cannot build tensors with `None`
+        #   type entries
 
         self.params_tensors = FluMetapopParamsTensors()
         self.params_tensors.num_locations = torch.tensor(mixing_params["num_locations"])
@@ -836,7 +869,6 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         total_pop_LAR = self.compute_total_pop_LAR()
 
         self.precomputed = FluPrecomputedTensors(total_pop_LAR,
-                                                 self.state_tensors,
                                                  self.params_tensors)
 
         self.mixing_params = clt.make_dataclass_from_dict(FluMixingParams, mixing_params)
@@ -926,37 +958,11 @@ class FluMetapopModel(clt.MetapopModel, ABC):
 
         self.params_tensors.standardize_shapes()
 
-    def update_state_tensors(self) -> None:
-
-        # ORDER MATTERS! USE ORDERED DICTIONARY HERE!
-        #   See `update_params_tensors` for detailed note.
-        subpop_models = self._subpop_models_ordered
-
-        for name in vars(self.state_tensors).keys():
-
-            # FluMetapopStateTensors has an attribute
-            #   that is a dictionary called `init_vals` --
-            #   disregard, as this only used to store
-            #   initial values for resetting, but is not
-            #   used in the travel model computation
-            if name == "init_vals":
-                continue
-
-            metapop_vals = []
-
-            for model in subpop_models.values():
-
-                current_val = getattr(model.state, name)
-
-                metapop_vals.append(current_val)
-
-            setattr(self.state_tensors, name, torch.tensor(np.asarray(metapop_vals)))
-
     def apply_inter_subpop_updates(self) -> None:
 
         self.update_state_tensors()
 
-        travel_wtd_infectious = compute_travel_wtd_infectious(self.state_tensors,
+        total_mixing_exposure = compute_total_mixing_exposure(self.state_tensors,
                                                               self.params_tensors,
                                                               self.precomputed)
 
@@ -964,11 +970,12 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         #   so iterating over the dictionary like this is well-defined
         #   and responsible -- the order is important because it
         #   determines the order (index) in any metapopulation tensors
-        subpop_models = self.subpop_models
+        subpop_models = self._subpop_models_ordered
 
         for i in range(len(subpop_models)):
 
-            subpop_models.values()[i].transition_variables.S_to_E.travel_wtd_infectious = \
-                np.squeeze(travel_wtd_infectious[i,:,:], axis=0)
+            subpop_models.values()[i].transition_variables.S_to_E.total_mixing_exposure = \
+                total_mixing_exposure[i,:,:]
+
 
 

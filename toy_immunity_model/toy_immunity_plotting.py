@@ -10,28 +10,28 @@ def make_graph_set(model: imm.ToyImmunitySubpopModel):
     plt.figure(figsize=(8, 12))
 
     plt.subplot(4, 1, 1)
-    plt.plot(np.asarray(model.compartments.S.history_vals_list), label="S")
-    plt.plot(np.asarray(model.compartments.I.history_vals_list), label="I")
-    plt.plot(np.asarray(model.compartments.H.history_vals_list), label="H")
-    plt.plot(np.asarray(model.compartments.R.history_vals_list), label="R")
+    plt.plot(np.sum(np.asarray(model.compartments.S.history_vals_list), axis=(1,2)), label="S")
+    plt.plot(np.sum(np.asarray(model.compartments.I.history_vals_list), axis=(1,2)), label="I")
+    plt.plot(np.sum(np.asarray(model.compartments.H.history_vals_list), axis=(1,2)), label="H")
+    plt.plot(np.sum(np.asarray(model.compartments.R.history_vals_list), axis=(1,2)), label="R")
     plt.title("Simulated compartment populations")
     plt.xlabel("Day")
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1))
 
     plt.subplot(4, 1, 2)
-    plt.plot(np.asarray(model.epi_metrics.M.history_vals_list), label="M")
-    plt.plot(np.asarray(model.epi_metrics.Mv.history_vals_list), label="Mv")
+    plt.plot(np.sum(np.asarray(model.epi_metrics.M.history_vals_list), axis=(1,2)), label="M")
+    plt.plot(np.sum(np.asarray(model.epi_metrics.Mv.history_vals_list), axis=(1,2)), label="Mv")
     plt.title("Simulated immunity")
     plt.xlabel("Day")
 
     plt.subplot(4, 1, 3)
-    plt.plot(np.asarray(model.transition_variables.S_to_I.history_vals_list), label="S to I")
-    plt.plot(np.asarray(model.transition_variables.I_to_H.history_vals_list), label="I to H")
+    plt.plot(np.sum(np.asarray(model.transition_variables.S_to_I.history_vals_list), axis=(1,2)), label="S to I")
+    plt.plot(np.sum(np.asarray(model.transition_variables.I_to_H.history_vals_list), axis=(1,2)), label="I to H")
     plt.title("Simulated incidence and hospital admits")
     plt.xlabel("Day")
 
     plt.subplot(4, 1, 4)
-    plt.plot(np.asarray(model.transition_variables.R_to_S.history_vals_list))
+    plt.plot(np.sum(np.asarray(model.transition_variables.R_to_S.history_vals_list), axis=(1,2)))
     plt.title("Simulated R to S")
     plt.xlabel("Day")
 
@@ -45,12 +45,12 @@ def plot_comparison(ax, model1_data, model2_data, labels, title, xlabel="Day"):
 
     lines = []
     for label in labels:
-        m1_vals = np.asarray(model1_data[label].history_vals_list)
+        m1_vals = np.sum(np.asarray(model1_data[label].history_vals_list), axis=(1,2))
         line, = ax.plot(m1_vals, label=label)
         lines.append((label, line))
 
     for label, line in lines:
-        m2_vals = np.asarray(model2_data[label].history_vals_list)
+        m2_vals = np.sum(np.asarray(model2_data[label].history_vals_list), axis=(1,2))
         ax.plot(m2_vals, marker="o", markevery=100, markersize=2, linestyle=":", label=f"{label}, model 2",
                 color=line.get_color(), alpha=0.6)
 
@@ -145,12 +145,12 @@ def changing_param_val_graph(model, param_type, param_name, param_vals_list, end
         model.simulate_until_day(end_day)
 
         sim_results.append({
-            "S": np.copy(np.asarray(model.compartments.S.history_vals_list)),
-            "I": np.copy(np.asarray(model.compartments.I.history_vals_list)),
-            "H": np.copy(np.asarray(model.compartments.H.history_vals_list)),
-            "R": np.copy(np.asarray(model.compartments.R.history_vals_list)),
-            "M": np.copy(np.asarray(model.epi_metrics.M.history_vals_list)),
-            "Mv": np.copy(np.asarray(model.epi_metrics.Mv.history_vals_list)),
+            "S": np.copy(np.sum(np.asarray(model.compartments.S.history_vals_list), axis=(1,2))),
+            "I": np.copy(np.sum(np.asarray(model.compartments.I.history_vals_list), axis=(1,2))),
+            "H": np.copy(np.sum(np.asarray(model.compartments.H.history_vals_list), axis=(1,2))),
+            "R": np.copy(np.sum(np.asarray(model.compartments.R.history_vals_list), axis=(1,2))),
+            "M": np.copy(np.sum(np.asarray(model.epi_metrics.M.history_vals_list), axis=(1,2))),
+            "Mv": np.copy(np.sum(np.asarray(model.epi_metrics.Mv.history_vals_list), axis=(1,2))),
             "param_val": param_val
         })
 

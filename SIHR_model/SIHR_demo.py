@@ -3,7 +3,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import clt_base as clt
-import SIHR_model as SIHR
+import SIHR_components as SIHR
 
 from pathlib import Path
 import numpy as np
@@ -29,7 +29,8 @@ bit_generator = np.random.MT19937(88888)
 city = SIHR.SIHRSubpopModel(compartments_epi_metrics_dict,
                             params_dict,
                             config_dict,
-                            np.random.Generator(bit_generator))
+                            np.random.Generator(bit_generator),
+                            "demo_city")
 
 city.simulate_until_day(100)
 

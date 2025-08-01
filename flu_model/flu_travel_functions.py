@@ -59,10 +59,7 @@ def compute_effective_pop_LA(state: FluMetapopStateTensors,
     traveling_residents_LAR = precomputed.sum_residents_nonlocal_travel_prop[:, None, None] * \
                               active_pop_LAR
 
-    if params.prop_time_away_by_age.size() == torch.Size([]):
-        prop_time_away = params.prop_time_away_by_age
-    else:
-        prop_time_away = params.prop_time_away_by_age[0, :, 0]
+    prop_time_away = params.prop_time_away[0, :, 0]
 
     effective_pop_LA = precomputed.total_pop_LA + prop_time_away * \
                        torch.sum(outside_visitors_LAR + traveling_residents_LAR, dim=2)
@@ -93,34 +90,34 @@ def compute_wtd_infectious_ratio_LLA(state: FluMetapopStateTensors,
     return prop_wtd_infectious
 
 
-def compute_local_to_local_exposure(prop_time_away_by_age: torch.Tensor,
-                                    total_contact_matrix: torch.Tensor,
+def compute_local_to_local_exposure(prop_time_away: torch.Tensor,
+                                    flu_contact_matrix: torch.Tensor,
                                     sum_residents_nonlocal_travel_prop: torch.Tensor,
                                     wtd_infectious_ratio_LLA: torch.Tensor,
                                     location_ix: int) -> torch.Tensor:
     """
-    Raw means that this is unnormalized by `relative_suscept_by_age`
+    Raw means that this is unnormalized by `relative_suscept`
 
     Excludes beta -- that is factored in later
     """
 
-    prop_time_away = prop_time_away_by_age.squeeze()[location_ix, :]
+    prop_time_away = prop_time_away[0, :, 0]
 
     result = (1 - prop_time_away * sum_residents_nonlocal_travel_prop[location_ix]) * \
-             torch.matmul(total_contact_matrix[location_ix, :, :],
+             torch.matmul(flu_contact_matrix[location_ix, :, :],
                           wtd_infectious_ratio_LLA[location_ix, location_ix, :])
 
     return result
 
 
-def compute_outside_visitors_exposure(prop_time_away_by_age: torch.Tensor,
-                                      total_contact_matrix: torch.Tensor,
+def compute_outside_visitors_exposure(prop_time_away: torch.Tensor,
+                                      flu_contact_matrix: torch.Tensor,
                                       travel_proportions: torch.Tensor,
                                       wtd_infectious_ratio_LLA: torch.Tensor,
                                       local_ix: int,
                                       visitors_ix: int) -> torch.Tensor:
     """
-    Computes raw (unnormalized by `relative_suscept_by_age`) force
+    Computes raw (unnormalized by `relative_suscept`) force
         of infection to local_ix, due to outside visitors from
         visitors_ix
 
@@ -132,23 +129,23 @@ def compute_outside_visitors_exposure(prop_time_away_by_age: torch.Tensor,
     # In location dest_ix, we are looking at the visitors from
     #   origin_ix who come to dest_ix (and infect folks in dest_ix)
 
-    prop_time_away = prop_time_away_by_age.squeeze()[visitors_ix, :]
+    prop_time_away = prop_time_away[0, :, 0]
 
     result = travel_proportions[visitors_ix, local_ix] * \
-             torch.matmul(prop_time_away * total_contact_matrix[local_ix, :, :],
+             torch.matmul(prop_time_away * flu_contact_matrix[local_ix, :, :],
                           wtd_infectious_ratio_LLA[visitors_ix, local_ix, :])
 
     return result
 
 
-def compute_residents_traveling_exposure(prop_time_away_by_age: torch.Tensor,
-                                         total_contact_matrix: torch.Tensor,
+def compute_residents_traveling_exposure(prop_time_away: torch.Tensor,
+                                         flu_contact_matrix: torch.Tensor,
                                          travel_proportions: torch.Tensor,
                                          wtd_infectious_ratio_LLA: torch.Tensor,
                                          local_ix: int,
                                          dest_ix: int) -> torch.Tensor:
     """
-    Computes raw (unnormalized by `relative_suscept_by_age`) force
+    Computes raw (unnormalized by `relative_suscept`) force
         of infection to local_ix, due to residents of local_ix
         traveling to dest_ix and getting infected in dest_ix
 
@@ -157,63 +154,65 @@ def compute_residents_traveling_exposure(prop_time_away_by_age: torch.Tensor,
     Output should be size A
     """
 
-    prop_time_away = prop_time_away_by_age.squeeze()[local_ix, :]
+    prop_time_away = prop_time_away[0, :, 0]
 
     result = prop_time_away * travel_proportions[local_ix, dest_ix] * \
-             torch.matmul(total_contact_matrix[local_ix, :, :],
+             torch.matmul(flu_contact_matrix[local_ix, :, :],
                           wtd_infectious_ratio_LLA[dest_ix, dest_ix, :])
 
     return result
 
 
-def compute_travel_wtd_infectious(state: FluMetapopStateTensors,
+def compute_total_mixing_exposure(state: FluMetapopStateTensors,
                                   params: FluMetapopParamsTensors,
                                   precomputed: FluPrecomputedTensors) -> torch.Tensor:
     L, A, R = precomputed.L, precomputed.A, precomputed.R
 
-    prop_time_away_by_age = params.prop_time_away_by_age
-    total_contact_matrix = params.total_contact_matrix
+    prop_time_away = params.prop_time_away
+    flu_contact_matrix = state.flu_contact_matrix
     travel_proportions = params.travel_proportions
     sum_residents_nonlocal_travel_prop = precomputed.sum_residents_nonlocal_travel_prop
     wtd_infectious_ratio_LLA = compute_wtd_infectious_ratio_LLA(state, params, precomputed)
 
-    relative_suscept = params.relative_suscept_by_age[0, :, 0]
+    relative_suscept = params.relative_suscept[0, :, 0]
 
-    travel_wtd_infectious = torch.tensor(np.zeros((L, A, R)))
+    total_mixing_exposure = torch.tensor(np.zeros((L, A, R)))
 
     for l in np.arange(L):
 
-        raw_travel_wtd_infectious = torch.tensor(np.zeros(A))
+        raw_total_mixing_exposure = torch.tensor(np.zeros(A))
 
         # local-to-local force of infection
-        raw_travel_wtd_infectious = raw_travel_wtd_infectious + \
-                                    compute_local_to_local_exposure(prop_time_away_by_age,
-                                                                    total_contact_matrix,
+        raw_total_mixing_exposure = raw_total_mixing_exposure + \
+                                    compute_local_to_local_exposure(prop_time_away,
+                                                                    flu_contact_matrix,
                                                                     sum_residents_nonlocal_travel_prop,
                                                                     wtd_infectious_ratio_LLA,
                                                                     l)
 
         for k in np.arange(L):
-            raw_travel_wtd_infectious = raw_travel_wtd_infectious + \
+            raw_total_mixing_exposure = raw_total_mixing_exposure + \
                                         compute_outside_visitors_exposure(
-                                            prop_time_away_by_age,
-                                            total_contact_matrix,
+                                            prop_time_away,
+                                            flu_contact_matrix,
                                             travel_proportions,
                                             wtd_infectious_ratio_LLA,
                                             l,
                                             k)
 
-            raw_travel_wtd_infectious = raw_travel_wtd_infectious + \
+            raw_total_mixing_exposure = raw_total_mixing_exposure + \
                                         compute_residents_traveling_exposure(
-                                            prop_time_away_by_age,
-                                            total_contact_matrix,
+                                            prop_time_away,
+                                            flu_contact_matrix,
                                             travel_proportions,
                                             wtd_infectious_ratio_LLA,
                                             l,
                                             k)
 
-        normalized_travel_wtd_infectious = relative_suscept * raw_travel_wtd_infectious
+        # breakpoint()
 
-        travel_wtd_infectious[l, :, :] = normalized_travel_wtd_infectious.view(A, 1).expand((A, R))
+        normalized_total_mixing_exposure = relative_suscept * raw_total_mixing_exposure
 
-    return travel_wtd_infectious
+        total_mixing_exposure[l, :, :] = normalized_total_mixing_exposure.view(A, 1).expand((A, R))
+
+    return total_mixing_exposure
