@@ -13,19 +13,15 @@
 #   for now it is constant, given in params
 
 import torch
-import numpy as np
-import pandas as pd
-from pathlib import Path
 import json
 import time
 
-from collections import defaultdict
 import matplotlib.pyplot as plt
-from dataclasses import dataclass, fields
 
-import flu_torch_det_components as flu_torch
+from flu_instances import flu_torch_det_components as flu_torch
 
-base_path = Path(__file__).parent / "flu_torch_input_files"
+from importlib.resources import files
+base_path = files("tests") / "test_input_files"
 
 # The update rule for immunity is
 #   - dM/dt = (R_to_S_rate * R / N) * (1 - inf_induced_saturation * M - vax_induced_saturation * M_v)

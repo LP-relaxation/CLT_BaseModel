@@ -1,4 +1,6 @@
-from .utils import np, json, Type
+import numpy as np
+import json
+from typing import Type
 from typing import Protocol
 
 

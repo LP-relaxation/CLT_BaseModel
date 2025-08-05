@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-import toy_immunity_components as imm
+from . import toy_immunity_components as imm
 
 
 def make_graph_set(model: imm.ToyImmunitySubpopModel):

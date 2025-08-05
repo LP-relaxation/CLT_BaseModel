@@ -3,13 +3,10 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import clt_base as clt
-import SIHR_components as SIHR
-
-from pathlib import Path
+import SIHR_core as SIHR
 import numpy as np
 
-# Obtain path to folder with JSON input files
-base_path = Path(__file__).parent / "SIHR_input_files"
+base_path = clt.utils.PROJECT_ROOT / "SIHR_instances" / "SIHR_input_files"
 
 # Get filepaths for initial values of state variables, fixed parameters,
 #   and configuration

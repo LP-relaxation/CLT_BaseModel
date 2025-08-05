@@ -15,7 +15,7 @@
 #   Binomial Taylor Approximation transition type may not reliably
 #   pass all tests with arbitrary Config values.
 
-import flu_model as flu
+import flu_core as flu
 import clt_base as clt
 
 import numpy as np
@@ -23,9 +23,7 @@ import pandas as pd
 import copy
 import pytest
 
-from pathlib import Path
-
-base_path = Path(__file__).parent / "test_input_files"
+base_path = clt.utils.PROJECT_ROOT / "tests" / "test_input_files"
 
 # WARNING:
 #   Currently excluding Poisson transition types from automatic

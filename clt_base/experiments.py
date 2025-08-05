@@ -1,5 +1,11 @@
-from .utils import np, sc, Optional, List, sqlite3, functools, os, pd, fields
+import numpy as np
+import pandas as pd
+from dataclasses import fields
+from typing import Optional
+import sqlite3
+import os
 from .base_components import SubpopModel, MetapopModel
+
 
 class ExperimentError(Exception):
     """Custom exceptions for experiment errors."""

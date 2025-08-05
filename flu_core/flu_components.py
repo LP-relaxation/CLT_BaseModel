@@ -5,20 +5,15 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 from typing import Optional
-from pathlib import Path
-from abc import ABC, abstractmethod
-from dataclasses import fields
+from abc import ABC
 
 import torch
 import clt_base as clt
 
-from .flu_data_structures import FluSubpopState, FluSubpopParams, \
-    FluMetapopStateTensors, FluMetapopParamsTensors, FluPrecomputedTensors, \
-    FluMixingParams
 from .flu_travel_functions import compute_total_mixing_exposure
 from .flu_data_structures import FluSubpopState, FluSubpopParams, \
     FluMetapopStateTensors, FluMetapopParamsTensors, FluSubpopModelError, \
-    FluMetapopModelError
+    FluMetapopModelError, FluMixingParams, FluPrecomputedTensors
 
 
 # Note: for dataclasses, Optional is used to help with static type checking

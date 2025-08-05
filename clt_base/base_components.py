@@ -1,6 +1,10 @@
-from .utils import np, sc, copy, ABC, abstractmethod, dataclass, \
-    Optional, Enum, datetime, pd, TypedDict
-from collections import defaultdict
+import numpy as np
+import sciris as sc
+import copy
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Optional
+import datetime
 from .base_data_structures import SubpopState, SubpopParams, Config, \
     TransitionTypes, JointTransitionTypes
 

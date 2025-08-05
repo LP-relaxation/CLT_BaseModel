@@ -31,10 +31,11 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 from dataclasses import dataclass, fields, field
 
-from .flu_data_structures import FluMetapopStateTensors, FluMetapopParamsTensors, FluPrecomputedTensors
-from .flu_travel_functions import compute_total_mixing_exposure
+from flu_core.flu_data_structures import FluMetapopStateTensors, FluMetapopParamsTensors, FluPrecomputedTensors
+from flu_core.flu_travel_functions import compute_total_mixing_exposure
 
-base_path = Path(__file__).parent / "texas_input_files"
+from importlib.resources import files
+base_path = files("flu_instances") / "texas_input_files"
 
 
 def to_tensor(x: np.ndarray,

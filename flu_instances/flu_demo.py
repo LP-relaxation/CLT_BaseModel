@@ -8,22 +8,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 # Import city-level transmission base components module
 import clt_base as clt
 
 # Import flu model module, which contains customized subclasses
-from flu_model import flu_components as flu
+from flu_core import flu_components as flu
 
 ###########################################################
 ################# READ INPUT FILES ########################
 ###########################################################
 
 # Obtain path to folder with JSON input files
-base_path = Path(__file__).parent / "texas_input_files"
+base_path = clt.utils.PROJECT_ROOT / "flu_instances" / "texas_input_files"
 
 # Get filepaths
 compartments_epi_metrics_init_vals_filepath = base_path / "init_vals.json"

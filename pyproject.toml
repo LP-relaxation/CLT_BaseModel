@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "city_level_transmission_toolkit"
+version = "0.1.0"
+description = "Tools for building modular and scalable compartmental models of respiratory virus transmission in a city."
+authors = [
+  { name = "LP" }
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["."]

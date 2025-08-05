@@ -1,4 +1,4 @@
-from .utils import np
+import numpy as np
 from .base_components import SubpopModel, MetapopModel
 import matplotlib.pyplot as plt
 import matplotlib

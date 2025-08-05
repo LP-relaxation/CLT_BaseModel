@@ -9,13 +9,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pathlib import Path
+base_path = clt.utils.PROJECT_ROOT / "tests" / "test_input_files"
 
 #################################################
 #################### SETUP ######################
 #################################################
-
-base_path = Path(__file__).parent / "flu_model" / "texas_input_files"
 
 params_filepath = base_path / "common_params.json"
 compartments_epi_metrics_init_vals_filepath = base_path / "init_vals.json"
