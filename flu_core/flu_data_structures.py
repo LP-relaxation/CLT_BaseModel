@@ -77,7 +77,7 @@ class FluSubpopState(clt.SubpopState):
             starting value of DynamicVal "beta_reduce" on
             starting day of simulation -- this DynamicVal
             emulates a simple staged-alert policy
-        daily_vaccines (np.ndarray of positive ints):
+        daily_vaccines_constant (np.ndarray of positive ints):
             holds current value of DailyVaccines instance,
             corresponding number of individuals who received influenza
             vaccine on that day, for given age-risk group
@@ -100,7 +100,7 @@ class FluSubpopState(clt.SubpopState):
     flu_contact_matrix: Optional[np.ndarray] = None
     beta_reduce: Optional[float] = 0.0
 
-    daily_vaccines: Optional[np.ndarray] = None
+    daily_vaccines_constant: Optional[np.ndarray] = None
 
 
 @dataclass
@@ -221,7 +221,7 @@ class FluSubpopParams(clt.SubpopParams):
             age group i has at work -- this matrix plus the
             work_contact_matrix must be less than the
             total_contact_matrix, element-wise
-        daily_vaccines (int):
+        daily_vaccines_constant (int):
             WARNING: THIS IS A PLACEHOLDER. See `DailyVaccines`
             class for more information. This will be deleted once
             we have historical vaccine data and set up the
@@ -274,13 +274,13 @@ class FluSubpopParams(clt.SubpopParams):
 
 
 @dataclass
-class FluMetapopStateTensors:
+class FluTravelStateTensors:
     """
-    Data container for tensors -- used to store L x A x R
-    arrays (collected from each location/subpopulation model).
-    Note that not all fields in `FluSubpopState` are included --
-    we only include compartments needed for the travel model
-    computation, for efficiency.
+    Data container for tensors -- used to store arrays that
+    contain data across all subpopulations (collected from each
+    location/subpopulation model). Note that not all fields in
+    `FluSubpopState` are included -- we only include compartments
+    needed for the travel model computation, for efficiency.
 
     Attributes:
         IP (torch.Tensor of nonnegative integers):
@@ -311,7 +311,6 @@ class FluMetapopStateTensors:
             work contact matrix, and the school contact matrix
             (and the value is adjusted depending on whether
             the date is a work or school day)
-
         init_vals (dict):
             dictionary of torch.Tensor instances, where keys
             correspond to "IP", "IS", "IA", and "H", and values
@@ -345,14 +344,15 @@ class FluMetapopStateTensors:
 
 
 @dataclass
-class FluMetapopParamsTensors:
+class FluTravelParamsTensors:
     """
-    Data container for tensors -- used to store L x A x R
-    arrays (collected from parameters on each location/subpopulation
-    model, as well as from the metapopulation's associated
-    `FluMixingParams` instance). Note that not all fields in
-    `FluSubpopParams` are included -- we only include parameters
-    needed for the travel model computation, for efficiency.
+    Data container for tensors -- used to store arrays that
+    contain data across all subpopulations (collected from parameters
+    on each location/subpopulation model, as well as from the
+    metapopulation's associated `FluMixingParams` instance).
+    Note that not all fields in `FluSubpopParams` are included
+    -- we only include parameters needed for the travel model
+    computation, for efficiency.
 
     Attributes:
         num_locations (torch.Tensor, 0-dimensional):
@@ -366,11 +366,13 @@ class FluMetapopParamsTensors:
             who travels to location j (on average).
 
     See `FluSubpopParams` docstring for other attributes.
+    Fields are analogous except they are L x A x R or scalar
+    (for location-age-risk).
     """
 
-    num_locations: torch.Tensor = None
-    num_age_groups: torch.Tensor = None
-    num_risk_groups: torch.Tensor = None
+    num_locations: Optional[torch.tensor] = None
+    num_age_groups: Optional[torch.tensor] = None
+    num_risk_groups: Optional[torch.tensor] = None
 
     travel_proportions: torch.Tensor = None
 
@@ -423,11 +425,129 @@ class FluMetapopParamsTensors:
             elif value.size() == torch.Size([L, A, R]):
                 continue
 
-            elif value.size() == torch.Size([A]):
-                setattr(self, name, value.view(1, A, 1).expand(L, A, R))
+            elif value.size() == torch.Size([L]):
+                setattr(self, name, value.view(L, 1, 1).expand(L, A, R))
 
             elif value.size() == torch.Size([A, R]):
                 setattr(self, name, value.view(1, A, R).expand(L, A, R))
+
+
+@dataclass
+class FluFullMetapopStateTensors(FluTravelStateTensors):
+    """
+    Data container for tensors -- used to store arrays that
+    contain data across all subpopulations
+    (collected from each location/subpopulation model).
+    Note that in contrast to `FluTravelStateTensors`,
+    ALL fields in `FluSubpopState` are included --
+    this is for running the simulation via torch.
+
+    Attributes:
+        flu_contact_matrix (torch.Tensor of nonnegative integers):
+            contact matrix for location-age-risk groups -- the
+            lth element holds current_val of `FluContactMatrix`
+            `Schedule` for subpopulation l -- this value is a
+            combination of the total contact matrix, the
+            work contact matrix, and the school contact matrix
+            (and the value is adjusted depending on whether
+            the date is a work or school day)
+        init_vals (dict):
+            dictionary of torch.Tensor instances, where keys
+            correspond to "IP", "IS", "IA", and "H", and values
+            correspond to their initial values for location-age-risk
+            groups.
+
+    See `FluSubpopState` and `FluTravelStateTensors` for other
+        attributes -- other attributes here correspond to
+        `FluSubpopState`, but are L x A x R tensors -- where L is the
+        number of subpopulations, and the lth A x R sub-tensor
+        corresponds to the age-risk current value for that
+        `StateVariable`.
+    """
+
+    # `IP`, `IS`, `IA`, `H`, `flu_contact_matrix` already in
+    #   parent class
+    # Same with `init_vals`
+
+    S: Optional[torch.Tensor] = None
+    E: Optional[torch.Tensor] = None
+    R: Optional[torch.Tensor] = None
+    D: Optional[torch.Tensor] = None
+
+    M: Optional[torch.Tensor] = None
+    Mv: Optional[torch.Tensor] = None
+
+    absolute_humidity: Optional[float] = None
+    beta_reduce: Optional[float] = 0.0
+    daily_vaccines_constant: Optional[torch.Tensor] = None
+
+
+@dataclass
+class FluFullMetapopParamsTensors(FluTravelParamsTensors):
+    """
+    Data container for tensors -- used to store arrays that
+    contain data across all subpopulations (collected from parameters
+    on each location/subpopulation model, as well as from the
+    metapopulation's associated `FluMixingParams` instance).
+    Note that in contrast to `FluTravelParamsTensors`,
+    ALL fields in `FluSubpopParams` are included --
+    this is for running the simulation via torch.
+
+    Attributes:
+        num_locations (torch.Tensor, 0-dimensional):
+            number of locations (subpopulations) in the
+            metapopulation model and therefore the travel
+            model.
+        travel_proportions (torch.Tensor):
+            L x L array, where L is the number of locations
+            or subpopulations, where element i,j corresponds
+            to the proportion of the population in location i
+            who travels to location j (on average).
+
+    See `FluSubpopParams` docstring for other attributes.
+    Other fields are analogous except they are L x A x R
+    or scalar (for location-age-risk).
+    """
+
+    beta_baseline: Optional[torch.Tensor] = None
+    total_pop_age_risk: Optional[torch.Tensor] = None
+    humidity_impact: Optional[torch.Tensor] = None
+
+    inf_induced_saturation: Optional[torch.Tensor] = None
+    inf_induced_immune_wane: Optional[torch.Tensor] = None
+    vax_induced_saturation: Optional[torch.Tensor] = None
+    vax_induced_immune_wane: Optional[torch.Tensor] = None
+    inf_induced_inf_risk_reduce: Optional[torch.Tensor] = None
+    inf_induced_hosp_risk_reduce: Optional[torch.Tensor] = None
+    inf_induced_death_risk_reduce: Optional[torch.Tensor] = None
+    vax_induced_inf_risk_reduce: Optional[torch.Tensor] = None
+    vax_induced_hosp_risk_reduce: Optional[torch.Tensor] = None
+    vax_induced_death_risk_reduce: Optional[torch.Tensor] = None
+
+    R_to_S_rate: Optional[torch.Tensor] = None
+    E_to_I_rate: Optional[torch.Tensor] = None
+    IP_to_IS_rate: Optional[torch.Tensor] = None
+    IS_to_R_rate: Optional[torch.Tensor] = None
+    IA_to_R_rate: Optional[torch.Tensor] = None
+    IS_to_H_rate: Optional[torch.Tensor] = None
+    H_to_R_rate: Optional[torch.Tensor] = None
+    H_to_D_rate: Optional[torch.Tensor] = None
+    E_to_IA_prop: Optional[torch.Tensor] = None
+
+    IS_to_H_adjusted_prop: Optional[torch.Tensor] = None
+    H_to_D_adjusted_prop: Optional[torch.Tensor] = None
+
+    IP_relative_inf: Optional[torch.Tensor] = None
+    IA_relative_inf: Optional[torch.Tensor] = None
+
+    relative_suscept: Optional[torch.Tensor] = None
+    prop_time_away: Optional[torch.Tensor] = None
+
+    total_contact_matrix: Optional[torch.Tensor] = None
+    school_contact_matrix: Optional[torch.Tensor] = None
+    work_contact_matrix: Optional[torch.Tensor] = None
+
+    daily_vaccines_constant: Optional[torch.Tensor] = None
 
 
 class FluPrecomputedTensors:
@@ -438,7 +558,7 @@ class FluPrecomputedTensors:
 
     def __init__(self,
                  total_pop_LAR: torch.Tensor,
-                 params: FluMetapopParamsTensors) -> None:
+                 params: FluTravelParamsTensors) -> None:
 
         self.total_pop_LAR = total_pop_LAR
 

@@ -34,5 +34,5 @@ jobs:
           # pip install -r requirements.txt
 
       # Step 4: Run Pytest
-      - name: Run flu_tests.py
-        run: pytest flu_tests.py
+      - name: Run tests
+        run: pytest test_flu.py test_flu_travel.py

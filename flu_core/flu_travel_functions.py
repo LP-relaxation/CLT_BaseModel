@@ -1,16 +1,16 @@
 import torch
 import numpy as np
 
-from .flu_data_structures import FluMetapopStateTensors, \
-    FluMetapopParamsTensors, FluPrecomputedTensors
+from .flu_data_structures import FluTravelStateTensors, \
+    FluTravelParamsTensors, FluPrecomputedTensors
 
 
-def compute_wtd_infected(state: FluMetapopStateTensors, params: FluMetapopParamsTensors) -> torch.Tensor:
+def compute_wtd_infected(state: FluTravelStateTensors, params: FluTravelParamsTensors) -> torch.Tensor:
     return params.IA_relative_inf * state.IA + params.IP_relative_inf + state.IP + state.IS
 
 
-def compute_wtd_infectious_LA(state: FluMetapopStateTensors,
-                              params: FluMetapopParamsTensors) -> torch.Tensor:
+def compute_wtd_infectious_LA(state: FluTravelStateTensors,
+                              params: FluTravelParamsTensors) -> torch.Tensor:
     """
     Returns L x A array -- summed over risk groups
     """
@@ -25,8 +25,8 @@ def compute_wtd_infectious_LA(state: FluMetapopStateTensors,
     return IS + wtd_IP + wtd_IA
 
 
-def compute_active_pop_LAR(state: FluMetapopStateTensors,
-                           _params: FluMetapopParamsTensors,
+def compute_active_pop_LAR(state: FluTravelStateTensors,
+                           _params: FluTravelParamsTensors,
                            precomputed: FluPrecomputedTensors) -> torch.Tensor:
     """
     Active population refers to those who are not
@@ -42,8 +42,8 @@ def compute_active_pop_LAR(state: FluMetapopStateTensors,
     return precomputed.total_pop_LAR - state.IS - state.H
 
 
-def compute_effective_pop_LA(state: FluMetapopStateTensors,
-                             params: FluMetapopParamsTensors,
+def compute_effective_pop_LA(state: FluTravelStateTensors,
+                             params: FluTravelParamsTensors,
                              precomputed: FluPrecomputedTensors) -> torch.Tensor:
     active_pop_LAR = compute_active_pop_LAR(state, params, precomputed)
 
@@ -67,8 +67,8 @@ def compute_effective_pop_LA(state: FluMetapopStateTensors,
     return effective_pop_LA
 
 
-def compute_wtd_infectious_ratio_LLA(state: FluMetapopStateTensors,
-                                     params: FluMetapopParamsTensors,
+def compute_wtd_infectious_ratio_LLA(state: FluTravelStateTensors,
+                                     params: FluTravelParamsTensors,
                                      precomputed: FluPrecomputedTensors) -> torch.Tensor:
     """
     Returns L x L x A array -- element i,j,a corresponds to
@@ -90,8 +90,8 @@ def compute_wtd_infectious_ratio_LLA(state: FluMetapopStateTensors,
     return prop_wtd_infectious
 
 
-def compute_local_to_local_exposure(prop_time_away: torch.Tensor,
-                                    flu_contact_matrix: torch.Tensor,
+def compute_local_to_local_exposure(flu_contact_matrix: torch.Tensor,
+                                    prop_time_away: torch.Tensor,
                                     sum_residents_nonlocal_travel_prop: torch.Tensor,
                                     wtd_infectious_ratio_LLA: torch.Tensor,
                                     location_ix: int) -> torch.Tensor:
@@ -110,8 +110,8 @@ def compute_local_to_local_exposure(prop_time_away: torch.Tensor,
     return result
 
 
-def compute_outside_visitors_exposure(prop_time_away: torch.Tensor,
-                                      flu_contact_matrix: torch.Tensor,
+def compute_outside_visitors_exposure(flu_contact_matrix: torch.Tensor,
+                                      prop_time_away: torch.Tensor,
                                       travel_proportions: torch.Tensor,
                                       wtd_infectious_ratio_LLA: torch.Tensor,
                                       local_ix: int,
@@ -138,8 +138,8 @@ def compute_outside_visitors_exposure(prop_time_away: torch.Tensor,
     return result
 
 
-def compute_residents_traveling_exposure(prop_time_away: torch.Tensor,
-                                         flu_contact_matrix: torch.Tensor,
+def compute_residents_traveling_exposure(flu_contact_matrix: torch.Tensor,
+                                         prop_time_away: torch.Tensor,
                                          travel_proportions: torch.Tensor,
                                          wtd_infectious_ratio_LLA: torch.Tensor,
                                          local_ix: int,
@@ -163,8 +163,8 @@ def compute_residents_traveling_exposure(prop_time_away: torch.Tensor,
     return result
 
 
-def compute_total_mixing_exposure(state: FluMetapopStateTensors,
-                                  params: FluMetapopParamsTensors,
+def compute_total_mixing_exposure(state: FluTravelStateTensors,
+                                  params: FluTravelParamsTensors,
                                   precomputed: FluPrecomputedTensors) -> torch.Tensor:
     L, A, R = precomputed.L, precomputed.A, precomputed.R
 
@@ -184,8 +184,8 @@ def compute_total_mixing_exposure(state: FluMetapopStateTensors,
 
         # local-to-local force of infection
         raw_total_mixing_exposure = raw_total_mixing_exposure + \
-                                    compute_local_to_local_exposure(prop_time_away,
-                                                                    flu_contact_matrix,
+                                    compute_local_to_local_exposure(flu_contact_matrix,
+                                                                    prop_time_away,
                                                                     sum_residents_nonlocal_travel_prop,
                                                                     wtd_infectious_ratio_LLA,
                                                                     l)
@@ -193,8 +193,8 @@ def compute_total_mixing_exposure(state: FluMetapopStateTensors,
         for k in np.arange(L):
             raw_total_mixing_exposure = raw_total_mixing_exposure + \
                                         compute_outside_visitors_exposure(
-                                            prop_time_away,
                                             flu_contact_matrix,
+                                            prop_time_away,
                                             travel_proportions,
                                             wtd_infectious_ratio_LLA,
                                             l,
@@ -202,8 +202,8 @@ def compute_total_mixing_exposure(state: FluMetapopStateTensors,
 
             raw_total_mixing_exposure = raw_total_mixing_exposure + \
                                         compute_residents_traveling_exposure(
-                                            prop_time_away,
                                             flu_contact_matrix,
+                                            prop_time_away,
                                             travel_proportions,
                                             wtd_infectious_ratio_LLA,
                                             l,

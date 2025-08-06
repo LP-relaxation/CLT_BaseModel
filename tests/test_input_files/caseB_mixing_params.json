@@ -1,0 +1,6 @@
+{
+	"num_locations":  2,
+	"travel_proportions":
+		[[0.8,0.5],
+		[0.01,0.1]]
+}
