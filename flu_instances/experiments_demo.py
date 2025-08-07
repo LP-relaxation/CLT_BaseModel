@@ -5,15 +5,11 @@
 ######################## IMPORTS ##########################
 ###########################################################
 
-from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# Import city-level transmission base components module
 import clt_base as clt
-
-# Import flu model module, which contains customized subclasses
-from importlib.resources import files
+import flu_core as flu
 
 ###########################################################
 ################# READ INPUT FILES ########################

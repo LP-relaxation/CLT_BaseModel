@@ -32,7 +32,12 @@ from .flu_data_structures import FluFullMetapopStateTensors, FluFullMetapopParam
 from .flu_travel_functions import compute_total_mixing_exposure
 
 from importlib.resources import files
+
 base_path = clt.utils.PROJECT_ROOT / "flu_instances" / "texas_input_files"
+
+
+def torch_approx_binomial_probability_from_rate(rate, dt):
+    return 1 - torch.exp(-rate * dt)
 
 
 def to_tensor(x: np.ndarray,
@@ -76,82 +81,137 @@ def compute_beta_adjusted(_state: FluFullMetapopStateTensors,
 def compute_S_to_E(state: FluFullMetapopStateTensors,
                    params: FluFullMetapopParamsTensors,
                    precomputed: FluPrecomputedTensors,
-                   day_counter: int) -> torch.Tensor:
-
+                   day_counter: int,
+                   dt: float) -> torch.Tensor:
     beta_adjusted = compute_beta_adjusted(state, params, day_counter)
 
     total_mixing_exposure = compute_total_mixing_exposure(state, params, precomputed)
 
     if total_mixing_exposure.size() != torch.Size([precomputed.L,
-                                                precomputed.A,
-                                                precomputed.R]):
+                                                   precomputed.A,
+                                                   precomputed.R]):
         raise Exception("force_of_infection must be L x A x R corresponding \n"
                         "to number of locations (subpopulations), age groups, \n"
                         "and risk groups.")
 
     # print("FOI", force_of_infection.sum())
 
-    S_to_E = state.S * beta_adjusted * total_mixing_exposure / \
-             (precomputed.total_pop_LAR * (1 + params.inf_induced_inf_risk_reduce * state.M +
-                                           params.vax_induced_inf_risk_reduce * state.Mv))
+    rate = beta_adjusted * total_mixing_exposure / \
+                (1 + params.inf_induced_inf_risk_reduce * state.M +
+                 params.vax_induced_inf_risk_reduce * state.Mv)
+
+    S_to_E = state.S * torch_approx_binomial_probability_from_rate(rate, dt)
 
     return S_to_E
 
 
-def compute_E_to_IP(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors) -> torch.Tensor:
-    E_to_IP = state.E * params.E_to_I_rate * (1 - params.E_to_IA_prop)
+def compute_E_to_IP(state: FluFullMetapopStateTensors,
+                    params: FluFullMetapopParamsTensors,
+                    dt: float) -> torch.Tensor:
+
+    rate = params.E_to_I_rate * (1 - params.E_to_IA_prop)
+
+    E_to_IP = state.E * torch_approx_binomial_probability_from_rate(rate, dt)
 
     return E_to_IP
 
 
-def compute_E_to_IA(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors) -> torch.Tensor:
-    E_to_IA = state.E * params.E_to_I_rate * params.E_to_IA_prop
+def compute_E_to_IA(state: FluFullMetapopStateTensors,
+                    params: FluFullMetapopParamsTensors,
+                    dt: float) -> torch.Tensor:
+
+    rate = params.E_to_I_rate * params.E_to_IA_prop
+
+    E_to_IA = state.E * torch_approx_binomial_probability_from_rate(rate, dt)
 
     return E_to_IA
 
 
-def compute_IP_to_IS(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors) -> torch.Tensor:
-    IP_to_IS = state.IP * params.IP_to_IS_rate
+def compute_IP_to_IS(state: FluFullMetapopStateTensors,
+                     params: FluFullMetapopParamsTensors,
+                     dt: float) -> torch.Tensor:
+
+    rate = params.IP_to_IS_rate
+
+    IP_to_IS = state.IP * torch_approx_binomial_probability_from_rate(rate, dt)
 
     return IP_to_IS
 
 
-def compute_IS_to_R(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors) -> torch.Tensor:
-    IS_to_R = state.IS * params.IS_to_R_rate * (1 - params.IS_to_H_adjusted_prop)
+def compute_IS_to_R(state: FluFullMetapopStateTensors,
+                    params: FluFullMetapopParamsTensors,
+                    dt: float) -> torch.Tensor:
+
+    immunity_force = (1 + params.inf_induced_hosp_risk_reduce * state.M +
+               params.vax_induced_hosp_risk_reduce * state.Mv)
+
+    rate = params.IS_to_R_rate * (1 - params.IS_to_H_adjusted_prop / immunity_force)
+
+    IS_to_R = state.IS * torch_approx_binomial_probability_from_rate(rate, dt)
 
     return IS_to_R
 
 
-def compute_IS_to_H(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors) -> torch.Tensor:
-    IS_to_H = state.IS * params.IS_to_H_rate * params.IS_to_H_adjusted_prop / \
-              (1 + params.inf_induced_hosp_risk_reduce * state.M +
+def compute_IS_to_H(state: FluFullMetapopStateTensors,
+                    params: FluFullMetapopParamsTensors,
+                    dt: float) -> torch.Tensor:
+
+    immunity_force = (1 + params.inf_induced_hosp_risk_reduce * state.M +
                params.vax_induced_hosp_risk_reduce * state.Mv)
+
+    rate = params.IS_to_H_rate * params.IS_to_H_adjusted_prop / immunity_force
+
+    IS_to_H = state.IS * torch_approx_binomial_probability_from_rate(rate, dt)
 
     return IS_to_H
 
 
-def compute_IA_to_R(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors) -> torch.Tensor:
-    IA_to_R = state.IA * params.IA_to_R_rate
+def compute_IA_to_R(state: FluFullMetapopStateTensors,
+                    params: FluFullMetapopParamsTensors,
+                    dt: float) -> torch.Tensor:
+
+    rate = params.IA_to_R_rate
+
+    IA_to_R = state.IA * torch_approx_binomial_probability_from_rate(rate, dt)
 
     return IA_to_R
 
 
-def compute_H_to_R(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors) -> torch.Tensor:
-    H_to_R = state.H * params.H_to_R_rate * (1 - params.H_to_D_adjusted_prop)
+def compute_H_to_R(state: FluFullMetapopStateTensors,
+                   params: FluFullMetapopParamsTensors,
+                   dt: float) -> torch.Tensor:
+
+    immunity_force = (1 + params.inf_induced_death_risk_reduce * state.M +
+              params.vax_induced_death_risk_reduce * state.Mv)
+
+    rate = params.H_to_R_rate * (1 - params.H_to_D_adjusted_prop / immunity_force)
+
+    H_to_R = state.H * torch_approx_binomial_probability_from_rate(rate, dt)
 
     return H_to_R
 
 
-def compute_H_to_D(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors) -> torch.Tensor:
-    H_to_D = state.H * params.H_to_D_rate * params.H_to_D_adjusted_prop / \
-             (1 + params.inf_induced_death_risk_reduce * state.M +
+def compute_H_to_D(state: FluFullMetapopStateTensors,
+                   params: FluFullMetapopParamsTensors,
+                   dt: float) -> torch.Tensor:
+
+    immunity_force = (1 + params.inf_induced_death_risk_reduce * state.M +
               params.vax_induced_death_risk_reduce * state.Mv)
+
+    rate = params.H_to_D_rate * params.H_to_D_adjusted_prop / immunity_force
+
+    H_to_D = state.H * torch_approx_binomial_probability_from_rate(rate, dt)
 
     return H_to_D
 
 
-def compute_R_to_S(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors) -> torch.Tensor:
-    R_to_S = state.R * params.R_to_S_rate
+def compute_R_to_S(state: FluFullMetapopStateTensors,
+                   params: FluFullMetapopParamsTensors,
+                   dt: float) -> torch.Tensor:
+
+    rate = params.R_to_S_rate
+
+    R_to_S = state.R * torch_approx_binomial_probability_from_rate(rate, dt)
 
     return R_to_S
 
@@ -162,15 +222,20 @@ def compute_R_to_S(state: FluFullMetapopStateTensors, params: FluFullMetapopPara
 #   - dMv/dt = (new vaccinations at time t - delta)/ N - vax_induced_immune_wane
 
 
-def compute_M_change(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors, precomputed: FluPrecomputedTensors) -> torch.Tensor:
+def compute_M_change(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors,
+                     precomputed: FluPrecomputedTensors,
+                     dt: float) -> torch.Tensor:
     M_change = (params.R_to_S_rate * state.R / precomputed.total_pop_LAR) * \
                (1 - params.inf_induced_saturation * state.M - params.vax_induced_saturation * state.Mv) - \
                params.inf_induced_immune_wane * state.M
 
-    return M_change
+    return M_change * dt
 
 
-def compute_Mv_change(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors, precomputed: FluPrecomputedTensors) -> torch.Tensor:
+def compute_Mv_change(state: FluFullMetapopStateTensors,
+                      params: FluFullMetapopParamsTensors,
+                      precomputed: FluPrecomputedTensors,
+                      dt: float) -> torch.Tensor:
     Mv_change = params.daily_vaccines_constant / precomputed.total_pop_LAR - \
                 params.vax_induced_immune_wane * state.Mv
 
@@ -191,29 +256,29 @@ def step(state: FluFullMetapopStateTensors,
     #   leaf tensors), but here we do non-in-place operations
     #   just in case
 
-    S_to_E = compute_S_to_E(state, params, precomputed, day_counter) * dt
+    S_to_E = compute_S_to_E(state, params, precomputed, day_counter, dt)
 
-    E_to_IP = compute_E_to_IP(state, params) * dt
+    E_to_IP = compute_E_to_IP(state, params, dt)
 
-    E_to_IA = compute_E_to_IA(state, params) * dt
+    E_to_IA = compute_E_to_IA(state, params, dt)
 
-    IP_to_IS = compute_IP_to_IS(state, params) * dt
+    IP_to_IS = compute_IP_to_IS(state, params, dt)
 
-    IS_to_R = compute_IS_to_R(state, params) * dt
+    IS_to_R = compute_IS_to_R(state, params, dt)
 
-    IS_to_H = compute_IS_to_H(state, params) * dt
+    IS_to_H = compute_IS_to_H(state, params, dt)
 
-    IA_to_R = compute_IA_to_R(state, params) * dt
+    IA_to_R = compute_IA_to_R(state, params, dt)
 
-    H_to_R = compute_H_to_R(state, params) * dt
+    H_to_R = compute_H_to_R(state, params, dt)
 
-    H_to_D = compute_H_to_D(state, params) * dt
+    H_to_D = compute_H_to_D(state, params, dt)
 
-    R_to_S = compute_R_to_S(state, params) * dt
+    R_to_S = compute_R_to_S(state, params, dt)
 
-    M_change = compute_M_change(state, params, precomputed) * dt
+    M_change = compute_M_change(state, params, precomputed, dt)
 
-    Mv_change = compute_Mv_change(state, params, precomputed) * dt
+    Mv_change = compute_Mv_change(state, params, precomputed, dt)
 
     S_new = state.S + R_to_S - S_to_E
 
@@ -235,17 +300,22 @@ def step(state: FluFullMetapopStateTensors,
 
     Mv_new = state.Mv + Mv_change
 
-    return FluFullMetapopStateTensors(S=S_new,
-                                      E=E_new,
-                                      IP=IP_new,
-                                      IS=IS_new,
-                                      IA=IA_new,
-                                      H=H_new,
-                                      R=R_new,
-                                      D=D_new,
-                                      M=M_new,
-                                      Mv=Mv_new,
-                                      flu_contact_matrix=state.flu_contact_matrix)
+    state_new = FluFullMetapopStateTensors(S=S_new,
+                                           E=E_new,
+                                           IP=IP_new,
+                                           IS=IS_new,
+                                           IA=IA_new,
+                                           H=H_new,
+                                           R=R_new,
+                                           D=D_new,
+                                           M=M_new,
+                                           Mv=Mv_new,
+                                           flu_contact_matrix=state.flu_contact_matrix)
+
+    calibration_targets = {}
+    calibration_targets["IS_to_H"] = IS_to_H
+
+    return state_new, calibration_targets
 
 
 def simulate_full_history(state: FluFullMetapopStateTensors,
@@ -258,28 +328,32 @@ def simulate_full_history(state: FluFullMetapopStateTensors,
     history_dict = defaultdict(list)
 
     for timestep in range(num_timesteps):
-        state = step(state, params, precomputed, timestep)
+        state, calibration_targets = step(state, params, precomputed, timestep)
 
         for field in fields(state):
             if field.name == "init_vals":
                 continue
             history_dict[str(field.name)].append(getattr(state, field.name).clone())
 
+        for key, value in calibration_targets.items():
+            history_dict[key] = value
+
     return history_dict
 
 
-def simulate(state: FluFullMetapopStateTensors,
-             params: FluFullMetapopParamsTensors,
-             precomputed: FluPrecomputedTensors,
-             num_days: int,
-             timesteps_per_day: int) -> torch.Tensor:
-    history = []
+def simulate_hospital_admits(state: FluFullMetapopStateTensors,
+                             params: FluFullMetapopParamsTensors,
+                             precomputed: FluPrecomputedTensors,
+                             num_days: int,
+                             timesteps_per_day: int) -> torch.Tensor:
 
-    dt = 1/float(timesteps_per_day)
+    hospital_admits_history = []
+
+    dt = 1 / float(timesteps_per_day)
 
     for day in range(num_days):
         for timestep in range(timesteps_per_day):
-            state = step(state, params, precomputed, day, dt)
-            history.append(state.H.clone())
+            state, calibration_targets = step(state, params, precomputed, day, dt)
+        hospital_admits_history.append(calibration_targets["IS_to_H"].clone())
 
-    return torch.stack(history)
+    return torch.stack(hospital_admits_history)

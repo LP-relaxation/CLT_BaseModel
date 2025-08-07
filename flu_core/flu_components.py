@@ -187,17 +187,16 @@ class SympToRecovered(clt.TransitionVariable):
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
 
-        hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
+        inf_induced_hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
+        inf_induced_proportional_risk_reduce = inf_induced_hosp_risk_reduce / (1 - inf_induced_hosp_risk_reduce)
 
-        if (np.asarray(hosp_risk_reduce) != 1).all():
-            proportional_risk_reduction = hosp_risk_reduce / (1 - hosp_risk_reduce)
-        else:
-            raise FluMetapopModelError("'inf_induced_hosp_risk_reduce' cannot be exactly 1, \n"
-                                       "otherwise the formula is not defined. Please amend \n"
-                                       "and try again.")
+        vax_induced_hosp_risk_reduce = params.vax_induced_hosp_risk_reduce
+        vax_induced_proportional_risk_reduce = vax_induced_hosp_risk_reduce / (1 - vax_induced_hosp_risk_reduce)
 
-        return np.asarray(((1 - params.IS_to_H_adjusted_prop) * params.IS_to_R_rate) /
-                          (1 + proportional_risk_reduction * state.Mv))
+        immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
+                          vax_induced_proportional_risk_reduce * state.Mv)
+
+        return np.asarray((1 - params.IS_to_H_adjusted_prop / immunity_force) * params.IS_to_R_rate)
 
 
 class AsympToRecovered(clt.TransitionVariable):
@@ -228,8 +227,21 @@ class HospToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+
+        inf_induced_death_risk_reduce = params.inf_induced_death_risk_reduce
+        vax_induced_death_risk_reduce = params.vax_induced_death_risk_reduce
+
+        inf_induced_proportional_risk_reduce = \
+            inf_induced_death_risk_reduce / (1 - inf_induced_death_risk_reduce)
+
+        vax_induced_proportional_risk_reduce = \
+            vax_induced_death_risk_reduce / (1 - vax_induced_death_risk_reduce)
+
+        immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
+                          vax_induced_proportional_risk_reduce * state.Mv)
+
         return np.full((params.num_age_groups, params.num_risk_groups),
-                       (1 - params.H_to_D_adjusted_prop) * params.H_to_R_rate)
+                       (1 - params.H_to_D_adjusted_prop / immunity_force) * params.H_to_R_rate)
 
 
 class SympToHosp(clt.TransitionVariable):
@@ -250,17 +262,16 @@ class SympToHosp(clt.TransitionVariable):
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
 
-        hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
+        inf_induced_hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
+        inf_induced_proportional_risk_reduce = inf_induced_hosp_risk_reduce / (1 - inf_induced_hosp_risk_reduce)
 
-        if (np.asarray(hosp_risk_reduce) != 1).all():
-            proportional_risk_reduction = hosp_risk_reduce / (1 - hosp_risk_reduce)
-        else:
-            raise FluMetapopModelError("'inf_induced_hosp_risk_reduce' cannot be exactly 1, \n"
-                                       "otherwise the formula is not defined. Please amend \n"
-                                       "and try again.")
+        vax_induced_hosp_risk_reduce = params.vax_induced_hosp_risk_reduce
+        vax_induced_proportional_risk_reduce = vax_induced_hosp_risk_reduce / (1 - vax_induced_hosp_risk_reduce)
 
-        return np.asarray(params.IS_to_H_rate * params.IS_to_H_adjusted_prop /
-                          (1 + proportional_risk_reduction * state.Mv))
+        immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
+                          vax_induced_proportional_risk_reduce * state.Mv)
+
+        return np.asarray(params.IS_to_H_rate * params.IS_to_H_adjusted_prop / immunity_force)
 
 
 class HospToDead(clt.TransitionVariable):
@@ -284,21 +295,16 @@ class HospToDead(clt.TransitionVariable):
         inf_induced_death_risk_reduce = params.inf_induced_death_risk_reduce
         vax_induced_death_risk_reduce = params.vax_induced_death_risk_reduce
 
-        if (np.asarray(inf_induced_death_risk_reduce) != 1).all():
-            inf_induced_proportional_risk_reduce = \
-                inf_induced_death_risk_reduce / (1 - inf_induced_death_risk_reduce)
-        else:
-            inf_induced_proportional_risk_reduce = 1
+        inf_induced_proportional_risk_reduce = \
+            inf_induced_death_risk_reduce / (1 - inf_induced_death_risk_reduce)
 
-        if (np.asarray(vax_induced_death_risk_reduce) != 1).all():
-            vax_induced_proportional_risk_reduce = \
-                vax_induced_death_risk_reduce / (1 - vax_induced_death_risk_reduce)
-        else:
-            vax_induced_proportional_risk_reduce = 1
+        vax_induced_proportional_risk_reduce = \
+            vax_induced_death_risk_reduce / (1 - vax_induced_death_risk_reduce)
 
-        return np.asarray(params.H_to_D_adjusted_prop * params.H_to_D_rate /
-                          (1 + inf_induced_proportional_risk_reduce * state.M +
-                           vax_induced_proportional_risk_reduce * state.Mv))
+        immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
+                           vax_induced_proportional_risk_reduce * state.Mv)
+
+        return np.asarray(params.H_to_D_adjusted_prop * params.H_to_D_rate / immunity_force)
 
 
 class InfInducedImmunity(clt.EpiMetric):
@@ -725,7 +731,7 @@ class FluSubpopModel(clt.SubpopModel):
         schedules["absolute_humidity"] = AbsoluteHumidity(filepath=self.absolute_humidity_filepath)
         schedules["flu_contact_matrix"] = FluContactMatrix(init_val=None,
                                                            calendar_df=self.calendar_df)
-        schedules["daily_vaccines"] = DailyVaccines(filepath="")
+        schedules["daily_vaccines_constant"] = DailyVaccines(filepath="")
 
         return schedules
 

@@ -1,5 +1,12 @@
+# DRAFT VERSION -- VERY MESSY AND INTERFACES
+#   WILL BE STREAMLINED AND CHANGED -- BE WARNED
+
 # TODO: add vaccination time series as a Schedule --
 #   for now it is constant, given in params
+
+#######################################
+############# IMPORTS #################
+#######################################
 
 import torch
 import time
@@ -13,10 +20,14 @@ import flu_core as flu
 
 import copy
 
-from dataclasses import fields, is_dataclass
+from dataclasses import fields
 import torch
 
 from flu_core import flu_torch_det_components as flu_torch
+
+############################################
+############# FILE LOADING #################
+############################################
 
 params_path = clt.utils.PROJECT_ROOT / "flu_instances" / "texas_input_files"
 init_vals_path = clt.utils.PROJECT_ROOT / "flu_instances" / "explore_two_betas_input_files"
@@ -40,9 +51,11 @@ config_dict = clt.load_json_new_dict(config_filepath)
 
 calendar_df = pd.read_csv(calendar_filepath, index_col=0)
 
-bit_generator = np.random.MT19937(88888)
-jumped_bit_generator = bit_generator.jumped(1)
+#################################################
+############# UTILITY FUNCTIONS #################
+#################################################
 
+# TODO: NEED TO ORGANIZE!
 
 # Turn this into a utility function and put it somewhere...
 #   that is not here :P
@@ -60,22 +73,27 @@ def enable_grad(container: flu.FluFullMetapopParamsTensors):
                 val.requires_grad_()
 
 
-###########################################################
-############# CREATE SUBPOPULATION MODELS #################
-###########################################################
+####################################################
+############# CREATE METAPOP MODEL #################
+####################################################
 
-younger_subpop_params_dict = updated_dict(common_subpop_params_dict, {"beta_baseline": 5})
-older_subpop_params_dict = updated_dict(common_subpop_params_dict, {"beta_baseline": 2})
+# Thanks for your patience on this section...
+# The torch implementation requires L x A x R tensors (ouch) --
+#   to streamline the interface... the user inputs A x R arrays
+#   (more readable, less redundant) -- and UNDER THE HOOD
+#   these are converted to L x A x R tensors
+# Overall, the goal is to have the object-oriented version
+#   and the torch version be as standardized as possible
+#   and have the same input types -- this is under construction...
+#   future updates will make it easier to set up the
+#   torch simulation.
 
-# Create two subpopulation models, one for the north
-#   side of the city and one for the south side of the city
-# In this case, these two (toy) subpopulations have the
-#   same demographics, initial compartment and epi metric values,
-#   fixed parameters, and school-work calendar.
-# If we wanted the "north" subpopulation and "south"
-#   subpopulation to have different aforementioned values,
-#   we could read in two separate sets of files -- one
-#   for each subpopulation
+bit_generator = np.random.MT19937(88888)
+jumped_bit_generator = bit_generator.jumped(1)
+
+younger_subpop_params_dict = updated_dict(common_subpop_params_dict, {"beta_baseline": 1.5})
+older_subpop_params_dict = updated_dict(common_subpop_params_dict, {"beta_baseline": 2.5})
+
 younger = flu.FluSubpopModel(younger_subpop_init_vals_dict,
                              younger_subpop_params_dict,
                              config_dict,
@@ -114,57 +132,66 @@ precomputed = flu_demo_model.precomputed
 state.flu_contact_matrix = torch.tensor(np.stack([younger.params.total_contact_matrix] * 2, axis=0))
 state.flu_contact_matrix = torch.tensor(np.stack([older.params.total_contact_matrix] * 2, axis=0))
 
+# Save the initial state!
 init_state = copy.deepcopy(state)
-init_params = copy.deepcopy(params)
 
-init_params.beta_baseline_raw = torch.tensor([3.0, 3.0], dtype=torch.float32, requires_grad=True)
-init_params.beta_baseline = torch.tensor(init_params.beta_baseline_raw.view(2, 1, 1).expand(2, 5, 1),
+# Need fresh copies of the state and params to pass to the optimization
+opt_state = copy.deepcopy(state)
+opt_params = copy.deepcopy(params)
+
+# `beta_baseline` is L x A x R -- but we only want there to be L=2 betas
+#   (one for each subpopulation) -- so, we create a new variable
+#   `beta_baseline_raw` to force the optimization to only optimize over L=2
+#   parameters, not have full degrees of freedom and change L x A x R betas
+# There's definitely room for improvement/clarity here...
+# WE MUST TELL TORCH TO TRACK THE GRADIENT ON THE PARAMETERS WE WANT TO
+#   OPTIMIZE! see `requires_grad = True`
+opt_params.beta_baseline_raw = torch.tensor([1.0, 1.0], dtype=torch.float32, requires_grad=True)
+opt_params.beta_baseline = torch.tensor(opt_params.beta_baseline_raw.view(2, 1, 1).expand(2, 5, 1),
                                          dtype=torch.float32,
                                          requires_grad=True)
 
-true_H_history = flu_torch.simulate(state, params, precomputed, 100, 10).clone().detach()
+# Generate "true" history
+true_admits_history = flu_torch.simulate_hospital_admits(state, params, precomputed, 100, 2).clone().detach()
 
-print(max(true_H_history.sum(axis=(1,2,3))))
+############################################
+############# OPTIMIZATION #################
+############################################
 
-optimizer = torch.optim.Adam([init_params.beta_baseline_raw], lr=0.01)
+# Could potentially wrap this in something nice...
+
+optimizer = torch.optim.Adam([opt_params.beta_baseline_raw], lr=0.01)
 
 beta_baseline_opt_history = []
 loss_history = []
 fitting_start_time = time.time()
 
-for i in range(100):
+for i in range(1000):
     optimizer.zero_grad()
-    init_params.beta_baseline = init_params.beta_baseline_raw.view(2, 1, 1).expand(2, 5, 1)
-    sim_result = flu_torch.simulate(init_state, init_params, precomputed, 100, 10)
-    loss = torch.nn.functional.mse_loss(sim_result, true_H_history)
+    opt_params.beta_baseline = opt_params.beta_baseline_raw.view(2, 1, 1).expand(2, 5, 1)
+    sim_result = flu_torch.simulate_hospital_admits(init_state, opt_params, precomputed, 100, 2)
+    loss = torch.nn.functional.mse_loss(sim_result, true_admits_history)
     loss_history.append(loss)
     loss.backward()
     optimizer.step()
-    # print(init_params.beta_baseline[0, 0, 0], init_params.beta_baseline[1, 0, 0])
-    beta_baseline_opt_history.append(init_params.beta_baseline.clone().detach())
+    # beta_baseline_opt_history.append(opt_params.beta_baseline_raw.clone().detach())
+    if i % 10 == 0:
+        print("Loss function: " + str(loss))
+        print("Estimated betas: " + str(opt_params.beta_baseline_raw.clone().detach()))
+    if loss < 1e-2:
+        break
 
 print(time.time() - fitting_start_time)
 
-breakpoint()
+print(opt_params.beta_baseline)
 
-fitted_H_history = flu_torch.simulate(state, params, 100)
+# Optional -- can simulate with fitted parameters and plot corresponding output
+# Commented out for now but can un-comment
+# fitted_admits_history = flu_torch.simulate_hospital_admits(init_state, opt_params, precomputed, 100, 2)
 
-breakpoint()
-
-plt.clf()
-plt.plot(beta_baseline_opt_history, label="Estimated beta over time")
-plt.axhline(y=1.5, color='b', label='True beta')
-plt.legend()
-plt.savefig("beta_baseline_plot.png", dpi=1200)
-plt.show()
-
-breakpoint()
-
-plt.clf()
-plt.plot(torch.sum(true_H_history, dim=(1, 2)), label="True H")
-plt.plot(torch.sum(fitted_H_history.clone().detach(), dim=(1, 2)), label="Fitted H")
-plt.legend()
-plt.savefig("H_plot.png", dpi=1200)
-plt.show()
-
-breakpoint()
+# plt.clf()
+# plt.plot(torch.sum(true_admits_history, dim=(1, 2)), label="True hospital admits")
+# plt.plot(torch.sum(fitted_admits_history.clone().detach(), dim=(1, 2)), label="Fitted hospital admits")
+# plt.legend()
+# plt.savefig("hospital_admits_plot.png", dpi=1200)
+# plt.show()

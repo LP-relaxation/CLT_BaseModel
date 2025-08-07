@@ -595,3 +595,4 @@ class FluMixingParams:
 
     num_locations: Optional[int]
     travel_proportions: Optional[np.ndarray]
+
