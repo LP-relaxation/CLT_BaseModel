@@ -31,6 +31,8 @@ jobs:
           pip install pytest
           pip install pandas
           pip install sciris
+          pip install torch
+          pip install .
           # pip install -r requirements.txt
 
       # Step 4: Run Pytest
