@@ -36,21 +36,21 @@ def test_size_travel_computations(make_subpop_model):
 
         for i in range(L):
             assert flu.compute_local_to_local_exposure(state.flu_contact_matrix,
-                                                       params.prop_time_away,
+                                                       params.mobility_modifier,
                                                        precomputed.sum_residents_nonlocal_travel_prop,
                                                        wtd_infectious_ratio_LLA,
                                                        i).size() == torch.Size([A])
 
             for j in range(L):
                 assert flu.compute_outside_visitors_exposure(state.flu_contact_matrix,
-                                                             params.prop_time_away,
+                                                             params.mobility_modifier,
                                                              params.travel_proportions,
                                                              wtd_infectious_ratio_LLA,
                                                              i,
                                                              j).size() == torch.Size([A])
 
                 assert flu.compute_residents_traveling_exposure(state.flu_contact_matrix,
-                                                                params.prop_time_away,
+                                                                params.mobility_modifier,
                                                                 params.travel_proportions,
                                                                 wtd_infectious_ratio_LLA,
                                                                 i,

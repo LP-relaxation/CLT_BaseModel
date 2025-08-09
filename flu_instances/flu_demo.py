@@ -27,9 +27,14 @@ subpop_params_filepath = base_path / "common_subpop_params.json"
 mixing_params_filepath = base_path / "mixing_params.json"
 config_filepath = base_path / "config.json"
 
-# Get filepaths for school-work calendar CSV and humidity CSV
-calendar_filepath = base_path / "school_work_calendar.csv"
-humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
+calendar_df = pd.read_csv(base_path / "school_work_calendar.csv", index_col=0)
+humidity_df = pd.read_csv(base_path / "humidity_austin_2023_2024.csv", index_col=0)
+vaccines_df = pd.read_csv(base_path / "daily_vaccines_constant.csv", index_col=0)
+
+schedules_info = {}
+schedules_info["flu_contact_matrix"] = calendar_df
+schedules_info["daily_vaccines"] = vaccines_df
+schedules_info["absolute_humidity"] = humidity_df
 
 # Read in files as dictionaries and dataframes
 # Note that we can also create these dictionaries directly
@@ -39,8 +44,6 @@ compartments_epi_metrics_dict = \
 subpop_params_dict = clt.load_json_new_dict(subpop_params_filepath)
 mixing_params_dict = clt.load_json_new_dict(mixing_params_filepath)
 config_dict = clt.load_json_new_dict(config_filepath)
-
-calendar_df = pd.read_csv(calendar_filepath, index_col=0)
 
 # Create two independent bit generators
 bit_generator = np.random.MT19937(88888)
@@ -62,17 +65,15 @@ jumped_bit_generator = bit_generator.jumped(1)
 north = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            subpop_params_dict,
                            config_dict,
-                           calendar_df,
                            np.random.Generator(bit_generator),
-                           humidity_filepath,
+                           schedules_info,
                            name="north")
 
 south = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            subpop_params_dict,
                            config_dict,
-                           calendar_df,
                            np.random.Generator(jumped_bit_generator),
-                           humidity_filepath,
+                           schedules_info,
                            name="south")
 
 # The structure of the code allows us to access

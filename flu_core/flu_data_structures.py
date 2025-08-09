@@ -77,7 +77,7 @@ class FluSubpopState(clt.SubpopState):
             starting value of DynamicVal "beta_reduce" on
             starting day of simulation -- this DynamicVal
             emulates a simple staged-alert policy
-        daily_vaccines_constant (np.ndarray of positive ints):
+        daily_vaccines (np.ndarray of positive ints):
             holds current value of DailyVaccines instance,
             corresponding number of individuals who received influenza
             vaccine on that day, for given age-risk group
@@ -100,7 +100,7 @@ class FluSubpopState(clt.SubpopState):
     flu_contact_matrix: Optional[np.ndarray] = None
     beta_reduce: Optional[float] = 0.0
 
-    daily_vaccines_constant: Optional[np.ndarray] = None
+    daily_vaccines: Optional[np.ndarray] = None
 
 
 @dataclass
@@ -200,7 +200,7 @@ class FluSubpopParams(clt.SubpopParams):
             people (IA to IS compartment).
         relative_suscept (np.ndarray of positive floats in [0,1]):
             relative susceptibility to infection by age group
-        prop_time_away (np.ndarray of positive floats in [0,1]):
+        mobility_modifier (np.ndarray of positive floats in [0,1]):
             total proportion of time spent away from home by age group
         total_contact_matrix (np.ndarray of positive floats):
             A x A contact matrix (where A is the number
@@ -221,11 +221,6 @@ class FluSubpopParams(clt.SubpopParams):
             age group i has at work -- this matrix plus the
             work_contact_matrix must be less than the
             total_contact_matrix, element-wise
-        daily_vaccines_constant (int):
-            WARNING: THIS IS A PLACEHOLDER. See `DailyVaccines`
-            class for more information. This will be deleted once
-            we have historical vaccine data and set up the
-            `DailyVaccines` `Schedule` properly.
 
     """
 
@@ -264,13 +259,11 @@ class FluSubpopParams(clt.SubpopParams):
 
     relative_suscept: Optional[np.ndarray] = None
 
-    prop_time_away: Optional[np.ndarray] = None
+    mobility_modifier: Optional[np.ndarray] = None
 
     total_contact_matrix: Optional[np.ndarray] = None
     school_contact_matrix: Optional[np.ndarray] = None
     work_contact_matrix: Optional[np.ndarray] = None
-
-    daily_vaccines_constant: Optional[int] = None
 
 
 @dataclass
@@ -380,7 +373,7 @@ class FluTravelParamsTensors:
     IA_relative_inf: torch.Tensor = None
 
     relative_suscept: torch.Tensor = None
-    prop_time_away: torch.Tensor = None
+    mobility_modifier: torch.Tensor = None
 
     def standardize_shapes(self) -> None:
         """
@@ -479,7 +472,7 @@ class FluFullMetapopStateTensors(FluTravelStateTensors):
 
     absolute_humidity: Optional[float] = None
     beta_reduce: Optional[float] = 0.0
-    daily_vaccines_constant: Optional[torch.Tensor] = None
+    daily_vaccines: Optional[torch.Tensor] = None
 
 
 @dataclass
@@ -541,13 +534,11 @@ class FluFullMetapopParamsTensors(FluTravelParamsTensors):
     IA_relative_inf: Optional[torch.Tensor] = None
 
     relative_suscept: Optional[torch.Tensor] = None
-    prop_time_away: Optional[torch.Tensor] = None
+    mobility_modifier: Optional[torch.Tensor] = None
 
     total_contact_matrix: Optional[torch.Tensor] = None
     school_contact_matrix: Optional[torch.Tensor] = None
     work_contact_matrix: Optional[torch.Tensor] = None
-
-    daily_vaccines_constant: Optional[torch.Tensor] = None
 
 
 class FluPrecomputedTensors:

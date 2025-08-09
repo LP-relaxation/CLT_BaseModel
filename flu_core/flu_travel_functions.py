@@ -59,9 +59,9 @@ def compute_effective_pop_LA(state: FluTravelStateTensors,
     traveling_residents_LAR = precomputed.sum_residents_nonlocal_travel_prop[:, None, None] * \
                               active_pop_LAR
 
-    prop_time_away = params.prop_time_away[0, :, 0]
+    mobility_modifier = params.mobility_modifier[0, :, 0]
 
-    effective_pop_LA = precomputed.total_pop_LA + prop_time_away * \
+    effective_pop_LA = precomputed.total_pop_LA + mobility_modifier * \
                        torch.sum(outside_visitors_LAR + traveling_residents_LAR, dim=2)
 
     return effective_pop_LA
@@ -91,7 +91,7 @@ def compute_wtd_infectious_ratio_LLA(state: FluTravelStateTensors,
 
 
 def compute_local_to_local_exposure(flu_contact_matrix: torch.Tensor,
-                                    prop_time_away: torch.Tensor,
+                                    mobility_modifier: torch.Tensor,
                                     sum_residents_nonlocal_travel_prop: torch.Tensor,
                                     wtd_infectious_ratio_LLA: torch.Tensor,
                                     location_ix: int) -> torch.Tensor:
@@ -101,9 +101,9 @@ def compute_local_to_local_exposure(flu_contact_matrix: torch.Tensor,
     Excludes beta -- that is factored in later
     """
 
-    prop_time_away = prop_time_away[0, :, 0]
+    mobility_modifier = mobility_modifier[0, :, 0]
 
-    result = (1 - prop_time_away * sum_residents_nonlocal_travel_prop[location_ix]) * \
+    result = (1 - mobility_modifier * sum_residents_nonlocal_travel_prop[location_ix]) * \
              torch.matmul(flu_contact_matrix[location_ix, :, :],
                           wtd_infectious_ratio_LLA[location_ix, location_ix, :])
 
@@ -111,7 +111,7 @@ def compute_local_to_local_exposure(flu_contact_matrix: torch.Tensor,
 
 
 def compute_outside_visitors_exposure(flu_contact_matrix: torch.Tensor,
-                                      prop_time_away: torch.Tensor,
+                                      mobility_modifier: torch.Tensor,
                                       travel_proportions: torch.Tensor,
                                       wtd_infectious_ratio_LLA: torch.Tensor,
                                       local_ix: int,
@@ -129,17 +129,17 @@ def compute_outside_visitors_exposure(flu_contact_matrix: torch.Tensor,
     # In location dest_ix, we are looking at the visitors from
     #   origin_ix who come to dest_ix (and infect folks in dest_ix)
 
-    prop_time_away = prop_time_away[0, :, 0]
+    mobility_modifier = mobility_modifier[0, :, 0]
 
     result = travel_proportions[visitors_ix, local_ix] * \
-             torch.matmul(prop_time_away * flu_contact_matrix[local_ix, :, :],
+             torch.matmul(mobility_modifier * flu_contact_matrix[local_ix, :, :],
                           wtd_infectious_ratio_LLA[visitors_ix, local_ix, :])
 
     return result
 
 
 def compute_residents_traveling_exposure(flu_contact_matrix: torch.Tensor,
-                                         prop_time_away: torch.Tensor,
+                                         mobility_modifier: torch.Tensor,
                                          travel_proportions: torch.Tensor,
                                          wtd_infectious_ratio_LLA: torch.Tensor,
                                          local_ix: int,
@@ -154,9 +154,9 @@ def compute_residents_traveling_exposure(flu_contact_matrix: torch.Tensor,
     Output should be size A
     """
 
-    prop_time_away = prop_time_away[0, :, 0]
+    mobility_modifier = mobility_modifier[0, :, 0]
 
-    result = prop_time_away * travel_proportions[local_ix, dest_ix] * \
+    result = mobility_modifier * travel_proportions[local_ix, dest_ix] * \
              torch.matmul(flu_contact_matrix[local_ix, :, :],
                           wtd_infectious_ratio_LLA[dest_ix, dest_ix, :])
 
@@ -168,7 +168,7 @@ def compute_total_mixing_exposure(state: FluTravelStateTensors,
                                   precomputed: FluPrecomputedTensors) -> torch.Tensor:
     L, A, R = precomputed.L, precomputed.A, precomputed.R
 
-    prop_time_away = params.prop_time_away
+    mobility_modifier = params.mobility_modifier
     flu_contact_matrix = state.flu_contact_matrix
     travel_proportions = params.travel_proportions
     sum_residents_nonlocal_travel_prop = precomputed.sum_residents_nonlocal_travel_prop
@@ -185,7 +185,7 @@ def compute_total_mixing_exposure(state: FluTravelStateTensors,
         # local-to-local force of infection
         raw_total_mixing_exposure = raw_total_mixing_exposure + \
                                     compute_local_to_local_exposure(flu_contact_matrix,
-                                                                    prop_time_away,
+                                                                    mobility_modifier,
                                                                     sum_residents_nonlocal_travel_prop,
                                                                     wtd_infectious_ratio_LLA,
                                                                     l)
@@ -194,7 +194,7 @@ def compute_total_mixing_exposure(state: FluTravelStateTensors,
             raw_total_mixing_exposure = raw_total_mixing_exposure + \
                                         compute_outside_visitors_exposure(
                                             flu_contact_matrix,
-                                            prop_time_away,
+                                            mobility_modifier,
                                             travel_proportions,
                                             wtd_infectious_ratio_LLA,
                                             l,
@@ -203,7 +203,7 @@ def compute_total_mixing_exposure(state: FluTravelStateTensors,
             raw_total_mixing_exposure = raw_total_mixing_exposure + \
                                         compute_residents_traveling_exposure(
                                             flu_contact_matrix,
-                                            prop_time_away,
+                                            mobility_modifier,
                                             travel_proportions,
                                             wtd_infectious_ratio_LLA,
                                             l,

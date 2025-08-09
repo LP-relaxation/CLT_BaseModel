@@ -362,11 +362,11 @@ class VaxInducedImmunity(clt.EpiMetric):
                                   state: FluSubpopState,
                                   params: FluSubpopParams,
                                   num_timesteps: int) -> np.ndarray:
-        # Note: `state.daily_vaccines_constant` (based on the value of the `DailyVaccines`
+        # Note: `state.daily_vaccines` (based on the value of the `DailyVaccines`
         #   `Schedule` is NOT divided by the number of timesteps -- so we need to
         #   do this division in the equation here.
 
-        return state.daily_vaccines_constant / (params.total_pop_age_risk * num_timesteps) - \
+        return state.daily_vaccines / (params.total_pop_age_risk * num_timesteps) - \
                params.vax_induced_immune_wane * state.Mv / num_timesteps
 
 
@@ -401,60 +401,51 @@ class DailyVaccines(clt.Schedule):
 
     def __init__(self,
                  init_val: Optional[np.ndarray | float] = None,
-                 filepath: Optional[str] = None):
+                 timeseries_df: pd.DataFrame = None):
         """
-        WARNING: THIS IS A PLACEHOLDER RIGHT NOW --
-        NEED TO REPLACE WITH REAL FUNCTION. Currently returns a
-        constant `params.daily_vaccines_constant` each day --
-        when we have historical data, we will need to use the
-        dataframe to build this class and grab the historical
-        according to the date. Then we should delete the
-        `params.daily_vaccines_constant` value.
-
-
         Args:
             init_val (Optional[np.ndarray | float]):
                 starting value(s) at the beginning of the simulation
             timeseries_df (Optional[pd.DataFrame] = None):
-                has a "date" column with strings in format `"YYYY-MM-DD"`
-                of consecutive calendar days, and other columns
-                corresponding to values on those days
+                must have "date" and "daily_vaccines" -- "date" entries must
+                correspond to consecutive calendar days and must either
+                be strings with `"YYYY-MM-DD"` format or `datetime.date`
+                objects -- "value" entries correspond to historical
+                number vaccinated on those days
         """
 
         super().__init__(init_val)
 
-        # df = pd.read_csv(filepath)
-        # df["date"] = pd.to_datetime(df["date"], format='%m/%d/%y').dt.date
-        # self.time_series_df = df
+        self.timeseries_df = timeseries_df
 
     def update_current_val(self, params, current_date: datetime.date) -> None:
-        self.current_val = params.daily_vaccines_constant
+        self.current_val = params.daily_vaccines
 
 
 class AbsoluteHumidity(clt.Schedule):
 
     def __init__(self,
                  init_val: Optional[np.ndarray | float] = None,
-                 filepath: Optional[str] = None):
+                 timeseries_df: pd.DataFrame = None):
         """
         Args:
             init_val (Optional[np.ndarray | float]):
                 starting value(s) at the beginning of the simulation
             timeseries_df (Optional[pd.DataFrame] = None):
-                has a "date" column with strings in format `"YYYY-MM-DD"`
-                of consecutive calendar days, and other columns
-                corresponding to values on those days
+                must have columns "date" and "humidity" --
+                "date" entries must correspond to consecutive calendar days
+                and must either be strings with `"YYYY-MM-DD"` format or
+                `datetime.date` objects -- "value" entries correspond to
+                absolute humidity on those days
         """
 
         super().__init__(init_val)
 
-        df = pd.read_csv(filepath)
-        df["date"] = pd.to_datetime(df["date"], format='%m/%d/%y').dt.date
-        self.time_series_df = df
+        self.timeseries_df = timeseries_df
 
     def update_current_val(self, params, current_date: datetime.date) -> None:
-        self.current_val = self.time_series_df.loc[
-            self.time_series_df["date"] == current_date, "humidity"].values[0]
+        self.current_val = self.timeseries_df.loc[
+            self.timeseries_df["date"] == current_date, "humidity"].values[0]
 
 
 class FluContactMatrix(clt.Schedule):
@@ -463,27 +454,29 @@ class FluContactMatrix(clt.Schedule):
 
     Attributes:
         timeseries_df (pd.DataFrame):
-            has a "date" column with strings in format "YYYY-MM-DD"
-            of consecutive calendar days, and other columns
-            named "is_school_day" (bool) and "is_work_day" (bool)
-            corresponding to type of day.
+            must have columns "date", "is_school_day", and "is_work_day"
+            -- "date" entries must correspond to consecutive calendar
+            days and must either be strings with `"YYYY-MM-DD"` format
+            or `datetime.date` object and "is_school_day" and
+            "is_work_day" entries are Booleans indicating if that date is
+            a school day or work day
 
     See parent class docstring for other attributes.
     """
 
     def __init__(self,
                  init_val: Optional[np.ndarray | float] = None,
-                 calendar_df: pd.DataFrame = None):
+                 timeseries_df: pd.DataFrame = None):
 
         super().__init__(init_val)
 
-        self.calendar_df = calendar_df
+        self.timeseries_df = timeseries_df
 
     def update_current_val(self,
                            subpop_params: FluSubpopParams,
                            current_date: datetime.date) -> None:
 
-        df = self.calendar_df
+        df = self.timeseries_df
 
         try:
             current_row = df[df["date"] == current_date].iloc[0]
@@ -491,7 +484,7 @@ class FluContactMatrix(clt.Schedule):
                                (1 - current_row["is_school_day"]) * subpop_params.school_contact_matrix - \
                                (1 - current_row["is_work_day"]) * subpop_params.work_contact_matrix
         except IndexError:
-            # print(f"Error: {current_date} is not in the Calendar's calendar_df. Using total contact matrix.")
+            # print(f"Error: {current_date} is not in `timeseries_df`. Using total contact matrix.")
             self.current_val = subpop_params.total_contact_matrix
 
 
@@ -635,9 +628,8 @@ class FluSubpopModel(clt.SubpopModel):
                  compartments_epi_metrics: dict,
                  params: dict,
                  config: dict,
-                 calendar_df: pd.DataFrame,
                  RNG: np.random.Generator,
-                 absolute_humidity_filepath: str,
+                 schedules_spec: dict,
                  name: str):
         """
         Args:
@@ -654,20 +646,36 @@ class FluSubpopModel(clt.SubpopModel):
                 holds configuration values -- keys and values
                 respectively must match field names and format of
                 Config.
-            calendar_df (pd.DataFrame):
-                DataFrame with columns "date", "is_school_day", and
-                "is_work_day" -- "date" entries are either strings
-                format with "YYYY-MM-DD" or datetime.date objects,
-                and "is_school_day" and "is_work_day" entries are
-                Booleans indicating if that date is a school
-                day or work day
             RNG (np.random.Generator):
                 numpy random generator object used to obtain
                 random numbers.
-            absolute_humidity_filepath (str):
-                filepath (ending in ".csv") corresponding to
-                absolute humidity data -- see `AbsoluteHumidity`
-                class for CSV file specifications
+            schedules_spec (dict[pd.DataFrame]):
+                `dict` of `DataFrame` objects
+                keys must be these strings:
+                    "absolute_humidity",
+                    "flu_contact_matrix",
+                    "daily_vaccines"
+                (keys correspond to fields in `FluSubpopState`
+                associated with `Schedule` instances)
+                dataframe associated with "absolute_humidity" must
+                    have columns "date" and "humidity" -- "date" entries must
+                    correspond to consecutive calendar days and must either
+                    be strings with `"YYYY-MM-DD"` format or `datetime.date`
+                    objects -- "value" entries correspond to absolute humidity
+                    on those days
+                dataframe associated with "flu_contact_matrix" must
+                    have columns "date", "is_school_day", and "is_work_day" --
+                    "date" entries must correspond to consecutive calendar days
+                    and must either be strings with `"YYYY-MM-DD"` format or
+                    `datetime.date` object and "is_school_day" and "is_work_day"
+                    entries are Booleans indicating if that date is a school
+                    day or work day
+                dataframe associated with "daily_vaccines" must have
+                    columns "date" and "daily_vaccines" -- "date" entries must
+                    correspond to consecutive calendar days and must either
+                    be strings with `"YYYY-MM-DD"` format or `datetime.date`
+                    objects -- "value" entries correspond to historical
+                    number vaccinated on those days
             name (str):
                 unique name of MetapopModel instance.
         """
@@ -675,16 +683,6 @@ class FluSubpopModel(clt.SubpopModel):
         # Assign config, params, and state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
-
-        self.absolute_humidity_filepath = absolute_humidity_filepath
-
-        if not all(isinstance(val, datetime.date) for val in calendar_df["date"]):
-            try:
-                calendar_df["date"] = pd.to_datetime(calendar_df["date"], format="%Y-%m-%d").dt.date
-            except ValueError:
-                print("Error: The date format should be YYYY-MM-DD.")
-
-        self.calendar_df = calendar_df
 
         state = clt.make_dataclass_from_dict(FluSubpopState, compartments_epi_metrics)
         params = clt.make_dataclass_from_dict(FluSubpopParams, params)
@@ -696,6 +694,8 @@ class FluSubpopModel(clt.SubpopModel):
         #   (redundant) because the parent class SubpopModel's __init__()
         #   creates deep copies.
         super().__init__(state, params, config, RNG, name)
+
+        self.setup_timeseries_df_on_schedules(schedules_spec)
 
     def create_compartments(self) -> sc.objdict[str, clt.Compartment]:
 
@@ -728,10 +728,9 @@ class FluSubpopModel(clt.SubpopModel):
 
         schedules = sc.objdict()
 
-        schedules["absolute_humidity"] = AbsoluteHumidity(filepath=self.absolute_humidity_filepath)
-        schedules["flu_contact_matrix"] = FluContactMatrix(init_val=None,
-                                                           calendar_df=self.calendar_df)
-        schedules["daily_vaccines_constant"] = DailyVaccines(filepath="")
+        schedules["absolute_humidity"] = AbsoluteHumidity()
+        schedules["flu_contact_matrix"] = FluContactMatrix()
+        schedules["daily_vaccines"] = DailyVaccines()
 
         return schedules
 
@@ -827,6 +826,19 @@ class FluSubpopModel(clt.SubpopModel):
             VaxInducedImmunity(getattr(self.state, "Mv"))
 
         return epi_metrics
+
+    def setup_timeseries_df_on_schedules(self,
+                                         schedules_spec: dict[pd.DataFrame]):
+
+        for key, df in schedules_spec.items():
+
+            try:
+                df["date"] = pd.to_datetime(df["date"], format='%Y-%m-%d').dt.date
+            except ValueError as e:
+                raise ValueError("Error: dates should be strings in YYYY-MM-DD format or "
+                                 "`date.datetime` objects.") from e
+
+            self.schedules[key].timeseries_df = df
 
 
 class FluMetapopModel(clt.MetapopModel, ABC):

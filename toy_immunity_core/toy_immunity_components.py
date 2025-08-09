@@ -150,7 +150,7 @@ class VaxInducedImmunity(clt.EpiMetric):
                                   state: ToyImmunitySubpopState,
                                   params: ToyImmunitySubpopParams,
                                   num_timesteps: int) -> np.ndarray:
-        return params.daily_vaccines_constant / (params.total_pop_age_risk * num_timesteps) - \
+        return params.daily_vaccines / (params.total_pop_age_risk * num_timesteps) - \
                params.vax_induced_immune_wane * state.Mv / num_timesteps
 
 

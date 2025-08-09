@@ -13,25 +13,18 @@
 #   this is to make the dimensions/indices explicit to help with
 #   the tensor computations
 
-# TODO: add vaccination time series as a Schedule --
-#   for now it is constant, given in params
-
 import torch
-
 import numpy as np
 import pandas as pd
-import json
 import clt_base as clt
 
-import time
+import datetime
 
 from collections import defaultdict
 from dataclasses import dataclass, fields, field
 
 from .flu_data_structures import FluFullMetapopStateTensors, FluFullMetapopParamsTensors, FluPrecomputedTensors
 from .flu_travel_functions import compute_total_mixing_exposure
-
-from importlib.resources import files
 
 base_path = clt.utils.PROJECT_ROOT / "flu_instances" / "texas_input_files"
 
@@ -69,6 +62,7 @@ humidity_df["date"] = pd.to_datetime(humidity_df["date"], format="%m/%d/%y").dt.
 
 def compute_beta_adjusted(_state: FluFullMetapopStateTensors,
                           params: FluFullMetapopParamsTensors,
+                          schedules: dict[torch.tensor],
                           day_counter: int) -> torch.Tensor:
     absolute_humidity = \
         humidity_df.iloc[day_counter]["humidity"]
@@ -81,11 +75,12 @@ def compute_beta_adjusted(_state: FluFullMetapopStateTensors,
 def compute_S_to_E(state: FluFullMetapopStateTensors,
                    params: FluFullMetapopParamsTensors,
                    precomputed: FluPrecomputedTensors,
+                   schedules: dict[torch.tensor],
                    day_counter: int,
                    dt: float) -> torch.Tensor:
-    beta_adjusted = compute_beta_adjusted(state, params, day_counter)
+    beta_adjusted = compute_beta_adjusted(state, params, schedules, day_counter)
 
-    total_mixing_exposure = compute_total_mixing_exposure(state, params, precomputed)
+    total_mixing_exposure = compute_total_mixing_exposure(state, params, precomputed, schedules)
 
     if total_mixing_exposure.size() != torch.Size([precomputed.L,
                                                    precomputed.A,
@@ -97,8 +92,8 @@ def compute_S_to_E(state: FluFullMetapopStateTensors,
     # print("FOI", force_of_infection.sum())
 
     rate = beta_adjusted * total_mixing_exposure / \
-                (1 + params.inf_induced_inf_risk_reduce * state.M +
-                 params.vax_induced_inf_risk_reduce * state.Mv)
+           (1 + params.inf_induced_inf_risk_reduce * state.M +
+            params.vax_induced_inf_risk_reduce * state.Mv)
 
     S_to_E = state.S * torch_approx_binomial_probability_from_rate(rate, dt)
 
@@ -108,7 +103,6 @@ def compute_S_to_E(state: FluFullMetapopStateTensors,
 def compute_E_to_IP(state: FluFullMetapopStateTensors,
                     params: FluFullMetapopParamsTensors,
                     dt: float) -> torch.Tensor:
-
     rate = params.E_to_I_rate * (1 - params.E_to_IA_prop)
 
     E_to_IP = state.E * torch_approx_binomial_probability_from_rate(rate, dt)
@@ -119,7 +113,6 @@ def compute_E_to_IP(state: FluFullMetapopStateTensors,
 def compute_E_to_IA(state: FluFullMetapopStateTensors,
                     params: FluFullMetapopParamsTensors,
                     dt: float) -> torch.Tensor:
-
     rate = params.E_to_I_rate * params.E_to_IA_prop
 
     E_to_IA = state.E * torch_approx_binomial_probability_from_rate(rate, dt)
@@ -130,7 +123,6 @@ def compute_E_to_IA(state: FluFullMetapopStateTensors,
 def compute_IP_to_IS(state: FluFullMetapopStateTensors,
                      params: FluFullMetapopParamsTensors,
                      dt: float) -> torch.Tensor:
-
     rate = params.IP_to_IS_rate
 
     IP_to_IS = state.IP * torch_approx_binomial_probability_from_rate(rate, dt)
@@ -141,9 +133,8 @@ def compute_IP_to_IS(state: FluFullMetapopStateTensors,
 def compute_IS_to_R(state: FluFullMetapopStateTensors,
                     params: FluFullMetapopParamsTensors,
                     dt: float) -> torch.Tensor:
-
     immunity_force = (1 + params.inf_induced_hosp_risk_reduce * state.M +
-               params.vax_induced_hosp_risk_reduce * state.Mv)
+                      params.vax_induced_hosp_risk_reduce * state.Mv)
 
     rate = params.IS_to_R_rate * (1 - params.IS_to_H_adjusted_prop / immunity_force)
 
@@ -155,9 +146,8 @@ def compute_IS_to_R(state: FluFullMetapopStateTensors,
 def compute_IS_to_H(state: FluFullMetapopStateTensors,
                     params: FluFullMetapopParamsTensors,
                     dt: float) -> torch.Tensor:
-
     immunity_force = (1 + params.inf_induced_hosp_risk_reduce * state.M +
-               params.vax_induced_hosp_risk_reduce * state.Mv)
+                      params.vax_induced_hosp_risk_reduce * state.Mv)
 
     rate = params.IS_to_H_rate * params.IS_to_H_adjusted_prop / immunity_force
 
@@ -169,7 +159,6 @@ def compute_IS_to_H(state: FluFullMetapopStateTensors,
 def compute_IA_to_R(state: FluFullMetapopStateTensors,
                     params: FluFullMetapopParamsTensors,
                     dt: float) -> torch.Tensor:
-
     rate = params.IA_to_R_rate
 
     IA_to_R = state.IA * torch_approx_binomial_probability_from_rate(rate, dt)
@@ -180,9 +169,8 @@ def compute_IA_to_R(state: FluFullMetapopStateTensors,
 def compute_H_to_R(state: FluFullMetapopStateTensors,
                    params: FluFullMetapopParamsTensors,
                    dt: float) -> torch.Tensor:
-
     immunity_force = (1 + params.inf_induced_death_risk_reduce * state.M +
-              params.vax_induced_death_risk_reduce * state.Mv)
+                      params.vax_induced_death_risk_reduce * state.Mv)
 
     rate = params.H_to_R_rate * (1 - params.H_to_D_adjusted_prop / immunity_force)
 
@@ -194,9 +182,8 @@ def compute_H_to_R(state: FluFullMetapopStateTensors,
 def compute_H_to_D(state: FluFullMetapopStateTensors,
                    params: FluFullMetapopParamsTensors,
                    dt: float) -> torch.Tensor:
-
     immunity_force = (1 + params.inf_induced_death_risk_reduce * state.M +
-              params.vax_induced_death_risk_reduce * state.Mv)
+                      params.vax_induced_death_risk_reduce * state.Mv)
 
     rate = params.H_to_D_rate * params.H_to_D_adjusted_prop / immunity_force
 
@@ -208,7 +195,6 @@ def compute_H_to_D(state: FluFullMetapopStateTensors,
 def compute_R_to_S(state: FluFullMetapopStateTensors,
                    params: FluFullMetapopParamsTensors,
                    dt: float) -> torch.Tensor:
-
     rate = params.R_to_S_rate
 
     R_to_S = state.R * torch_approx_binomial_probability_from_rate(rate, dt)
@@ -236,14 +222,49 @@ def compute_Mv_change(state: FluFullMetapopStateTensors,
                       params: FluFullMetapopParamsTensors,
                       precomputed: FluPrecomputedTensors,
                       dt: float) -> torch.Tensor:
-    Mv_change = params.daily_vaccines_constant / precomputed.total_pop_LAR - \
+    Mv_change = params.daily_vaccines / precomputed.total_pop_LAR - \
                 params.vax_induced_immune_wane * state.Mv
 
-    return Mv_change
+    return Mv_change * dt
+
+
+# """
+# Parameters:
+#     start_real_date (datetime.date):
+#         actual date that aligns with the beginning of the simulation
+#     schedules_spec (dict[pd.DataFrame]):
+#         `dict` of `DataFrame` objects
+#         keys must be these strings:
+#             "absolute_humidity",
+#             "flu_contact_matrix",
+#             "daily_vaccines"
+#         (keys correspond to fields in `FluSubpopState`
+#         associated with `Schedule` instances)
+#         dataframe associated with "absolute_humidity" must
+#             have columns "date" and "humidity" -- "date" entries must
+#             correspond to consecutive calendar days and must either
+#             be strings with `"YYYY-MM-DD"` format or `datetime.date`
+#             objects -- "value" entries correspond to absolute humidity
+#             on those days
+#         dataframe associated with "flu_contact_matrix" must
+#             have columns "date", "is_school_day", and "is_work_day" --
+#             "date" entries must correspond to consecutive calendar days
+#             and must either be strings with `"YYYY-MM-DD"` format or
+#             `datetime.date` object and "is_school_day" and "is_work_day"
+#             entries are Booleans indicating if that date is a school
+#             day or work day
+#         dataframe associated with "daily_vaccines" must have
+#             columns "date" and "daily_vaccines" -- "date" entries must
+#             correspond to consecutive calendar days and must either
+#             be strings with `"YYYY-MM-DD"` format or `datetime.date`
+#             objects -- "value" entries correspond to historical
+#             number vaccinated on those days
+# """
 
 
 def step(state: FluFullMetapopStateTensors,
          params: FluFullMetapopParamsTensors,
+         schedules: dict[torch.tensor],
          precomputed: FluPrecomputedTensors,
          day_counter: int,
          dt: float):
@@ -256,7 +277,7 @@ def step(state: FluFullMetapopStateTensors,
     #   leaf tensors), but here we do non-in-place operations
     #   just in case
 
-    S_to_E = compute_S_to_E(state, params, precomputed, day_counter, dt)
+    S_to_E = compute_S_to_E(state, params, precomputed, schedules, day_counter, dt)
 
     E_to_IP = compute_E_to_IP(state, params, dt)
 
@@ -278,7 +299,7 @@ def step(state: FluFullMetapopStateTensors,
 
     M_change = compute_M_change(state, params, precomputed, dt)
 
-    Mv_change = compute_Mv_change(state, params, precomputed, dt)
+    Mv_change = compute_Mv_change(state, params, precomputed, schedules, dt)
 
     S_new = state.S + R_to_S - S_to_E
 
@@ -321,14 +342,12 @@ def step(state: FluFullMetapopStateTensors,
 def simulate_full_history(state: FluFullMetapopStateTensors,
                           params: FluFullMetapopParamsTensors,
                           precomputed: FluPrecomputedTensors,
+                          schedules: torch.tensor,
                           num_timesteps: int) -> dict:
-    """
-    Not autodiff compatible
-    """
     history_dict = defaultdict(list)
 
     for timestep in range(num_timesteps):
-        state, calibration_targets = step(state, params, precomputed, timestep)
+        state, calibration_targets = step(state, params, precomputed, schedules, timestep)
 
         for field in fields(state):
             if field.name == "init_vals":
@@ -344,16 +363,16 @@ def simulate_full_history(state: FluFullMetapopStateTensors,
 def simulate_hospital_admits(state: FluFullMetapopStateTensors,
                              params: FluFullMetapopParamsTensors,
                              precomputed: FluPrecomputedTensors,
+                             schedules: dict[torch.tensor],
                              num_days: int,
                              timesteps_per_day: int) -> torch.Tensor:
-
     hospital_admits_history = []
 
     dt = 1 / float(timesteps_per_day)
 
     for day in range(num_days):
         for timestep in range(timesteps_per_day):
-            state, calibration_targets = step(state, params, precomputed, day, dt)
+            state, calibration_targets = step(state, params, precomputed, schedules, day, dt)
         hospital_admits_history.append(calibration_targets["IS_to_H"].clone())
 
     return torch.stack(hospital_admits_history)

@@ -38,7 +38,7 @@ class Config:
             the probability distribution of transitions between
             compartments.
         start_real_date (datetime.date):
-            actual date that aligns with the beginning of the simulation.
+            actual date that aligns with the beginning of the simulation
         save_daily_history (bool):
             set to `True` to save `current_val` of `StateVariable` to history after each
             simulation day -- set to `False` if want speedier performance.

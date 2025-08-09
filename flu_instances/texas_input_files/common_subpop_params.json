@@ -30,13 +30,12 @@
 		[1.0],
 		[1.0],
 		[1.0]],
-	"prop_time_away":
+	"mobility_modifier":
 		[[0.2],
 		[0.2],
 		[0.2],
 		[0.2],
 		[0.2]],
-	"daily_vaccines_constant": 1000,
 	"H_to_D_adjusted_prop": [[0.00009],
 							[0.000027],
 							[0.000165],

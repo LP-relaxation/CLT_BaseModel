@@ -5,15 +5,19 @@ Notes
 
 Note: the order that the parameter values are described in this README may not necessarily match the order given in the input files.
 
-# `school_work_calendar.csv`
+# "school_work_calendar.csv"
 
 ***MUST BE UPDATED!*** This is taken from previous bespoke Austin model work (Dave Morton and Nazli Arslan), and is also from 2022-2023.
 
-# `humidity_austin_2023_2024.csv`
+# "daily_vaccines_constant.csv"
+
+***MUST BE UPDATED!*** This is a placeholder file -- notice that all "daily_vaccines" are 100. Must be updated with actual historical time series.
+
+# "humidity_austin_2023_2024.csv"
 
 From Remy!
 
-# `common_subpop_params.json`
+# "common_subpop_params.json"
 
 This `JSON` file has parameter values currently used in calibration attempts. A simple initial calibration attempt is to obtain a sensible `beta_baseline` (and potentially sensible population-level immunity parameter values and initial values) for one subpopulation.
 
@@ -43,8 +47,7 @@ Note that many of the fixed parameters will likely be common across city models,
 - `inf_induced_inf_risk_reduce`, `vax_induced_inf_risk_reduce` -- Anass 2025
 
 ## Parameters that need to be changed or fit
-- `daily_vaccines_constant` (placeholder, needs to be updated) -- once we use a vaccine time series, we do not need this parameter anymore
-- `prop_time_away` -- need to be replaced by mobility data-driven estimates
+- `mobility_modifier` -- need to be replaced by mobility data-driven estimates
 - `beta_baseline` -- we are trying to fit this parameter. B&B 2025 list their calibrated value as `0.0493`
 - `R_to_S_rate` -- CLT Lit Review (Oluwasegun) -- will probably have to wiggle this for our new population-level immunity equations -- also, based on very preliminary calibration, it seems like this rate is too fast for sensible results
 - `inf_induced_immune_wane`, `vax_induced_immune_wane` -- CLT Lit Review (Linda, but had group discussion, and ended up using similar B&B 2025 values) -- specifically for infection-induced immunity waning, LP is suspicious because we only have literature on the half-life of antibodies, but that is not the same as half-life of protection against infection... may want to consider fitting these parameters.

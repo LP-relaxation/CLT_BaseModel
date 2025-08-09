@@ -33,14 +33,14 @@
   [1.0, 1.0, 1.0],
   [1.0, 1.0, 1.0]
 ],
-	"prop_time_away":
+	"mobility_modifier":
 [
   [0.2, 0.2, 0.2],
   [0.2, 0.2, 0.2],
   [0.2, 0.2, 0.2],
   [0.2, 0.2, 0.2]
 ],
-	"daily_vaccines_constant": 1000,
+	"daily_vaccines": 1000,
 	"H_to_D_adjusted_prop": 0.001,
 	"IS_to_H_adjusted_prop": 0.01,
 	"total_contact_matrix":

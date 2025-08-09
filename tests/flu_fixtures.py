@@ -31,10 +31,16 @@ def subpop_inputs(id: str):
     config_dict = clt.load_json_new_dict(config_filepath)
 
     calendar_df = pd.read_csv(calendar_filepath, index_col=0)
-    humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
+    humidity_df = pd.read_csv(base_path / "humidity_austin_2023_2024.csv", index_col=0)
+    vaccines_df = pd.read_csv(base_path / "daily_vaccines_constant.csv", index_col = 0)
+
+    schedules_info = {}
+    schedules_info["flu_contact_matrix"] = calendar_df
+    schedules_info["daily_vaccines"] = vaccines_df
+    schedules_info["absolute_humidity"] = humidity_df
 
     return init_vals_dict, params_dict, mixing_params_dict, \
-           config_dict, calendar_df, humidity_filepath
+           config_dict, schedules_info
 
 
 # Factory function
@@ -58,7 +64,7 @@ def make_subpop_model():
                            case_id_str: str = "caseA"):
 
         init_vals_dict, params_dict, mixing_params_dict, \
-        config_dict, calendar_df, humidity_filepath = subpop_inputs(case_id_str)
+        config_dict, schedules_info = subpop_inputs(case_id_str)
 
         config_dict["timesteps_per_day"] = timesteps_per_day
 
@@ -71,9 +77,8 @@ def make_subpop_model():
         model = flu.FluSubpopModel(init_vals_dict,
                                    params_dict,
                                    config_dict,
-                                   calendar_df,
                                    np.random.Generator(bit_generator.jumped(num_jumps)),
-                                   humidity_filepath,
+                                   schedules_info,
                                    name)
 
         return model

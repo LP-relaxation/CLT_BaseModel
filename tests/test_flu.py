@@ -328,7 +328,7 @@ def test_metapop_no_travel(make_subpop_model, transition_type, inputs_id):
     - Setting pairwise travel proportions to 0 (so that 0% of
         subpopulation i travels to subpopulation j, for each
         distinct i,j subpopulation pair, i != j)
-    - Or setting the prop_time_away to 0 for each
+    - Or setting the mobility_modifier to 0 for each
         subpopulation
     We test both of these options, one at a time
 
