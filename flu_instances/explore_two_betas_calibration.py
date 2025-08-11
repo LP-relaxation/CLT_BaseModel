@@ -37,17 +37,17 @@ older_subpop_init_vals_filepath = init_vals_path / "older_subpop_init_vals.json"
 
 common_subpop_params_filepath = params_path / "common_subpop_params.json"
 mixing_params_filepath = params_path / "mixing_params.json"
-config_filepath = params_path / "config.json"
+simulation_settings_filepath = params_path / "simulation_settings.json"
 
-calendar_filepath = params_path / "school_work_calendar.csv"
-humidity_filepath = params_path / "humidity_austin_2023_2024.csv"
+calendar_filepath = params_path / "absolute_school_work_calendar.csv"
+humidity_filepath = params_path / "absolute_humidity_austin_2023_2024.csv"
 
 younger_subpop_init_vals_dict = clt.load_json_new_dict(younger_subpop_init_vals_filepath)
 older_subpop_init_vals_dict = clt.load_json_new_dict(older_subpop_init_vals_filepath)
 
 common_subpop_params_dict = clt.load_json_new_dict(common_subpop_params_filepath)
 mixing_params_dict = clt.load_json_new_dict(mixing_params_filepath)
-config_dict = clt.load_json_new_dict(config_filepath)
+simulation_settings_dict = clt.load_json_new_dict(simulation_settings_filepath)
 
 calendar_df = pd.read_csv(calendar_filepath, index_col=0)
 
@@ -96,7 +96,7 @@ older_subpop_params_dict = updated_dict(common_subpop_params_dict, {"beta_baseli
 
 younger = flu.FluSubpopModel(younger_subpop_init_vals_dict,
                              younger_subpop_params_dict,
-                             config_dict,
+                             simulation_settings_dict,
                              calendar_df,
                              np.random.Generator(bit_generator),
                              humidity_filepath,
@@ -104,7 +104,7 @@ younger = flu.FluSubpopModel(younger_subpop_init_vals_dict,
 
 older = flu.FluSubpopModel(older_subpop_init_vals_dict,
                            older_subpop_params_dict,
-                           config_dict,
+                           simulation_settings_dict,
                            calendar_df,
                            np.random.Generator(jumped_bit_generator),
                            humidity_filepath,
@@ -153,6 +153,8 @@ opt_params.beta_baseline = torch.tensor(opt_params.beta_baseline_raw.view(2, 1, 
 
 # Generate "true" history
 true_admits_history = flu_torch.simulate_hospital_admits(state, params, precomputed, 100, 2).clone().detach()
+
+breakpoint()
 
 ############################################
 ############# OPTIMIZATION #################

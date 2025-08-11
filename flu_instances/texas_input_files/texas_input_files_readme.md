@@ -13,7 +13,7 @@ Note: the order that the parameter values are described in this README may not n
 
 ***MUST BE UPDATED!*** This is a placeholder file -- notice that all "daily_vaccines" are 100. Must be updated with actual historical time series.
 
-# "humidity_austin_2023_2024.csv"
+# "absolute_humidity_austin_2023_2024.csv"
 
 From Remy!
 

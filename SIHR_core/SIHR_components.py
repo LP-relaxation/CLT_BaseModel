@@ -245,12 +245,12 @@ class SIHRSubpopModel(clt.SubpopModel):
     # If we look at the `clt.SubpopModel` base class,
     #   we see that `clt.SubpopModel`'s `__init__` function
     #   requires the arguments `state` (a `SubpopState`),
-    #   `params` (a `SubpopParams`), `config` (a `Config`)
+    #   `params` (a `SubpopParams`), `simulation_settings` (a `SimulationSettings`)
     #   and `RNG` (an `np.random.Generator`).
     # For *our* custom model, we add additional functionality
     #   to `__init__` to allow the user to specify dictionaries
     #   containing model information, and then generate the
-    #   `SubpopState`, `SubpopParams`, `Config` instances
+    #   `SubpopState`, `SubpopParams`, `SimulationSettings` instances
     #   from those dictionaries.
     # Note that customizing our own `__init__` is TOTALLY OPTIONAL!
     #   If a subclass does not have its own `__init__` defined,
@@ -265,7 +265,7 @@ class SIHRSubpopModel(clt.SubpopModel):
     def __init__(self,
                  compartments_epi_metrics_dict: dict,
                  params_dict: dict,
-                 config_dict: dict,
+                 simulation_settings_dict: dict,
                  RNG: np.random.Generator,
                  name: str = "",
                  wastewater_enabled: bool = False):
@@ -280,10 +280,10 @@ class SIHRSubpopModel(clt.SubpopModel):
                 holds epidemiological parameter values -- keys and
                 values respectively must match field names and
                 format of FluSubpopParams.
-            config_dict (dict):
-                holds configuration values -- keys and values
+            simulation_settings_dict (dict):
+                holds simulation settings -- keys and values
                 respectively must match field names and format of
-                Config.
+                SimulationSettings.
             RNG (np.random.Generator):
                 numpy random generator object used to obtain
                 random numbers.
@@ -294,7 +294,7 @@ class SIHRSubpopModel(clt.SubpopModel):
                 excludes it.
         """
 
-        # Assign config, params, and state to model-specific
+        # Assign simulation settings, params, and state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
 
@@ -302,14 +302,14 @@ class SIHRSubpopModel(clt.SubpopModel):
 
         state = clt.make_dataclass_from_dict(SIHRSubpopState, compartments_epi_metrics_dict)
         params = clt.make_dataclass_from_dict(SIHRSubpopParams, params_dict)
-        config = clt.make_dataclass_from_dict(clt.Config, config_dict)
+        simulation_settings = clt.make_dataclass_from_dict(clt.SimulationSettings, simulation_settings_dict)
 
         # IMPORTANT NOTE: as always, we must be careful with mutable objects
         #   and generally use deep copies to avoid modification of the same
         #   object. But in this function call, using deep copies is unnecessary
         #   (redundant) because the parent class SubpopModel's __init__()
         #   creates deep copies.
-        super().__init__(state, params, config, RNG, name)
+        super().__init__(state, params, simulation_settings, RNG, name)
 
     # `clt.SubpopModel` is an abstract base class, and has multiple
     #   abstract methods that we must implement:
@@ -389,8 +389,8 @@ class SIHRSubpopModel(clt.SubpopModel):
         `transition_type`.
         """
 
-        # Grab the `transition_type` specified in `Config`
-        type = self.config.transition_type
+        # Grab the `transition_type` specified in `simulation_settings`
+        type = self.simulation_settings.transition_type
 
         transition_variables = sc.objdict()
 
@@ -426,7 +426,7 @@ class SIHRSubpopModel(clt.SubpopModel):
         joint distribution.
         """
 
-        transition_type = self.config.transition_type
+        transition_type = self.simulation_settings.transition_type
 
         transition_variable_groups = sc.objdict()
 

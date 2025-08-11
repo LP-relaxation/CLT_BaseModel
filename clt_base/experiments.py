@@ -733,12 +733,12 @@ class Experiment:
                 experiment results are saved to this CSV file.
         """
 
-        # Override each subpop config's save_daily_history attribute --
+        # Override each subpop simulation_settings's save_daily_history attribute --
         #   set it to False -- because we will manually save history
         #   to results database according to user-defined
         #   days_between_save_history for all subpops
         for subpop_model in self.experiment_subpop_models:
-            subpop_model.config.save_daily_history = False
+            subpop_model.simulation_settings.save_daily_history = False
 
         model = self.model
 

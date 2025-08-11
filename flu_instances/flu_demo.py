@@ -25,10 +25,10 @@ base_path = clt.utils.PROJECT_ROOT / "flu_instances" / "texas_input_files"
 compartments_epi_metrics_init_vals_filepath = base_path / "init_vals.json"
 subpop_params_filepath = base_path / "common_subpop_params.json"
 mixing_params_filepath = base_path / "mixing_params.json"
-config_filepath = base_path / "config.json"
+simulation_settings_filepath = base_path / "simulation_settings.json"
 
 calendar_df = pd.read_csv(base_path / "school_work_calendar.csv", index_col=0)
-humidity_df = pd.read_csv(base_path / "humidity_austin_2023_2024.csv", index_col=0)
+humidity_df = pd.read_csv(base_path / "absolute_humidity_austin_2023_2024.csv", index_col=0)
 vaccines_df = pd.read_csv(base_path / "daily_vaccines_constant.csv", index_col=0)
 
 schedules_info = {}
@@ -43,7 +43,7 @@ compartments_epi_metrics_dict = \
     clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
 subpop_params_dict = clt.load_json_new_dict(subpop_params_filepath)
 mixing_params_dict = clt.load_json_new_dict(mixing_params_filepath)
-config_dict = clt.load_json_new_dict(config_filepath)
+simulation_settings_dict = clt.load_json_new_dict(simulation_settings_filepath)
 
 # Create two independent bit generators
 bit_generator = np.random.MT19937(88888)
@@ -64,14 +64,14 @@ jumped_bit_generator = bit_generator.jumped(1)
 #   for each subpopulation
 north = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            subpop_params_dict,
-                           config_dict,
+                           simulation_settings_dict,
                            np.random.Generator(bit_generator),
                            schedules_info,
                            name="north")
 
 south = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            subpop_params_dict,
-                           config_dict,
+                           simulation_settings_dict,
                            np.random.Generator(jumped_bit_generator),
                            schedules_info,
                            name="south")

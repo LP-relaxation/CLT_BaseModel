@@ -22,16 +22,16 @@ def subpop_inputs(id: str):
         params_filepath = base_path / "caseB_common_subpop_params.json"
         mixing_params_filepath = base_path / "caseB_mixing_params.json"
 
-    config_filepath = base_path / "config.json"
+    simulation_settings_filepath = base_path / "simulation_settings.json"
     calendar_filepath = base_path / "school_work_calendar.csv"
 
     init_vals_dict = clt.load_json_new_dict(init_vals_filepath)
     params_dict = clt.load_json_new_dict(params_filepath)
     mixing_params_dict = clt.load_json_new_dict(mixing_params_filepath)
-    config_dict = clt.load_json_new_dict(config_filepath)
+    simulation_settings_dict = clt.load_json_new_dict(simulation_settings_filepath)
 
     calendar_df = pd.read_csv(calendar_filepath, index_col=0)
-    humidity_df = pd.read_csv(base_path / "humidity_austin_2023_2024.csv", index_col=0)
+    humidity_df = pd.read_csv(base_path / "absolute_humidity_austin_2023_2024.csv", index_col=0)
     vaccines_df = pd.read_csv(base_path / "daily_vaccines_constant.csv", index_col = 0)
 
     schedules_info = {}
@@ -40,7 +40,7 @@ def subpop_inputs(id: str):
     schedules_info["absolute_humidity"] = humidity_df
 
     return init_vals_dict, params_dict, mixing_params_dict, \
-           config_dict, schedules_info
+           simulation_settings_dict, schedules_info
 
 
 # Factory function
@@ -64,19 +64,19 @@ def make_subpop_model():
                            case_id_str: str = "caseA"):
 
         init_vals_dict, params_dict, mixing_params_dict, \
-        config_dict, schedules_info = subpop_inputs(case_id_str)
+        simulation_settings_dict, schedules_info = subpop_inputs(case_id_str)
 
-        config_dict["timesteps_per_day"] = timesteps_per_day
+        simulation_settings_dict["timesteps_per_day"] = timesteps_per_day
 
         # Modify transition type
-        config_dict["transition_type"] = transition_type
+        simulation_settings_dict["transition_type"] = transition_type
 
         starting_random_seed = 123456789123456789
         bit_generator = np.random.MT19937(starting_random_seed)
 
         model = flu.FluSubpopModel(init_vals_dict,
                                    params_dict,
-                                   config_dict,
+                                   simulation_settings_dict,
                                    np.random.Generator(bit_generator.jumped(num_jumps)),
                                    schedules_info,
                                    name)

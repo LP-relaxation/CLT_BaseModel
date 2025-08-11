@@ -19,10 +19,10 @@ import flu_core as flu
 base_path = clt.utils.PROJECT_ROOT / "flu_instances" / "texas_input_files"
 
 # Get filepaths for initial values of compartments and epi metrics,
-#   fixed parameters, configuration, and travel proportions
+#   fixed parameters, simulation settings, and travel proportions
 compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
 params_filepath = base_path / "common_params.json"
-config_filepath = base_path / "config.json"
+simulation_settings_filepath = base_path / "simulation_settings.json"
 travel_proportions_filepath = base_path / "travel_proportions.json"
 
 # Get filepaths for school-work calendar CSV
@@ -34,7 +34,7 @@ calendar_filepath = base_path / "school_work_calendar.csv"
 compartments_epi_metrics_dict = \
     clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
 params_dict = clt.load_json_new_dict(params_filepath)
-config_dict = clt.load_json_new_dict(config_filepath)
+simulation_settings_dict = clt.load_json_new_dict(simulation_settings_filepath)
 travel_proportions = clt.load_json_new_dict(travel_proportions_filepath)
 
 calendar_df = pd.read_csv(calendar_filepath, index_col=0)
@@ -58,14 +58,14 @@ jumped_bit_generator = bit_generator.jumped(1)
 #   for each subpopulation
 north = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            params_dict,
-                           config_dict,
+                           simulation_settings_dict,
                            calendar_df,
                            np.random.Generator(bit_generator),
                            name="north")
 
 south = flu.FluSubpopModel(compartments_epi_metrics_dict,
                            params_dict,
-                           config_dict,
+                           simulation_settings_dict,
                            calendar_df,
                            np.random.Generator(jumped_bit_generator),
                            name="south")

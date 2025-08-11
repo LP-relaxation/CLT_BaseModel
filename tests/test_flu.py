@@ -8,12 +8,12 @@
 
 # WARNING:
 #   If there are too few timesteps_per_day (in each SubpopModel's
-#   Config), then it is possible for Binomial Taylor Approximation
+#   SimulationSettings), then it is possible for Binomial Taylor Approximation
 #   (both stochastic and deterministic) to fail. This is because
 #   the input into the "probability parameter" for the numpy
 #   random binomial draw may be not be in [0,1]. Thus, the
 #   Binomial Taylor Approximation transition type may not reliably
-#   pass all tests with arbitrary Config values.
+#   pass all tests with arbitrary SimulationSettings values.
 
 import flu_core as flu
 import clt_base as clt
@@ -59,7 +59,7 @@ def check_state_variables_same_history(subpop_model_A: clt.SubpopModel,
 
 def test_num_timesteps(make_subpop_model):
     """
-    If "timesteps_per_day" in Config increases (number of timesteps per day
+    If "timesteps_per_day" in SimulationSettings increases (number of timesteps per day
         increases), then step sizes are smaller.
 
     Using binomial deterministic transitions, realizations will be smaller
@@ -333,7 +333,7 @@ def test_metapop_no_travel(make_subpop_model, transition_type, inputs_id):
     We test both of these options, one at a time
 
     Note -- this test will only pass when timesteps_per_day on
-    each Config is 1. This is because, for the sake of efficiency,
+    each SimulationSettings is 1. This is because, for the sake of efficiency,
     for MetapopModel instances, each InteractionTerm is updated
     only ONCE PER DAY rather than after every single discretized timestep.
     In contrast, independent SubpopModel instances (not linked by any

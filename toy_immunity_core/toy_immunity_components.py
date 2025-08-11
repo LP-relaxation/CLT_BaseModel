@@ -173,11 +173,11 @@ class AbsoluteHumidity(clt.Schedule):
 
         df = pd.read_csv(filepath)
         df["date"] = pd.to_datetime(df["date"], format='%m/%d/%y').dt.date
-        self.time_series_df = df
+        self.timeseries_df = df
 
     def update_current_val(self, params, current_date: datetime.date) -> None:
-        self.current_val = self.time_series_df.loc[
-            self.time_series_df["date"] == current_date, "humidity"].values[0]
+        self.current_val = self.timeseries_df.loc[
+            self.timeseries_df["date"] == current_date, "absolute_humidity"].values[0]
 
 
 class ToyImmunitySubpopModel(clt.SubpopModel, ABC):
@@ -185,7 +185,7 @@ class ToyImmunitySubpopModel(clt.SubpopModel, ABC):
     def __init__(self,
                  compartments_epi_metrics_dict: dict,
                  params_dict: dict,
-                 config_dict: dict,
+                 simulation_settings_dict: dict,
                  RNG: np.random.Generator,
                  absolute_humidity_filepath: str,
                  name: str = "",
@@ -201,10 +201,10 @@ class ToyImmunitySubpopModel(clt.SubpopModel, ABC):
                 holds epidemiological parameter values -- keys and
                 values respectively must match field names and
                 format of FluSubpopParams.
-            config_dict (dict):
-                holds configuration values -- keys and values
+            simulation_settings_dict (dict):
+                holds SimulationSettings values -- keys and values
                 respectively must match field names and format of
-                Config.
+                SimulationSettings.
             RNG (np.random.Generator):
                 numpy random generator object used to obtain
                 random numbers.
@@ -219,7 +219,7 @@ class ToyImmunitySubpopModel(clt.SubpopModel, ABC):
                 excludes it.
         """
 
-        # Assign config, params, and state to model-specific
+        # Assign simulation settings, params, and state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
 
@@ -229,14 +229,14 @@ class ToyImmunitySubpopModel(clt.SubpopModel, ABC):
 
         state = clt.make_dataclass_from_dict(ToyImmunitySubpopState, compartments_epi_metrics_dict)
         params = clt.make_dataclass_from_dict(ToyImmunitySubpopParams, params_dict)
-        config = clt.make_dataclass_from_dict(clt.Config, config_dict)
+        simulation_settings = clt.make_dataclass_from_dict(clt.SimulationSettings, simulation_settings_dict)
 
         # IMPORTANT NOTE: as always, we must be careful with mutable objects
         #   and generally use deep copies to avoid modification of the same
         #   object. But in this function call, using deep copies is unnecessary
         #   (redundant) because the parent class SubpopModel's __init__()
         #   creates deep copies.
-        super().__init__(state, params, config, RNG, name)
+        super().__init__(state, params, simulation_settings, RNG, name)
 
     def create_schedules(self) -> sc.objdict[str, clt.Schedule]:
 
@@ -268,7 +268,7 @@ class ToyImmunitySubpopModel(clt.SubpopModel, ABC):
     def create_transition_variables(self,
             compartments: sc.objdict[str, clt.Compartment] = None) -> sc.objdict[str, clt.TransitionVariable]:
 
-        type = self.config.transition_type
+        type = self.simulation_settings.transition_type
 
         transition_variables = sc.objdict()
 

@@ -6,16 +6,6 @@ from dataclasses import dataclass, fields, field
 import clt_base as clt
 
 
-class FluSubpopModelError(clt.SubpopModelError):
-    """Custom exceptions for flu subpopulation simulation model errors."""
-    pass
-
-
-class FluMetapopModelError(clt.MetapopModelError):
-    """Custom exceptions for flu metapopulation simulation model errors."""
-    pass
-
-
 @dataclass
 class FluSubpopState(clt.SubpopState):
     """
@@ -586,4 +576,13 @@ class FluMixingParams:
 
     num_locations: Optional[int]
     travel_proportions: Optional[np.ndarray]
+
+
+@dataclass
+class FluFullMetapopScheduleTensors:
+
+    absolute_humidity: Optional[list[torch.tensor]] = None
+    is_school_day: Optional[list[torch.tensor]] = None
+    is_work_day: Optional[list[torch.tensor]] = None
+    daily_vaccines: Optional[list[torch.tensor]] = None
 

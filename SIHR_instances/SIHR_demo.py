@@ -9,23 +9,23 @@ import numpy as np
 base_path = clt.utils.PROJECT_ROOT / "SIHR_instances" / "SIHR_input_files"
 
 # Get filepaths for initial values of state variables, fixed parameters,
-#   and configuration
+#   and simulation settings
 compartments_epi_metrics_init_vals_filepath = base_path / "compartments_epi_metrics_init_vals.json"
 params_filepath = base_path / "common_params.json"
-config_filepath = base_path / "config.json"
+simulation_settings_filepath = base_path / "simulation_settings.json"
 
 compartments_epi_metrics_dict = clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
 params_dict = clt.load_json_new_dict(params_filepath)
-config_dict = clt.load_json_new_dict(config_filepath)
+simulation_settings_dict = clt.load_json_new_dict(simulation_settings_filepath)
 
-config_dict["transition_type"] = "binomial_deterministic"
-config_dict["timesteps_per_day"] = 1
+simulation_settings_dict["transition_type"] = "binomial_deterministic"
+simulation_settings_dict["timesteps_per_day"] = 1
 
 bit_generator = np.random.MT19937(88888)
 
 city = SIHR.SIHRSubpopModel(compartments_epi_metrics_dict,
                             params_dict,
-                            config_dict,
+                            simulation_settings_dict,
                             np.random.Generator(bit_generator),
                             "demo_city")
 

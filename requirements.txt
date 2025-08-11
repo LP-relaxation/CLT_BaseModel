@@ -64,7 +64,7 @@ idna @ file:///home/conda/feedstock_root/build_artifacts/idna_1733211830134/work
 imbalanced-learn @ file:///home/conda/feedstock_root/build_artifacts/imbalanced-learn_1734717084342/work
 importlib_metadata @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_importlib-metadata_1747934053/work
 importlib_resources @ file:///home/conda/feedstock_root/build_artifacts/importlib_resources_1736252299705/work
-iniconfig @ file:///home/conda/feedstock_root/build_artifacts/iniconfig_1733223141826/work
+iniSimulationSettings @ file:///home/conda/feedstock_root/build_artifacts/iniSimulationSettings_1733223141826/work
 ipykernel @ file:///Users/runner/miniforge3/conda-bld/ipykernel_1719845458456/work
 ipython @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_ipython_1745672166/work
 ipython_pygments_lexers @ file:///home/conda/feedstock_root/build_artifacts/ipython_pygments_lexers_1737123620466/work

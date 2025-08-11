@@ -7,6 +7,8 @@ import sciris as sc
 from typing import Optional
 from abc import ABC
 
+from functools import reduce
+
 import torch
 import clt_base as clt
 
@@ -14,9 +16,18 @@ from dataclasses import fields
 from .flu_travel_functions import compute_total_mixing_exposure
 from .flu_data_structures import FluSubpopState, FluSubpopParams, \
     FluTravelStateTensors, FluTravelParamsTensors, \
-    FluFullMetapopStateTensors, FluFullMetapopParamsTensors,\
-    FluMixingParams, FluPrecomputedTensors, \
-    FluSubpopModelError, FluMetapopModelError \
+    FluFullMetapopStateTensors, FluFullMetapopParamsTensors, \
+    FluMixingParams, FluPrecomputedTensors, FluFullMetapopScheduleTensors
+
+
+class FluSubpopModelError(clt.SubpopModelError):
+    """Custom exceptions for flu subpopulation simulation model errors."""
+    pass
+
+
+class FluMetapopModelError(clt.MetapopModelError):
+    """Custom exceptions for flu metapopulation simulation model errors."""
+    pass
 
 
 # Note: for dataclasses, Optional is used to help with static type checking
@@ -186,7 +197,6 @@ class SympToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         inf_induced_hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
         inf_induced_proportional_risk_reduce = inf_induced_hosp_risk_reduce / (1 - inf_induced_hosp_risk_reduce)
 
@@ -227,7 +237,6 @@ class HospToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         inf_induced_death_risk_reduce = params.inf_induced_death_risk_reduce
         vax_induced_death_risk_reduce = params.vax_induced_death_risk_reduce
 
@@ -261,7 +270,6 @@ class SympToHosp(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         inf_induced_hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
         inf_induced_proportional_risk_reduce = inf_induced_hosp_risk_reduce / (1 - inf_induced_hosp_risk_reduce)
 
@@ -291,7 +299,6 @@ class HospToDead(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         inf_induced_death_risk_reduce = params.inf_induced_death_risk_reduce
         vax_induced_death_risk_reduce = params.vax_induced_death_risk_reduce
 
@@ -302,7 +309,7 @@ class HospToDead(clt.TransitionVariable):
             vax_induced_death_risk_reduce / (1 - vax_induced_death_risk_reduce)
 
         immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
-                           vax_induced_proportional_risk_reduce * state.Mv)
+                          vax_induced_proportional_risk_reduce * state.Mv)
 
         return np.asarray(params.H_to_D_adjusted_prop * params.H_to_D_rate / immunity_force)
 
@@ -419,7 +426,8 @@ class DailyVaccines(clt.Schedule):
         self.timeseries_df = timeseries_df
 
     def update_current_val(self, params, current_date: datetime.date) -> None:
-        self.current_val = params.daily_vaccines
+        self.current_val = self.timeseries_df.loc[
+            self.timeseries_df["date"] == current_date, "daily_vaccines"].values[0]
 
 
 class AbsoluteHumidity(clt.Schedule):
@@ -432,7 +440,7 @@ class AbsoluteHumidity(clt.Schedule):
             init_val (Optional[np.ndarray | float]):
                 starting value(s) at the beginning of the simulation
             timeseries_df (Optional[pd.DataFrame] = None):
-                must have columns "date" and "humidity" --
+                must have columns "date" and "absolute_humidity" --
                 "date" entries must correspond to consecutive calendar days
                 and must either be strings with `"YYYY-MM-DD"` format or
                 `datetime.date` objects -- "value" entries correspond to
@@ -445,7 +453,7 @@ class AbsoluteHumidity(clt.Schedule):
 
     def update_current_val(self, params, current_date: datetime.date) -> None:
         self.current_val = self.timeseries_df.loc[
-            self.timeseries_df["date"] == current_date, "humidity"].values[0]
+            self.timeseries_df["date"] == current_date, "absolute_humidity"].values[0]
 
 
 class FluContactMatrix(clt.Schedule):
@@ -627,7 +635,7 @@ class FluSubpopModel(clt.SubpopModel):
     def __init__(self,
                  compartments_epi_metrics: dict,
                  params: dict,
-                 config: dict,
+                 simulation_settings: dict,
                  RNG: np.random.Generator,
                  schedules_spec: dict,
                  name: str):
@@ -642,10 +650,10 @@ class FluSubpopModel(clt.SubpopModel):
                 holds epidemiological parameter values -- keys and
                 values respectively must match field names and
                 format of FluSubpopParams.
-            config (dict):
-                holds configuration values -- keys and values
+            simulation_settings (dict):
+                holds simulation settings -- keys and values
                 respectively must match field names and format of
-                Config.
+                SimulationSettings.
             RNG (np.random.Generator):
                 numpy random generator object used to obtain
                 random numbers.
@@ -680,20 +688,20 @@ class FluSubpopModel(clt.SubpopModel):
                 unique name of MetapopModel instance.
         """
 
-        # Assign config, params, and state to model-specific
+        # Assign simulation settings, params, and state to model-specific
         # types of dataclasses that have epidemiological parameter information
         # and sim state information
 
         state = clt.make_dataclass_from_dict(FluSubpopState, compartments_epi_metrics)
         params = clt.make_dataclass_from_dict(FluSubpopParams, params)
-        config = clt.make_dataclass_from_dict(clt.Config, config)
+        simulation_settings = clt.make_dataclass_from_dict(clt.SimulationSettings, simulation_settings)
 
         # IMPORTANT NOTE: as always, we must be careful with mutable objects
         #   and generally use deep copies to avoid modification of the same
         #   object. But in this function call, using deep copies is unnecessary
         #   (redundant) because the parent class SubpopModel's __init__()
         #   creates deep copies.
-        super().__init__(state, params, config, RNG, name)
+        super().__init__(state, params, simulation_settings, RNG, name)
 
         self.setup_timeseries_df_on_schedules(schedules_spec)
 
@@ -744,9 +752,9 @@ class FluSubpopModel(clt.SubpopModel):
 
         # NOTE: see the parent class `SubpopModel`'s `__init__()` --
         #   `create_transition_variables` is called after
-        #   `self.config` is assigned
+        #   `self.simulation_settings` is assigned
 
-        transition_type = self.config.transition_type
+        transition_type = self.simulation_settings.transition_type
 
         transition_variables = sc.objdict()
 
@@ -785,9 +793,9 @@ class FluSubpopModel(clt.SubpopModel):
         # Shortcuts for attribute access
         # NOTE: see the parent class SubpopModel's __init__() --
         #   create_transition_variable_groups is called after
-        #   self.config is assigned
+        #   self.simulation_settings is assigned
 
-        transition_type = self.config.transition_type
+        transition_type = self.simulation_settings.transition_type
 
         transition_variable_groups = sc.objdict()
 
@@ -867,7 +875,6 @@ class FluMetapopModel(clt.MetapopModel, ABC):
             raise FluMetapopModelError("'num_locations' should equal the number of items in \n"
                                        "'subpop_models'. Please amend before continuing.")
 
-        self.travel_state_tensors = FluTravelStateTensors()
         # travel_state_tensors gets updated in `apply_inter_subpop_updates`,
         #   which is called at the beginning of each simulation day
         #   (see `simulate_until_day` method on `MetapopModel`
@@ -876,6 +883,7 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         #   `flu_contact_matrix` for each subpopulation are not
         #   defined yet, and we cannot build tensors with `None`
         #   type entries
+        self.travel_state_tensors = FluTravelStateTensors()
 
         self.mixing_params = clt.make_dataclass_from_dict(FluMixingParams, mixing_params)
 
@@ -890,6 +898,9 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         # Generally not used unless using torch version
         self.full_metapop_params_tensors = None
         self.full_metapop_state_tensors = None
+        self.full_metapop_schedule_tensors = None
+
+        self.setup_full_metapop_schedule_tensors()
 
     def compute_total_pop_LAR(self):
 
@@ -908,7 +919,6 @@ class FluMetapopModel(clt.MetapopModel, ABC):
             metapop_vals = []
 
             for model in subpop_models_ordered.values():
-
                 compartment = getattr(model.compartments, name)
                 metapop_vals.append(compartment.current_val)
 
@@ -977,7 +987,6 @@ class FluMetapopModel(clt.MetapopModel, ABC):
 
             else:
                 for model in subpop_models_ordered.values():
-
                     metapop_vals.append(getattr(model.params, name))
 
                 # If all values are equal to each other, then
@@ -998,13 +1007,13 @@ class FluMetapopModel(clt.MetapopModel, ABC):
 
     def update_travel_params_tensors(self) -> None:
 
-        self._update_params_tensors(target = self.travel_params_tensors)
+        self._update_params_tensors(target=self.travel_params_tensors)
 
     def update_full_metapop_params_tensors(self) -> None:
 
         if self.full_metapop_params_tensors is None:
             self.full_metapop_params_tensors = FluFullMetapopParamsTensors()
-        self._update_params_tensors(target = self.full_metapop_params_tensors)
+        self._update_params_tensors(target=self.full_metapop_params_tensors)
 
     def apply_inter_subpop_updates(self) -> None:
 
@@ -1021,9 +1030,51 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         subpop_models = self._subpop_models_ordered
 
         for i in range(len(subpop_models)):
-
             subpop_models.values()[i].transition_variables.S_to_E.total_mixing_exposure = \
-                total_mixing_exposure[i,:,:]
+                total_mixing_exposure[i, :, :]
 
+    def setup_full_metapop_schedule_tensors(self):
 
+        self.full_metapop_schedule_tensors = FluFullMetapopScheduleTensors()
 
+        # ah_df = subpop_model.schedules.absolute_humidity.timeseries_df
+        # fcm_df = subpop_model.schedules.flu_contact_matrix.timeseries_df
+        # dv_df = subpop_model.schedules.daily_vaccines.timeseries_df
+
+        for item in [("absolute_humidity", "absolute_humidity"),
+                     ("flu_contact_matrix", "is_school_day"),
+                     ("flu_contact_matrix", "is_work_day"),
+                     ("daily_vaccines", "daily_vaccines")]:
+
+            schedule_name = item[0]
+            values_column_name = item[1]
+
+            metapop_vals = []
+
+            for subpop_model in self._subpop_models_ordered.values():
+                df = subpop_model.schedules[schedule_name].timeseries_df
+
+                start_date = datetime.datetime.strptime(subpop_model.simulation_settings.start_real_date, "%Y-%m-%d")
+                df["simulation_day"] = (pd.to_datetime(df["date"], format="%Y-%m-%d") - start_date).dt.days
+                df = df[df["simulation_day"] >= 0]
+
+                metapop_vals.append(np.asarray(df[values_column_name]))
+
+            try:
+                stacked_metapop_vals = np.stack(metapop_vals, axis=1)
+            except ValueError as e:
+                # This error occurs if arrays have different lengths (ragged)
+                raise ValueError("Cannot stack: arrays have different lengths (ragged). \n"
+                                 "Make sure that the .csv inputs for each subpopulation and \n"
+                                 "each schedule are all over the same dates -- in other words, \n"
+                                 "for each .csv input, the dates column should have the same \n"
+                                 "(consecutive) entries") from e
+
+            # Convert each row to torch tensor and put into a list
+            setattr(self.full_metapop_schedule_tensors, values_column_name,
+                [torch.tensor(row) for row in stacked_metapop_vals])
+
+    def get_flu_torch_inputs(self):
+
+        self.update_full_metapop_state_tensors()
+        self.update_full_metapop_params_tensors()

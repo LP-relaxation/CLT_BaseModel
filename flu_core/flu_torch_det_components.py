@@ -56,7 +56,7 @@ def create_dict_of_tensors(d: dict,
     return {k: to_tensor(k, v) for k, v in d.items()}
 
 
-humidity_df = pd.read_csv(base_path / "humidity_austin_2023_2024.csv")
+humidity_df = pd.read_csv(base_path / "absolute_humidity_austin_2023_2024.csv")
 humidity_df["date"] = pd.to_datetime(humidity_df["date"], format="%m/%d/%y").dt.date
 
 
@@ -241,7 +241,7 @@ def compute_Mv_change(state: FluFullMetapopStateTensors,
 #         (keys correspond to fields in `FluSubpopState`
 #         associated with `Schedule` instances)
 #         dataframe associated with "absolute_humidity" must
-#             have columns "date" and "humidity" -- "date" entries must
+#             have columns "date" and "absolute_humidity" -- "date" entries must
 #             correspond to consecutive calendar days and must either
 #             be strings with `"YYYY-MM-DD"` format or `datetime.date`
 #             objects -- "value" entries correspond to absolute humidity

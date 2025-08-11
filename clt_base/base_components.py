@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 import datetime
-from .base_data_structures import SubpopState, SubpopParams, Config, \
+from .base_data_structures import SubpopState, SubpopParams, SimulationSettings, \
     TransitionTypes, JointTransitionTypes
 
 
@@ -1221,8 +1221,8 @@ class MetapopModel(ABC):
 
             for subpop_model in self.subpop_models.values():
 
-                save_daily_history = subpop_model.config.save_daily_history
-                timesteps_per_day = subpop_model.config.timesteps_per_day
+                save_daily_history = subpop_model.simulation_settings.save_daily_history
+                timesteps_per_day = subpop_model.simulation_settings.timesteps_per_day
 
                 subpop_model._simulate_timesteps(timesteps_per_day)
 
@@ -1314,7 +1314,7 @@ class SubpopModel(ABC):
     Each `SubpopModel` instance includes compartments,
     epi metrics, dynamic vals, a data container for the current simulation
     state, transition variables and transition variable groups,
-    epidemiological parameters, simulation experiment configuration
+    epidemiological parameters, simulation experiment simulation settings
     parameters, and a random number generator.
 
     All city-level subpopulation models, regardless of disease type and
@@ -1340,11 +1340,11 @@ class SubpopModel(ABC):
             objdict of all the subpop model's `Schedule` instances.
         current_simulation_day (int):
             tracks current simulation day -- incremented by +1
-            when `config.timesteps_per_day` discretized timesteps
+            when `simulation_settings.timesteps_per_day` discretized timesteps
             have completed.
         current_real_date (datetime.date):
             tracks real-world date -- advanced by +1 day when
-            `config.timesteps_per_day` discretized timesteps
+            `simulation_settings.timesteps_per_day` discretized timesteps
             have completed.
 
     See `__init__` docstring for other attributes.
@@ -1353,7 +1353,7 @@ class SubpopModel(ABC):
     def __init__(self,
                  state: SubpopState,
                  params: SubpopParams,
-                 config: Config,
+                 simulation_settings: SimulationSettings,
                  RNG: np.random.Generator,
                  name: str,
                  metapop_model: MetapopModel = None):
@@ -1366,8 +1366,8 @@ class SubpopModel(ABC):
                 data container for the model's epidemiological parameters,
                 such as the "Greek letters" characterizing sojourn times
                 in compartments.
-            config (Config):
-                data container for the model's simulation configuration values.
+            simulation_settings (SimulationSettings):
+                data container for the model's simulation settings.
             RNG (np.random.Generator):
                  used to generate stochastic transitions in the model and control
                  reproducibility.
@@ -1380,7 +1380,7 @@ class SubpopModel(ABC):
 
         self.state = copy.deepcopy(state)
         self.params = copy.deepcopy(params)
-        self.config = copy.deepcopy(config)
+        self.simulation_settings = copy.deepcopy(simulation_settings)
 
         self.RNG = RNG
 
@@ -1438,7 +1438,7 @@ class SubpopModel(ABC):
 
     def get_start_real_date(self):
         """
-        Fetches `start_real_date` from `self.config` -- converts to
+        Fetches `start_real_date` from `self.simulation_settings` -- converts to
             proper datetime.date format if originally given as
             string.
 
@@ -1448,7 +1448,7 @@ class SubpopModel(ABC):
                 simulation.
         """
 
-        start_real_date = self.config.start_real_date
+        start_real_date = self.simulation_settings.start_real_date
 
         if not isinstance(start_real_date, datetime.date):
             try:
@@ -1521,8 +1521,8 @@ class SubpopModel(ABC):
             raise SubpopModelError(f"Current day counter ({self.current_simulation_day}) "
                                    f"exceeds last simulation day ({simulation_end_day}).")
 
-        save_daily_history = self.config.save_daily_history
-        timesteps_per_day = self.config.timesteps_per_day
+        save_daily_history = self.simulation_settings.save_daily_history
+        timesteps_per_day = self.simulation_settings.timesteps_per_day
 
         # Adding this in case the user manually changes the initial
         #   value or current value of any state variable --
@@ -1548,7 +1548,7 @@ class SubpopModel(ABC):
 
         Iterates through discretized timesteps to simulate next
         simulation day. Granularity of discretization is given by
-        attribute `self.config.timesteps_per_day`.
+        attribute `self.simulation_settings.timesteps_per_day`.
 
         Properly scales transition variable realizations and changes
         in dynamic vals by specified timesteps per day.
@@ -1614,7 +1614,7 @@ class SubpopModel(ABC):
 
         state = self.state
         params = self.params
-        timesteps_per_day = self.config.timesteps_per_day
+        timesteps_per_day = self.simulation_settings.timesteps_per_day
 
         for metric in self.epi_metrics.values():
             metric.change_in_current_val = \
@@ -1646,8 +1646,8 @@ class SubpopModel(ABC):
         """
 
         RNG = self.RNG
-        timesteps_per_day = self.config.timesteps_per_day
-        save_transition_variables_history = self.config.save_transition_variables_history
+        timesteps_per_day = self.simulation_settings.timesteps_per_day
+        save_transition_variables_history = self.simulation_settings.save_transition_variables_history
 
         # Obtain transition variable realizations for jointly distributed transition variables
         #   (i.e. when there are multiple transition variable outflows from an epi compartment)

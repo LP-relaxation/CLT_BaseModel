@@ -24,9 +24,9 @@ class JointTransitionTypes(str, Enum):
 
 
 @dataclass(frozen=True)
-class Config:
+class SimulationSettings:
     """
-    Stores simulation configuration values.
+    Stores simulation settings.
 
     Attributes:
         timesteps_per_day (int):

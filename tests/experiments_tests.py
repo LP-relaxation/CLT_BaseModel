@@ -18,13 +18,13 @@ base_path = clt.utils.PROJECT_ROOT / " / "test_input_files"
 params_filepath = base_path / "common_params.json"
 compartments_epi_metrics_init_vals_filepath = base_path / "init_vals.json"
 calendar_filepath = base_path / "school_work_calendar.csv"
-humidity_filepath = base_path / "humidity_austin_2023_2024.csv"
+humidity_filepath = base_path / "absolute_humidity_austin_2023_2024.csv"
 
-config_dict = {}
-config_dict["timesteps_per_day"] = 2
-config_dict["transition_type"] = "binomial_deterministic"
-config_dict["start_real_date"] = "2022-08-08"
-config_dict["save_daily_history"] = False
+simulation_settings_dict = {}
+simulation_settings_dict["timesteps_per_day"] = 2
+simulation_settings_dict["transition_type"] = "binomial_deterministic"
+simulation_settings_dict["start_real_date"] = "2022-08-08"
+simulation_settings_dict["save_daily_history"] = False
 
 compartments_epi_metrics_dict = clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
 params_dict = clt.load_json_new_dict(params_filepath)
@@ -36,7 +36,7 @@ twice_jumped_bit_generator = jumped_bit_generator.jumped(1)
 
 subpopA = flu.FluSubpopModel(compartments_epi_metrics_dict,
                              params_dict,
-                             config_dict,
+                             simulation_settings_dict,
                              calendar_df,
                              np.random.Generator(bit_generator),
                              humidity_filepath,
@@ -44,7 +44,7 @@ subpopA = flu.FluSubpopModel(compartments_epi_metrics_dict,
 
 subpopB = flu.FluSubpopModel(compartments_epi_metrics_dict,
                              params_dict,
-                             config_dict,
+                             simulation_settings_dict,
                              calendar_df,
                              np.random.Generator(jumped_bit_generator),
                              humidity_filepath,
@@ -95,7 +95,7 @@ def test_subpop_sequences_init_vals():
 
     subpopA.RNG = np.random.Generator(np.random.MT19937(88888))
 
-    subpopA.config.save_daily_history = True
+    subpopA.simulation_settings.save_daily_history = True
 
     subpopA.compartments.S.current_val = np.array([[int(2e6)],[int(2e6)]])
 
