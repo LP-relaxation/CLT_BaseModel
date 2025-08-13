@@ -2,14 +2,14 @@
 # Models are simulated deterministically (without microstochastics,
 #   i.e. random transitions between compartments)
 
-from flu_model import flu_components as flu
+from flu_core import flu_components as flu
 import clt_base as clt
 
 import numpy as np
 import pandas as pd
 import pytest
 
-base_path = clt.utils.PROJECT_ROOT / " / "test_input_files"
+base_path = clt.utils.PROJECT_ROOT / "tests" / "test_input_files"
 
 #################################################
 #################### SETUP ######################

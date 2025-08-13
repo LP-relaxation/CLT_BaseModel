@@ -51,14 +51,15 @@ Note that many of the fixed parameters will likely be common across city models,
 - `beta_baseline` -- we are trying to fit this parameter. B&B 2025 list their calibrated value as `0.0493`
 - `R_to_S_rate` -- CLT Lit Review (Oluwasegun) -- will probably have to wiggle this for our new population-level immunity equations -- also, based on very preliminary calibration, it seems like this rate is too fast for sensible results
 - `inf_induced_immune_wane`, `vax_induced_immune_wane` -- CLT Lit Review (Linda, but had group discussion, and ended up using similar B&B 2025 values) -- specifically for infection-induced immunity waning, LP is suspicious because we only have literature on the half-life of antibodies, but that is not the same as half-life of protection against infection... may want to consider fitting these parameters.
-- `inf_induced_hosp_risk_reduce`, `inf_induced_death_risk_reduce` -- set to be same as `inf_induced_inf_risk_reduce` 
-- `vax_induced_hosp_risk_reduce`, `vax_induced_death_risk_reduce` -- set to be same as `vax_induced_inf_risk_reduce`
+- `inf_induced_hosp_risk_reduce` -- set to be same as `inf_induced_inf_risk_reduce` 
+- `vax_induced_hosp_risk_reduce` -- set to be same as `vax_induced_inf_risk_reduce`
 
 ## Unused parameters
 These parameters are not being included, at least in the first pass (simpler model for attempted calibration).
 `humidity_impact` -- currently set to 0.
-`school_contact_matrix`, `work_contact_matrix` -- currently set to zero-matrices, so that we are not considering weekend or holiday seasonality (the force of infection includes the total contact matrix every day in the simulation).
+`school_contact_matrix`, `work_contact_matrix` -- currently set to zero-matrices, so that we are not considering weekend or holiday seasonality (the force of infection includes the total contact matrix every day in the simulation)
 `relative_suscept` -- set to all 1s, so not in effect currently.
+`inf_induced_death_risk_reduce`, `vax_induced_death_risk_reduce` -- 08/05/2025 meeting with Remy and Lauren -- Lauren said we are not including protection against death, so we set these to 0.
 
 # `init_vals.json`
 

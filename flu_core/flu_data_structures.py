@@ -365,6 +365,10 @@ class FluTravelParamsTensors:
     relative_suscept: torch.Tensor = None
     mobility_modifier: torch.Tensor = None
 
+    total_contact_matrix: Optional[torch.Tensor] = None
+    school_contact_matrix: Optional[torch.Tensor] = None
+    work_contact_matrix: Optional[torch.Tensor] = None
+
     def standardize_shapes(self) -> None:
         """
         If field is not a scalar or L x A x R, or is not a special variable
@@ -372,8 +376,6 @@ class FluTravelParamsTensors:
             L x A x R for tensor multiplication.
 
         Special variables that are exempted:
-            - `total_contact_matrix`, `school_contact_matrix`,
-                `work_contact_matrix` -- all of these must be dimension A x A
             - `travel_proportions`: this must be L x L
 
         Valid values for the `indices_dict` are: "age", "age_risk",
@@ -399,6 +401,15 @@ class FluTravelParamsTensors:
             elif name == "travel_proportions":
                 if value.size() != torch.Size([L, L]):
                     raise Exception(str(name) + error_str)
+
+            # `total_contact_matrix`, `school_contact_matrix`, `work_contact_matrix`
+            elif "contact_matrix" in name:
+                if value.size() == torch.Size([L, A, A]):
+                    continue
+                elif value.size() != torch.Size([A, A]):
+                    raise Exception(str(name) + error_str)
+                else:
+                    setattr(self, name, value.view(1, A, A).expand(L, A, A))
 
             # If scalar or already L x A x R, do not need to adjust
             #   dimensions
@@ -464,6 +475,8 @@ class FluFullMetapopStateTensors(FluTravelStateTensors):
     beta_reduce: Optional[float] = 0.0
     daily_vaccines: Optional[torch.Tensor] = None
 
+    flu_contact_matrix: Optional[torch.Tensor] = None
+
 
 @dataclass
 class FluFullMetapopParamsTensors(FluTravelParamsTensors):
@@ -525,10 +538,6 @@ class FluFullMetapopParamsTensors(FluTravelParamsTensors):
 
     relative_suscept: Optional[torch.Tensor] = None
     mobility_modifier: Optional[torch.Tensor] = None
-
-    total_contact_matrix: Optional[torch.Tensor] = None
-    school_contact_matrix: Optional[torch.Tensor] = None
-    work_contact_matrix: Optional[torch.Tensor] = None
 
 
 class FluPrecomputedTensors:

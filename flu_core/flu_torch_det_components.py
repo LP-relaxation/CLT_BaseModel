@@ -23,7 +23,9 @@ import datetime
 from collections import defaultdict
 from dataclasses import dataclass, fields, field
 
-from .flu_data_structures import FluFullMetapopStateTensors, FluFullMetapopParamsTensors, FluPrecomputedTensors
+from .flu_data_structures import FluFullMetapopStateTensors, \
+    FluFullMetapopParamsTensors, FluPrecomputedTensors, \
+    FluFullMetapopScheduleTensors
 from .flu_travel_functions import compute_total_mixing_exposure
 
 base_path = clt.utils.PROJECT_ROOT / "flu_instances" / "texas_input_files"
@@ -56,16 +58,12 @@ def create_dict_of_tensors(d: dict,
     return {k: to_tensor(k, v) for k, v in d.items()}
 
 
-humidity_df = pd.read_csv(base_path / "absolute_humidity_austin_2023_2024.csv")
-humidity_df["date"] = pd.to_datetime(humidity_df["date"], format="%m/%d/%y").dt.date
-
-
 def compute_beta_adjusted(_state: FluFullMetapopStateTensors,
                           params: FluFullMetapopParamsTensors,
-                          schedules: dict[torch.tensor],
+                          schedules: FluFullMetapopScheduleTensors,
                           day_counter: int) -> torch.Tensor:
-    absolute_humidity = \
-        humidity_df.iloc[day_counter]["humidity"]
+
+    absolute_humidity = schedules.absolute_humidity[day_counter]
     beta_adjusted = params.beta_baseline * \
                     (1 + params.humidity_impact * np.exp(-180 * absolute_humidity))
 
@@ -75,12 +73,18 @@ def compute_beta_adjusted(_state: FluFullMetapopStateTensors,
 def compute_S_to_E(state: FluFullMetapopStateTensors,
                    params: FluFullMetapopParamsTensors,
                    precomputed: FluPrecomputedTensors,
-                   schedules: dict[torch.tensor],
+                   schedules: FluFullMetapopScheduleTensors,
                    day_counter: int,
                    dt: float) -> torch.Tensor:
+
     beta_adjusted = compute_beta_adjusted(state, params, schedules, day_counter)
 
-    total_mixing_exposure = compute_total_mixing_exposure(state, params, precomputed, schedules)
+    state.flu_contact_matrix = \
+        params.total_contact_matrix - \
+        params.school_contact_matrix * (1 - schedules.is_school_day[day_counter].view(precomputed.L, 1, 1)) - \
+        params.work_contact_matrix * (1 - schedules.is_work_day[day_counter].view(precomputed.L, 1, 1))
+
+    total_mixing_exposure = compute_total_mixing_exposure(state, params, precomputed)
 
     if total_mixing_exposure.size() != torch.Size([precomputed.L,
                                                    precomputed.A,
@@ -88,8 +92,6 @@ def compute_S_to_E(state: FluFullMetapopStateTensors,
         raise Exception("force_of_infection must be L x A x R corresponding \n"
                         "to number of locations (subpopulations), age groups, \n"
                         "and risk groups.")
-
-    # print("FOI", force_of_infection.sum())
 
     rate = beta_adjusted * total_mixing_exposure / \
            (1 + params.inf_induced_inf_risk_reduce * state.M +
@@ -221,8 +223,11 @@ def compute_M_change(state: FluFullMetapopStateTensors, params: FluFullMetapopPa
 def compute_Mv_change(state: FluFullMetapopStateTensors,
                       params: FluFullMetapopParamsTensors,
                       precomputed: FluPrecomputedTensors,
+                      schedules: FluFullMetapopScheduleTensors,
+                      day_counter: int,
                       dt: float) -> torch.Tensor:
-    Mv_change = params.daily_vaccines / precomputed.total_pop_LAR - \
+
+    Mv_change = schedules.daily_vaccines[day_counter] / precomputed.total_pop_LAR - \
                 params.vax_induced_immune_wane * state.Mv
 
     return Mv_change * dt
@@ -264,8 +269,8 @@ def compute_Mv_change(state: FluFullMetapopStateTensors,
 
 def step(state: FluFullMetapopStateTensors,
          params: FluFullMetapopParamsTensors,
-         schedules: dict[torch.tensor],
          precomputed: FluPrecomputedTensors,
+         schedules: FluFullMetapopScheduleTensors,
          day_counter: int,
          dt: float):
     # WARNING: do NOT use in-place operations such as +=
@@ -299,7 +304,7 @@ def step(state: FluFullMetapopStateTensors,
 
     M_change = compute_M_change(state, params, precomputed, dt)
 
-    Mv_change = compute_Mv_change(state, params, precomputed, schedules, dt)
+    Mv_change = compute_Mv_change(state, params, precomputed, schedules, day_counter, dt)
 
     S_new = state.S + R_to_S - S_to_E
 
@@ -342,7 +347,7 @@ def step(state: FluFullMetapopStateTensors,
 def simulate_full_history(state: FluFullMetapopStateTensors,
                           params: FluFullMetapopParamsTensors,
                           precomputed: FluPrecomputedTensors,
-                          schedules: torch.tensor,
+                          schedules: FluFullMetapopScheduleTensors,
                           num_timesteps: int) -> dict:
     history_dict = defaultdict(list)
 
@@ -363,7 +368,7 @@ def simulate_full_history(state: FluFullMetapopStateTensors,
 def simulate_hospital_admits(state: FluFullMetapopStateTensors,
                              params: FluFullMetapopParamsTensors,
                              precomputed: FluPrecomputedTensors,
-                             schedules: dict[torch.tensor],
+                             schedules: FluFullMetapopScheduleTensors,
                              num_days: int,
                              timesteps_per_day: int) -> torch.Tensor:
     hospital_admits_history = []

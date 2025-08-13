@@ -12,15 +12,15 @@ def subpop_inputs(id: str):
     if id == "caseA":
         init_vals_filepath = base_path / "caseA_init_vals.json"
         params_filepath = base_path / "caseA_common_subpop_params.json"
-        mixing_params_filepath = base_path / "caseA_mixing_params.json"
+        mixing_params_filepath = base_path / "caseAB_mixing_params.json"
     elif id == "caseB_subpop1":
         init_vals_filepath = base_path / "caseB_subpop1_init_vals.json"
         params_filepath = base_path / "caseB_common_subpop_params.json"
-        mixing_params_filepath = base_path / "caseB_mixing_params.json"
+        mixing_params_filepath = base_path / "caseAB_mixing_params.json"
     elif id == "caseB_subpop2":
         init_vals_filepath = base_path / "caseB_subpop2_init_vals.json"
         params_filepath = base_path / "caseB_common_subpop_params.json"
-        mixing_params_filepath = base_path / "caseB_mixing_params.json"
+        mixing_params_filepath = base_path / "caseAB_mixing_params.json"
 
     simulation_settings_filepath = base_path / "simulation_settings.json"
     calendar_filepath = base_path / "school_work_calendar.csv"

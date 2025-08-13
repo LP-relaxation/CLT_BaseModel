@@ -4,20 +4,14 @@
 
 import torch
 import time
-
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import copy
+from dataclasses import fields
 
 import clt_base as clt
 import flu_core as flu
-
-import copy
-
-from dataclasses import fields
-import torch
-
-from flu_core import flu_torch_det_components as flu_torch
 
 ############################################
 ############# FILE LOADING #################
@@ -28,9 +22,10 @@ calibration_files_path = clt.utils.PROJECT_ROOT / "flu_instances" / "calibration
 
 subpopA_init_vals_filepath = calibration_files_path / "subpopA_init_vals.json"
 subpopB_init_vals_filepath = calibration_files_path / "subpopB_init_vals.json"
+subpopC_init_vals_filepath = calibration_files_path / "subpopC_init_vals.json"
 
 common_subpop_params_filepath = texas_files_path / "common_subpop_params.json"
-mixing_params_filepath = calibration_files_path / "AB_mixing_params.json"
+mixing_params_filepath = calibration_files_path / "ABC_mixing_params.json"
 simulation_settings_filepath = texas_files_path / "simulation_settings.json"
 
 calendar_df = pd.read_csv(texas_files_path / "school_work_calendar.csv", index_col=0)
@@ -44,10 +39,13 @@ schedules_info["absolute_humidity"] = humidity_df
 
 subpopA_init_vals_dict = clt.load_json_new_dict(subpopA_init_vals_filepath)
 subpopB_init_vals_dict = clt.load_json_new_dict(subpopB_init_vals_filepath)
+subpopC_init_vals_dict = clt.load_json_new_dict(subpopB_init_vals_filepath)
 
 common_subpop_params_dict = clt.load_json_new_dict(common_subpop_params_filepath)
 mixing_params_dict = clt.load_json_new_dict(mixing_params_filepath)
 simulation_settings_dict = clt.load_json_new_dict(simulation_settings_filepath)
+
+L = 3
 
 #################################################
 ############# UTILITY FUNCTIONS #################
@@ -78,8 +76,12 @@ def enable_grad(container: flu.FluFullMetapopParamsTensors):
 bit_generator = np.random.MT19937(88888)
 jumped_bit_generator = bit_generator.jumped(1)
 
-subpopA_params_dict = updated_dict(common_subpop_params_dict, {"beta_baseline": 1.5})
-subpopB_params_dict = updated_dict(common_subpop_params_dict, {"beta_baseline": 2.5})
+subpopA_params_dict = updated_dict(common_subpop_params_dict,
+                                   {"beta_baseline": 1.5})
+subpopB_params_dict = updated_dict(common_subpop_params_dict,
+                                   {"beta_baseline": 2.5})
+subpopC_params_dict = updated_dict(common_subpop_params_dict,
+                                   {"beta_baseline": 2.5})
 
 subpopA = flu.FluSubpopModel(subpopA_init_vals_dict,
                              subpopA_params_dict,
@@ -89,14 +91,21 @@ subpopA = flu.FluSubpopModel(subpopA_init_vals_dict,
                              name="subpopA")
 
 subpopB = flu.FluSubpopModel(subpopB_init_vals_dict,
-                           subpopB_params_dict,
-                           simulation_settings_dict,
-                           np.random.Generator(jumped_bit_generator),
-                           schedules_info,
-                           name="subpopB")
+                             subpopB_params_dict,
+                             simulation_settings_dict,
+                             np.random.Generator(jumped_bit_generator),
+                             schedules_info,
+                             name="subpopB")
+
+subpopC = flu.FluSubpopModel(subpopC_init_vals_dict,
+                             subpopC_params_dict,
+                             simulation_settings_dict,
+                             np.random.Generator(jumped_bit_generator),
+                             schedules_info,
+                             name="subpopC")
 
 # Combine two subpopulations into one metapopulation model (travel model)
-flu_demo_model = flu.FluMetapopModel([subpopA, subpopB],
+flu_demo_model = flu.FluMetapopModel([subpopA, subpopB, subpopC],
                                      mixing_params_dict)
 
 d = flu_demo_model.get_flu_torch_inputs()
@@ -120,18 +129,21 @@ opt_params = copy.deepcopy(params)
 # There's definitely room for improvement/clarity here...
 # WE MUST TELL TORCH TO TRACK THE GRADIENT ON THE PARAMETERS WE WANT TO
 #   OPTIMIZE! see `requires_grad = True`
-opt_params.beta_baseline_raw = torch.tensor([1.0, 1.0], dtype=torch.float32, requires_grad=True)
-opt_params.beta_baseline = torch.tensor(opt_params.beta_baseline_raw.view(2, 1, 1).expand(2, 5, 1),
-                                         dtype=torch.float32,
-                                         requires_grad=True)
+opt_params.beta_baseline_raw = torch.tensor([1.0, 1.0, 1.0], dtype=torch.float32, requires_grad=True)
+
+opt_params.IS_to_H_adjusted_prop_raw = torch.tensor([[0.02],
+                                                     [0.02],
+                                                     [0.02],
+                                                     [0.02],
+                                                     [0.02]], dtype=torch.float32, requires_grad=True)
 
 # Generate "true" history
-true_admits_history = flu_torch.simulate_hospital_admits(state,
-                                                         params,
-                                                         precomputed,
-                                                         schedules,
-                                                         100,
-                                                         2).clone().detach()
+true_admits_history = flu.simulate_hospital_admits(state,
+                                                   params,
+                                                   precomputed,
+                                                   schedules,
+                                                   100,
+                                                   2).clone().detach()
 
 ############################################
 ############# OPTIMIZATION #################
@@ -139,24 +151,31 @@ true_admits_history = flu_torch.simulate_hospital_admits(state,
 
 # Could potentially wrap this in something nice...
 
-optimizer = torch.optim.Adam([opt_params.beta_baseline_raw], lr=0.01)
+# opt_params.beta_baseline_raw (L-dimensional)
+optimizer = torch.optim.Adam([opt_params.beta_baseline_raw,
+                              opt_params.IS_to_H_adjusted_prop_raw], lr=0.01)
 
 beta_baseline_opt_history = []
+IS_to_H_adjusted_prop_history = []
 loss_history = []
 fitting_start_time = time.time()
 
-for i in range(int(5e3)):
+for i in range(int(2e3)):
     optimizer.zero_grad()
-    opt_params.beta_baseline = opt_params.beta_baseline_raw.view(2, 1, 1).expand(2, 5, 1)
-    sim_result = flu_torch.simulate_hospital_admits(init_state, opt_params, precomputed, schedules, 100, 2)
+    opt_params.beta_baseline = opt_params.beta_baseline_raw.view(L, 1, 1).expand(L, 5, 1)
+    opt_params.IS_to_H_adjusted_prop = opt_params.IS_to_H_adjusted_prop_raw.view(1, 5, 1).expand(L, 5, 1)
+    sim_result = flu.simulate_hospital_admits(init_state, opt_params, precomputed, schedules, 100, 2)
     loss = torch.nn.functional.mse_loss(sim_result, true_admits_history)
-    loss_history.append(loss)
     loss.backward()
     optimizer.step()
-    # beta_baseline_opt_history.append(opt_params.beta_baseline_raw.clone().detach())
     if i % 50 == 0:
+        print(time.time() - fitting_start_time)
         print("Loss function: " + str(loss))
-        print("Estimated betas: " + str(opt_params.beta_baseline_raw.clone().detach()))
+        print("Estimated betas: " + str(opt_params.beta_baseline_raw.clone()))
+        print("Estimated IHR: " + str(opt_params.IS_to_H_adjusted_prop_raw.clone()))
+        loss_history.append(loss)
+        beta_baseline_opt_history.append(opt_params.beta_baseline_raw.clone())
+        IS_to_H_adjusted_prop_history.append(opt_params.IS_to_H_adjusted_prop_raw.clone())
     if loss < 1e-2:
         break
 
@@ -164,14 +183,16 @@ print(time.time() - fitting_start_time)
 
 print(opt_params.beta_baseline)
 
-np.savetxt("caseAB_beta.csv", [t.detach().numpy() for t in beta_baseline_opt_history], delimiter=",")
-np.savetxt("caseAB_mse.csv", [t.detach().numpy() for t in loss_history], delimiter=",")
+np.savetxt("caseABC_sameIHR_beta.csv", np.stack([t.detach().numpy() for t in beta_baseline_opt_history]), delimiter=",")
+np.savetxt("caseABC_sameIHR_IHR.csv", np.stack([t.detach().numpy().squeeze() for t in IS_to_H_adjusted_prop_history]),
+           delimiter=",")
+np.savetxt("caseABC_sameIHR_mse.csv", np.stack([t.detach().numpy() for t in loss_history]), delimiter=",")
 
 breakpoint()
 
 # Optional -- can simulate with fitted parameters and plot corresponding output
 # Commented out for now but can un-comment
-# fitted_admits_history = flu_torch.simulate_hospital_admits(init_state, opt_params, precomputed, schedules, 100, 2)
+# fitted_admits_history = flu.simulate_hospital_admits(init_state, opt_params, precomputed, schedules, 100, 2)
 
 # plt.clf()
 # plt.plot(torch.sum(true_admits_history, dim=(1, 2)), label="True hospital admits")

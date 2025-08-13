@@ -98,8 +98,6 @@ class SusceptibleToExposed(clt.TransitionVariable):
             #   `suscept_by_age` -- see `compute_total_mixing_exposure_prop`
             #   in `flu_travel_functions`
 
-            # breakpoint()
-
             # Need to convert tensor into array because combining np.ndarrays and
             #   tensors doesn't work, and everything else is an array
             return np.asarray(beta_adjusted * self.total_mixing_exposure / immune_force)
@@ -875,15 +873,8 @@ class FluMetapopModel(clt.MetapopModel, ABC):
             raise FluMetapopModelError("'num_locations' should equal the number of items in \n"
                                        "'subpop_models'. Please amend before continuing.")
 
-        # travel_state_tensors gets updated in `apply_inter_subpop_updates`,
-        #   which is called at the beginning of each simulation day
-        #   (see `simulate_until_day` method on `MetapopModel`
-        #   in `base_components`) -- there is no need to update
-        #   here -- also, schedule values such as the value of
-        #   `flu_contact_matrix` for each subpopulation are not
-        #   defined yet, and we cannot build tensors with `None`
-        #   type entries
         self.travel_state_tensors = FluTravelStateTensors()
+        self.update_travel_state_tensors()
 
         self.mixing_params = clt.make_dataclass_from_dict(FluMixingParams, mixing_params)
 
@@ -899,8 +890,6 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         self.full_metapop_params_tensors = None
         self.full_metapop_state_tensors = None
         self.full_metapop_schedule_tensors = None
-
-        self.setup_full_metapop_schedule_tensors()
 
     def compute_total_pop_LAR(self):
 
@@ -953,7 +942,7 @@ class FluMetapopModel(clt.MetapopModel, ABC):
                 metapop_vals.append(current_val)
 
             if any(v is None for v in metapop_vals):
-                setattr(target, name, None)
+                setattr(target, name, torch.tensor(np.full(np.shape(metapop_vals), 0.0)))
             else:
                 setattr(target, name, torch.tensor(np.asarray(metapop_vals)))
 
@@ -1078,3 +1067,14 @@ class FluMetapopModel(clt.MetapopModel, ABC):
 
         self.update_full_metapop_state_tensors()
         self.update_full_metapop_params_tensors()
+        self.full_metapop_params_tensors.standardize_shapes()
+        self.setup_full_metapop_schedule_tensors()
+
+        d = {}
+
+        d["state_tensors"] = self.full_metapop_state_tensors
+        d["params_tensors"] = self.full_metapop_params_tensors
+        d["schedule_tensors"] = self.full_metapop_schedule_tensors
+        d["precomputed"] = self.precomputed
+
+        return d
