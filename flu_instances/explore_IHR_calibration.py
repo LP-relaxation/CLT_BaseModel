@@ -10,7 +10,7 @@ import numpy as np
 import copy
 from dataclasses import fields
 
-import clt_base as clt
+import clt_toolkit as clt
 import flu_core as flu
 
 ############################################

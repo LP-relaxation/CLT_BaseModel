@@ -3,7 +3,7 @@
 #   i.e. random transitions between compartments)
 
 from flu_core import flu_components as flu
-import clt_base as clt
+import clt_toolkit as clt
 
 import numpy as np
 import pandas as pd

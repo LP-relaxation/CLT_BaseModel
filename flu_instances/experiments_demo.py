@@ -1,6 +1,3 @@
-# Simple demo with flu model with "toy" (not fitted or realistic) parameters
-# Wastewater addition from Sonny is still in progress
-
 ###########################################################
 ######################## IMPORTS ##########################
 ###########################################################
@@ -8,7 +5,7 @@
 import numpy as np
 import pandas as pd
 
-import clt_base as clt
+import clt_toolkit as clt
 import flu_core as flu
 
 ###########################################################

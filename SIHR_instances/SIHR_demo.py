@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import clt_base as clt
+import clt_toolkit as clt
 import SIHR_core as SIHR
 import numpy as np
 

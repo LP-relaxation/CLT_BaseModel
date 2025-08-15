@@ -16,7 +16,7 @@
 #   pass all tests with arbitrary SimulationSettings values.
 
 import flu_core as flu
-import clt_base as clt
+import clt_toolkit as clt
 
 import numpy as np
 import pandas as pd

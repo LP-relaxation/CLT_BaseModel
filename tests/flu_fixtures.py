@@ -1,4 +1,4 @@
-import clt_base as clt
+import clt_toolkit as clt
 import flu_core as flu
 import numpy as np
 import pandas as pd

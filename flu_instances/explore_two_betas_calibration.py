@@ -9,7 +9,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-import clt_base as clt
+import clt_toolkit as clt
 import flu_core as flu
 
 import copy

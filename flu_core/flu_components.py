@@ -10,7 +10,7 @@ from abc import ABC
 from functools import reduce
 
 import torch
-import clt_base as clt
+import clt_toolkit as clt
 
 from dataclasses import fields
 from .flu_travel_functions import compute_total_mixing_exposure

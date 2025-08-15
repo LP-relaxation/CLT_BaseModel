@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-import clt_base as clt
+import clt_toolkit as clt
 import flu_core as flu
 from flu_fixtures import subpop_inputs, make_subpop_model
 

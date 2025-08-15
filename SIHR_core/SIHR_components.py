@@ -34,7 +34,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
-import clt_base as clt
+import clt_toolkit as clt
 
 # Generally, when creating a custom model, we need
 #   to define the following subclasses

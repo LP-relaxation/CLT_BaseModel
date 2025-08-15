@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 # Import city-level transmission base components module
-import clt_base as clt
+import clt_toolkit as clt
 
 # Import flu model module, which contains customized subclasses
 from flu_core import flu_components as flu
