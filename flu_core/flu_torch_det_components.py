@@ -95,7 +95,7 @@ def compute_S_to_E(state: FluFullMetapopStateTensors,
 
     rate = beta_adjusted * total_mixing_exposure / \
            (1 + params.inf_induced_inf_risk_reduce * state.M +
-            params.vax_induced_inf_risk_reduce * state.Mv)
+            params.vax_induced_inf_risk_reduce * state.MV)
 
     S_to_E = state.S * torch_approx_binomial_probability_from_rate(rate, dt)
 
@@ -136,7 +136,7 @@ def compute_IS_to_R(state: FluFullMetapopStateTensors,
                     params: FluFullMetapopParamsTensors,
                     dt: float) -> torch.Tensor:
     immunity_force = (1 + params.inf_induced_hosp_risk_reduce * state.M +
-                      params.vax_induced_hosp_risk_reduce * state.Mv)
+                      params.vax_induced_hosp_risk_reduce * state.MV)
 
     rate = params.IS_to_R_rate * (1 - params.IS_to_H_adjusted_prop / immunity_force)
 
@@ -149,7 +149,7 @@ def compute_IS_to_H(state: FluFullMetapopStateTensors,
                     params: FluFullMetapopParamsTensors,
                     dt: float) -> torch.Tensor:
     immunity_force = (1 + params.inf_induced_hosp_risk_reduce * state.M +
-                      params.vax_induced_hosp_risk_reduce * state.Mv)
+                      params.vax_induced_hosp_risk_reduce * state.MV)
 
     rate = params.IS_to_H_rate * params.IS_to_H_adjusted_prop / immunity_force
 
@@ -172,7 +172,7 @@ def compute_H_to_R(state: FluFullMetapopStateTensors,
                    params: FluFullMetapopParamsTensors,
                    dt: float) -> torch.Tensor:
     immunity_force = (1 + params.inf_induced_death_risk_reduce * state.M +
-                      params.vax_induced_death_risk_reduce * state.Mv)
+                      params.vax_induced_death_risk_reduce * state.MV)
 
     rate = params.H_to_R_rate * (1 - params.H_to_D_adjusted_prop / immunity_force)
 
@@ -185,7 +185,7 @@ def compute_H_to_D(state: FluFullMetapopStateTensors,
                    params: FluFullMetapopParamsTensors,
                    dt: float) -> torch.Tensor:
     immunity_force = (1 + params.inf_induced_death_risk_reduce * state.M +
-                      params.vax_induced_death_risk_reduce * state.Mv)
+                      params.vax_induced_death_risk_reduce * state.MV)
 
     rate = params.H_to_D_rate * params.H_to_D_adjusted_prop / immunity_force
 
@@ -207,30 +207,30 @@ def compute_R_to_S(state: FluFullMetapopStateTensors,
 # The update rule for immunity is
 #   - dM/dt = (R_to_S_rate * R / N) * (1 - inf_induced_saturation * M - vax_induced_saturation * M_v)
 #                   - inf_induced_immune_wane * state.M
-#   - dMv/dt = (new vaccinations at time t - delta)/ N - vax_induced_immune_wane
+#   - dMV/dt = (new vaccinations at time t - delta)/ N - vax_induced_immune_wane
 
 
 def compute_M_change(state: FluFullMetapopStateTensors, params: FluFullMetapopParamsTensors,
                      precomputed: FluPrecomputedTensors,
                      dt: float) -> torch.Tensor:
     M_change = (params.R_to_S_rate * state.R / precomputed.total_pop_LAR) * \
-               (1 - params.inf_induced_saturation * state.M - params.vax_induced_saturation * state.Mv) - \
+               (1 - params.inf_induced_saturation * state.M - params.vax_induced_saturation * state.MV) - \
                params.inf_induced_immune_wane * state.M
 
     return M_change * dt
 
 
-def compute_Mv_change(state: FluFullMetapopStateTensors,
+def compute_MV_change(state: FluFullMetapopStateTensors,
                       params: FluFullMetapopParamsTensors,
                       precomputed: FluPrecomputedTensors,
                       schedules: FluFullMetapopScheduleTensors,
                       day_counter: int,
                       dt: float) -> torch.Tensor:
 
-    Mv_change = schedules.daily_vaccines[day_counter] / precomputed.total_pop_LAR - \
-                params.vax_induced_immune_wane * state.Mv
+    MV_change = schedules.daily_vaccines[day_counter] / precomputed.total_pop_LAR - \
+                params.vax_induced_immune_wane * state.MV
 
-    return Mv_change * dt
+    return MV_change * dt
 
 
 # """
@@ -244,26 +244,9 @@ def compute_Mv_change(state: FluFullMetapopStateTensors,
 #             "flu_contact_matrix",
 #             "daily_vaccines"
 #         (keys correspond to fields in `FluSubpopState`
-#         associated with `Schedule` instances)
-#         dataframe associated with "absolute_humidity" must
-#             have columns "date" and "absolute_humidity" -- "date" entries must
-#             correspond to consecutive calendar days and must either
-#             be strings with `"YYYY-MM-DD"` format or `datetime.date`
-#             objects -- "value" entries correspond to absolute humidity
-#             on those days
-#         dataframe associated with "flu_contact_matrix" must
-#             have columns "date", "is_school_day", and "is_work_day" --
-#             "date" entries must correspond to consecutive calendar days
-#             and must either be strings with `"YYYY-MM-DD"` format or
-#             `datetime.date` object and "is_school_day" and "is_work_day"
-#             entries are Booleans indicating if that date is a school
-#             day or work day
-#         dataframe associated with "daily_vaccines" must have
-#             columns "date" and "daily_vaccines" -- "date" entries must
-#             correspond to consecutive calendar days and must either
-#             be strings with `"YYYY-MM-DD"` format or `datetime.date`
-#             objects -- "value" entries correspond to historical
-#             number vaccinated on those days
+#         associated with `Schedule` instances) -- dataframes
+#         must have very specific format -- see `FluSubpopSchedules`
+#         for dataframe format
 # """
 
 
@@ -304,7 +287,7 @@ def step(state: FluFullMetapopStateTensors,
 
     M_change = compute_M_change(state, params, precomputed, dt)
 
-    Mv_change = compute_Mv_change(state, params, precomputed, schedules, day_counter, dt)
+    MV_change = compute_MV_change(state, params, precomputed, schedules, day_counter, dt)
 
     S_new = state.S + R_to_S - S_to_E
 
@@ -324,7 +307,7 @@ def step(state: FluFullMetapopStateTensors,
 
     M_new = state.M + M_change
 
-    Mv_new = state.Mv + Mv_change
+    MV_new = state.MV + MV_change
 
     state_new = FluFullMetapopStateTensors(S=S_new,
                                            E=E_new,
@@ -335,7 +318,7 @@ def step(state: FluFullMetapopStateTensors,
                                            R=R_new,
                                            D=D_new,
                                            M=M_new,
-                                           Mv=Mv_new,
+                                           MV=MV_new,
                                            flu_contact_matrix=state.flu_contact_matrix)
 
     calibration_targets = {}

@@ -70,21 +70,21 @@ def make_dataclass_from_dict(dataclass_ref: Type[DataClassProtocol],
     return dataclass_ref(**d)
 
 
-def make_dataclass_from_json(dataclass_ref: Type[DataClassProtocol],
-                             json_filepath: str) -> DataClassProtocol:
+def make_dataclass_from_json(json_filepath: str,
+                             dataclass_ref: Type[DataClassProtocol]) -> DataClassProtocol:
     """
     Create instance of class dataclass_ref,
     based on information in json_filepath.
 
     Args:
-        dataclass_ref (Type[DataClassProtocol]):
-            (class, not instance) from which to create instance --
-            must have dataclass decorator.
         json_filepath (str):
             path to json file (path includes actual filename
             with suffix ".json") -- all json fields must
             match name and datatype of dataclass_ref instance
             attributes.
+        dataclass_ref (Type[DataClassProtocol]):
+            (class, not instance) from which to create instance --
+            must have dataclass decorator.
 
     Returns:
         DataClassProtocol:

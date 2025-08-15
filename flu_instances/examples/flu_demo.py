@@ -12,7 +12,7 @@ import pandas as pd
 import clt_toolkit as clt
 
 # Import flu model module, which contains customized subclasses
-from flu_core import flu_components as flu
+import flu_core as flu
 
 ###########################################################
 ################# READ INPUT FILES ########################
@@ -31,19 +31,18 @@ calendar_df = pd.read_csv(base_path / "school_work_calendar.csv", index_col=0)
 humidity_df = pd.read_csv(base_path / "absolute_humidity_austin_2023_2024.csv", index_col=0)
 vaccines_df = pd.read_csv(base_path / "daily_vaccines_constant.csv", index_col=0)
 
-schedules_info = {}
-schedules_info["flu_contact_matrix"] = calendar_df
-schedules_info["daily_vaccines"] = vaccines_df
-schedules_info["absolute_humidity"] = humidity_df
+schedules_info = flu.FluSubpopSchedules(absolute_humidity=humidity_df,
+                                        flu_contact_matrix=calendar_df,
+                                        daily_vaccines=vaccines_df)
 
 # Read in files as dictionaries and dataframes
 # Note that we can also create these dictionaries directly
 #   rather than reading from a predefined input data file
-compartments_epi_metrics_dict = \
-    clt.load_json_new_dict(compartments_epi_metrics_init_vals_filepath)
-subpop_params_dict = clt.load_json_new_dict(subpop_params_filepath)
-mixing_params_dict = clt.load_json_new_dict(mixing_params_filepath)
-simulation_settings_dict = clt.load_json_new_dict(simulation_settings_filepath)
+state = clt.make_dataclass_from_json(compartments_epi_metrics_init_vals_filepath,
+                                                             flu.FluSubpopState)
+params = clt.make_dataclass_from_json(subpop_params_filepath, flu.FluSubpopParams)
+mixing_params = clt.make_dataclass_from_json(mixing_params_filepath, flu.FluMixingParams)
+settings = clt.make_dataclass_from_json(simulation_settings_filepath, flu.SimulationSettings)
 
 # Create two independent bit generators
 bit_generator = np.random.MT19937(88888)
@@ -62,16 +61,16 @@ jumped_bit_generator = bit_generator.jumped(1)
 #   subpopulation to have different aforementioned values,
 #   we could read in two separate sets of files -- one
 #   for each subpopulation
-north = flu.FluSubpopModel(compartments_epi_metrics_dict,
-                           subpop_params_dict,
-                           simulation_settings_dict,
+north = flu.FluSubpopModel(state,
+                           params,
+                           settings,
                            np.random.Generator(bit_generator),
                            schedules_info,
                            name="north")
 
-south = flu.FluSubpopModel(compartments_epi_metrics_dict,
-                           subpop_params_dict,
-                           simulation_settings_dict,
+south = flu.FluSubpopModel(state,
+                           params,
+                           settings,
                            np.random.Generator(jumped_bit_generator),
                            schedules_info,
                            name="south")
@@ -89,7 +88,7 @@ print(south.params.beta_baseline)
 # Note that this is quite a large and unrealistic value of
 #   beta_baseline, but we'll use this to create
 #   a dramatic difference between the two subpopulations
-south.params.beta_baseline = 10
+south.params = clt.updated_dataclass(south.params, {"beta_baseline": 10})
 
 ###########################################################
 ############# CREATE METAPOPULATION MODEL #################
@@ -97,7 +96,7 @@ south.params.beta_baseline = 10
 
 # Combine two subpopulations into one metapopulation model (travel model)
 flu_demo_model = flu.FluMetapopModel([north, south],
-                                     mixing_params_dict)
+                                     mixing_params)
 
 ###########################################################
 ################# SIMULATE & ANALYZE ######################
@@ -145,9 +144,12 @@ flu_demo_model.reset_simulation()
 #   periodicity
 num_age_groups = flu_demo_model.subpop_models.north.params.num_age_groups
 
+
 for subpop_model in flu_demo_model.subpop_models.values():
-    subpop_model.params.school_contact_matrix = np.zeros((num_age_groups, num_age_groups))
-    subpop_model.params.work_contact_matrix = np.zeros((num_age_groups, num_age_groups))
+
+    subpop_model.params = clt.updated_dataclass(subpop_model.params,
+                                                {"school_contact_matrix": np.zeros((num_age_groups, num_age_groups)),
+                                                 "work_contact_matrix": np.zeros((num_age_groups, num_age_groups))})
 
 flu_demo_model.simulate_until_day(100)
 

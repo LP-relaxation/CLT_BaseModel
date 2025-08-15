@@ -8,7 +8,7 @@
 	"vax_induced_saturation": 0.2,
 	"vax_induced_immune_wane": 0.004,
 	"inf_induced_inf_risk_reduce": 0.8,
-	"inf_induced_hosp_risk_reduce": 0.8,
+	"inf_induced_hosp_risk_reduce": 1.17,
 	"inf_induced_death_risk_reduce": 0.0,
 	"vax_induced_inf_risk_reduce": 0.68,
 	"vax_induced_hosp_risk_reduce": 0.68,

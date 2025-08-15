@@ -11,8 +11,8 @@ def test_size_travel_computations(make_subpop_model):
     subpopB = make_subpop_model("B", clt.TransitionTypes.BINOMIAL_DETERMINISTIC, num_jumps = 1, timesteps_per_day = 1)
 
     metapopAB_model = flu.FluMetapopModel([subpopA, subpopB],
-                                          {"travel_proportions": np.zeros((2, 2)),
-                                           "num_locations": 2})
+                                          flu.FluMixingParams(num_locations=2,
+                                                              travel_proportions=np.zeros((2,2))))
 
     for i in [1, 10, 100]:
 

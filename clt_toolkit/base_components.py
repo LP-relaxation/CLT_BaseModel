@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 import datetime
+from .utils import updated_dataclass
 from .base_data_structures import SubpopState, SubpopParams, SimulationSettings, \
     TransitionTypes, JointTransitionTypes
 
@@ -1413,7 +1414,7 @@ class SubpopModel(ABC):
         self.state.dynamic_vals = self.dynamic_vals
         self.state.schedules = self.schedules
 
-        self.params.total_pop_age_risk = self.compute_total_pop_age_risk()
+        self.params = updated_dataclass(self.params, {"total_pop_age_risk": self.compute_total_pop_age_risk()})
 
     def compute_total_pop_age_risk(self) -> np.ndarray:
         """

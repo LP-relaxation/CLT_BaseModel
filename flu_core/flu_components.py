@@ -12,12 +12,13 @@ from functools import reduce
 import torch
 import clt_toolkit as clt
 
-from dataclasses import fields
+from dataclasses import fields, asdict
 from .flu_travel_functions import compute_total_mixing_exposure
 from .flu_data_structures import FluSubpopState, FluSubpopParams, \
     FluTravelStateTensors, FluTravelParamsTensors, \
     FluFullMetapopStateTensors, FluFullMetapopParamsTensors, \
-    FluMixingParams, FluPrecomputedTensors, FluFullMetapopScheduleTensors
+    FluMixingParams, FluPrecomputedTensors, FluFullMetapopScheduleTensors, \
+    FluSubpopSchedules
 
 
 class FluSubpopModelError(clt.SubpopModelError):
@@ -202,7 +203,7 @@ class SympToRecovered(clt.TransitionVariable):
         vax_induced_proportional_risk_reduce = vax_induced_hosp_risk_reduce / (1 - vax_induced_hosp_risk_reduce)
 
         immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
-                          vax_induced_proportional_risk_reduce * state.Mv)
+                          vax_induced_proportional_risk_reduce * state.MV)
 
         return np.asarray((1 - params.IS_to_H_adjusted_prop / immunity_force) * params.IS_to_R_rate)
 
@@ -245,7 +246,7 @@ class HospToRecovered(clt.TransitionVariable):
             vax_induced_death_risk_reduce / (1 - vax_induced_death_risk_reduce)
 
         immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
-                          vax_induced_proportional_risk_reduce * state.Mv)
+                          vax_induced_proportional_risk_reduce * state.MV)
 
         return np.full((params.num_age_groups, params.num_risk_groups),
                        (1 - params.H_to_D_adjusted_prop / immunity_force) * params.H_to_R_rate)
@@ -275,7 +276,7 @@ class SympToHosp(clt.TransitionVariable):
         vax_induced_proportional_risk_reduce = vax_induced_hosp_risk_reduce / (1 - vax_induced_hosp_risk_reduce)
 
         immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
-                          vax_induced_proportional_risk_reduce * state.Mv)
+                          vax_induced_proportional_risk_reduce * state.MV)
 
         return np.asarray(params.IS_to_H_rate * params.IS_to_H_adjusted_prop / immunity_force)
 
@@ -307,7 +308,7 @@ class HospToDead(clt.TransitionVariable):
             vax_induced_death_risk_reduce / (1 - vax_induced_death_risk_reduce)
 
         immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
-                          vax_induced_proportional_risk_reduce * state.Mv)
+                          vax_induced_proportional_risk_reduce * state.MV)
 
         return np.asarray(params.H_to_D_adjusted_prop * params.H_to_D_rate / immunity_force)
 
@@ -350,7 +351,7 @@ class InfInducedImmunity(clt.EpiMetric):
         #   various realizations for more information
 
         return (self.R_to_S.current_val / params.total_pop_age_risk) * \
-               (1 - params.inf_induced_saturation * state.M - params.vax_induced_saturation * state.Mv) - \
+               (1 - params.inf_induced_saturation * state.M - params.vax_induced_saturation * state.MV) - \
                params.inf_induced_immune_wane * state.M / num_timesteps
 
 
@@ -372,7 +373,7 @@ class VaxInducedImmunity(clt.EpiMetric):
         #   do this division in the equation here.
 
         return state.daily_vaccines / (params.total_pop_age_risk * num_timesteps) - \
-               params.vax_induced_immune_wane * state.Mv / num_timesteps
+               params.vax_induced_immune_wane * state.MV / num_timesteps
 
 
 class BetaReduce(clt.DynamicVal):
@@ -416,7 +417,8 @@ class DailyVaccines(clt.Schedule):
                 correspond to consecutive calendar days and must either
                 be strings with `"YYYY-MM-DD"` format or `datetime.date`
                 objects -- "value" entries correspond to historical
-                number vaccinated on those days
+                number vaccinated on those days. Identical to
+                `FluSubpopSchedules` field of same name.
         """
 
         super().__init__(init_val)
@@ -442,7 +444,8 @@ class AbsoluteHumidity(clt.Schedule):
                 "date" entries must correspond to consecutive calendar days
                 and must either be strings with `"YYYY-MM-DD"` format or
                 `datetime.date` objects -- "value" entries correspond to
-                absolute humidity on those days
+                absolute humidity on those days. Identical to
+                `FluSubpopSchedules` field of same name.
         """
 
         super().__init__(init_val)
@@ -465,7 +468,8 @@ class FluContactMatrix(clt.Schedule):
             days and must either be strings with `"YYYY-MM-DD"` format
             or `datetime.date` object and "is_school_day" and
             "is_work_day" entries are Booleans indicating if that date is
-            a school day or work day
+            a school day or work day. Identical to `FluSubpopSchedules` field
+            of same name.
 
     See parent class docstring for other attributes.
     """
@@ -594,7 +598,7 @@ class FluSubpopModel(clt.SubpopModel):
 
     Key method create_transmission_model returns a SubpopModel
     instance with S-E-I-H-R-D compartments and M
-    and Mv epi metrics.
+    and MV epi metrics.
     
     The update structure is as follows:
         - S <- S + R_to_S - S_to_E
@@ -622,7 +626,7 @@ class FluSubpopModel(clt.SubpopModel):
 
     The following are EpiMetric instances:
         - M is a InfInducedImmunity instance
-        - Mv is a VaxInducedImmunity instance
+        - MV is a VaxInducedImmunity instance
 
     Transition rates and update formulas are specified in
         corresponding classes.
@@ -631,68 +635,32 @@ class FluSubpopModel(clt.SubpopModel):
     """
 
     def __init__(self,
-                 compartments_epi_metrics: dict,
-                 params: dict,
-                 simulation_settings: dict,
+                 state: FluSubpopState,
+                 params: FluSubpopParams,
+                 simulation_settings: FluSubpopSchedules,
                  RNG: np.random.Generator,
-                 schedules_spec: dict,
+                 schedules_spec: FluSubpopSchedules,
                  name: str):
         """
         Args:
-            compartments_epi_metrics (dict):
+            state (FluSubpopState):
                 holds current simulation state information,
                 such as current values of epidemiological compartments
-                and epi metrics -- keys and values respectively
-                must match field names and format of FluSubpopState.
-            params (dict):
-                holds epidemiological parameter values -- keys and
-                values respectively must match field names and
-                format of FluSubpopParams.
-            simulation_settings (dict):
-                holds simulation settings -- keys and values
-                respectively must match field names and format of
-                SimulationSettings.
+                and epi metrics.
+            params (FluSubpopParams):
+                holds epidemiological parameter values.
+            simulation_settings (SimulationSettings):
+                holds simulation settings.
             RNG (np.random.Generator):
                 numpy random generator object used to obtain
                 random numbers.
-            schedules_spec (dict[pd.DataFrame]):
-                `dict` of `DataFrame` objects
-                keys must be these strings:
-                    "absolute_humidity",
-                    "flu_contact_matrix",
-                    "daily_vaccines"
-                (keys correspond to fields in `FluSubpopState`
-                associated with `Schedule` instances)
-                dataframe associated with "absolute_humidity" must
-                    have columns "date" and "humidity" -- "date" entries must
-                    correspond to consecutive calendar days and must either
-                    be strings with `"YYYY-MM-DD"` format or `datetime.date`
-                    objects -- "value" entries correspond to absolute humidity
-                    on those days
-                dataframe associated with "flu_contact_matrix" must
-                    have columns "date", "is_school_day", and "is_work_day" --
-                    "date" entries must correspond to consecutive calendar days
-                    and must either be strings with `"YYYY-MM-DD"` format or
-                    `datetime.date` object and "is_school_day" and "is_work_day"
-                    entries are Booleans indicating if that date is a school
-                    day or work day
-                dataframe associated with "daily_vaccines" must have
-                    columns "date" and "daily_vaccines" -- "date" entries must
-                    correspond to consecutive calendar days and must either
-                    be strings with `"YYYY-MM-DD"` format or `datetime.date`
-                    objects -- "value" entries correspond to historical
-                    number vaccinated on those days
+            schedules_spec (FluSubpopSchedules):
+                holds dataframes that specify `Schedule` instances.
             name (str):
                 unique name of MetapopModel instance.
         """
 
-        # Assign simulation settings, params, and state to model-specific
-        # types of dataclasses that have epidemiological parameter information
-        # and sim state information
-
-        state = clt.make_dataclass_from_dict(FluSubpopState, compartments_epi_metrics)
-        params = clt.make_dataclass_from_dict(FluSubpopParams, params)
-        simulation_settings = clt.make_dataclass_from_dict(clt.SimulationSettings, simulation_settings)
+        self.schedules_spec = schedules_spec
 
         # IMPORTANT NOTE: as always, we must be careful with mutable objects
         #   and generally use deep copies to avoid modification of the same
@@ -700,8 +668,6 @@ class FluSubpopModel(clt.SubpopModel):
         #   (redundant) because the parent class SubpopModel's __init__()
         #   creates deep copies.
         super().__init__(state, params, simulation_settings, RNG, name)
-
-        self.setup_timeseries_df_on_schedules(schedules_spec)
 
     def create_compartments(self) -> sc.objdict[str, clt.Compartment]:
 
@@ -737,6 +703,16 @@ class FluSubpopModel(clt.SubpopModel):
         schedules["absolute_humidity"] = AbsoluteHumidity()
         schedules["flu_contact_matrix"] = FluContactMatrix()
         schedules["daily_vaccines"] = DailyVaccines()
+
+        for field, df in asdict(self.schedules_spec).items():
+
+            try:
+                df["date"] = pd.to_datetime(df["date"], format='%Y-%m-%d').dt.date
+            except ValueError as e:
+                raise ValueError("Error: dates should be strings in YYYY-MM-DD format or "
+                                 "`date.datetime` objects.") from e
+
+            schedules[field].timeseries_df = df
 
         return schedules
 
@@ -828,23 +804,10 @@ class FluSubpopModel(clt.SubpopModel):
             InfInducedImmunity(getattr(self.state, "M"),
                                transition_variables.R_to_S)
 
-        epi_metrics.Mv = \
-            VaxInducedImmunity(getattr(self.state, "Mv"))
+        epi_metrics.MV = \
+            VaxInducedImmunity(getattr(self.state, "MV"))
 
         return epi_metrics
-
-    def setup_timeseries_df_on_schedules(self,
-                                         schedules_spec: dict[pd.DataFrame]):
-
-        for key, df in schedules_spec.items():
-
-            try:
-                df["date"] = pd.to_datetime(df["date"], format='%Y-%m-%d').dt.date
-            except ValueError as e:
-                raise ValueError("Error: dates should be strings in YYYY-MM-DD format or "
-                                 "`date.datetime` objects.") from e
-
-            self.schedules[key].timeseries_df = df
 
 
 class FluMetapopModel(clt.MetapopModel, ABC):
@@ -854,17 +817,15 @@ class FluMetapopModel(clt.MetapopModel, ABC):
 
     def __init__(self,
                  subpop_models: list[dict],
-                 mixing_params: dict = {},
+                 mixing_params: FluMixingParams,
                  name: str = ""):
 
         super().__init__(subpop_models,
                          mixing_params,
                          name)
 
-        if not isinstance(mixing_params, dict):
-            raise FluMetapopModelError("'mixing_params' argument must be a dictionary.")
         try:
-            num_locations = mixing_params["num_locations"]
+            num_locations = mixing_params.num_locations
         except KeyError:
             raise FluMetapopModelError("'mixing_params' must contain the key 'num_locations'. \n"
                                        "Please specify it before continuing.")
@@ -876,7 +837,7 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         self.travel_state_tensors = FluTravelStateTensors()
         self.update_travel_state_tensors()
 
-        self.mixing_params = clt.make_dataclass_from_dict(FluMixingParams, mixing_params)
+        self.mixing_params = mixing_params
 
         self.travel_params_tensors = FluTravelParamsTensors()
         self.update_travel_params_tensors()

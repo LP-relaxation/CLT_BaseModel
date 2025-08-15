@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+import pandas as pd
+
 from typing import Optional
 from dataclasses import dataclass, fields, field
 
@@ -50,10 +52,10 @@ class FluSubpopState(clt.SubpopState):
             infection-induced population-level immunity
             for age-risk groups (holds current_val
             of EpiMetric "M").
-        Mv (np.ndarray of nonnegative floats):
+        MV (np.ndarray of nonnegative floats):
             vaccine-induced population-level immunity
             for age-risk groups (holds current_val
-            of EpiMetric "Mv").
+            of EpiMetric "MV").
         absolute_humidity (positive float):
             grams of water vapor per cubic meter g/m^3,
             used as seasonality parameter that influences
@@ -84,7 +86,7 @@ class FluSubpopState(clt.SubpopState):
     D: Optional[np.ndarray] = None
 
     M: Optional[np.ndarray] = None
-    Mv: Optional[np.ndarray] = None
+    MV: Optional[np.ndarray] = None
 
     absolute_humidity: Optional[float] = None
     flu_contact_matrix: Optional[np.ndarray] = None
@@ -93,7 +95,7 @@ class FluSubpopState(clt.SubpopState):
     daily_vaccines: Optional[np.ndarray] = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class FluSubpopParams(clt.SubpopParams):
     """
     Data container for pre-specified and fixed epidemiological
@@ -105,9 +107,11 @@ class FluSubpopParams(clt.SubpopParams):
     See FluSubpopState docstring for important formatting note
     on 2D arrays.
 
-    TODO:
-        when adding multiple strains, need to add subscripts
-        to math of attributes and add strain-specific description
+    Note: the user does not have to specify `total_pop_age_risk` --
+    this is automatically computed when a `FluSubpopModel` is
+    instantiated. This is to ensure that the total population
+    (summed across all compartments) actually equals `total_pop_age_risk` --
+    and the user doesn't change one without updating the other.
 
     Attributes:
         num_age_groups (positive int):
@@ -211,7 +215,6 @@ class FluSubpopParams(clt.SubpopParams):
             age group i has at work -- this matrix plus the
             work_contact_matrix must be less than the
             total_contact_matrix, element-wise
-
     """
 
     num_age_groups: Optional[int] = None
@@ -254,6 +257,40 @@ class FluSubpopParams(clt.SubpopParams):
     total_contact_matrix: Optional[np.ndarray] = None
     school_contact_matrix: Optional[np.ndarray] = None
     work_contact_matrix: Optional[np.ndarray] = None
+
+
+@dataclass
+class FluSubpopSchedules:
+    """
+    Data container for dataframes used to specify schedules.
+    FORMAT FOR EACH DATAFRAME IS VERY IMPORTANT -- please
+    read and implement carefully.
+
+    Attributes:
+        absolute_humidity (pd.DataFrame):
+            must have columns "date" and "absolute_humidity" --
+            "date" entries must correspond to consecutive calendar days
+            and must either be strings with `"YYYY-MM-DD"` format or
+            `datetime.date` objects -- "value" entries correspond to
+            absolute humidity on those days
+        flu_contact_matrix (pd.DataFrame):
+            must have columns "date", "is_school_day", and "is_work_day"
+            -- "date" entries must correspond to consecutive calendar
+            days and must either be strings with `"YYYY-MM-DD"` format
+            or `datetime.date` object and "is_school_day" and
+            "is_work_day" entries are Booleans indicating if that date is
+            a school day or work day
+        daily_vaccines (pd.DataFrame):
+            must have "date" and "daily_vaccines" -- "date" entries must
+            correspond to consecutive calendar days and must either
+            be strings with `"YYYY-MM-DD"` format or `datetime.date`
+            objects -- "value" entries correspond to historical
+            number vaccinated on those days
+    """
+
+    absolute_humidity: Optional[pd.DataFrame] = None
+    flu_contact_matrix: Optional[pd.DataFrame] = None
+    daily_vaccines: Optional[pd.DataFrame] = None
 
 
 @dataclass
@@ -469,7 +506,7 @@ class FluFullMetapopStateTensors(FluTravelStateTensors):
     D: Optional[torch.Tensor] = None
 
     M: Optional[torch.Tensor] = None
-    Mv: Optional[torch.Tensor] = None
+    MV: Optional[torch.Tensor] = None
 
     absolute_humidity: Optional[float] = None
     beta_reduce: Optional[float] = 0.0

@@ -25,22 +25,22 @@ def subpop_inputs(id: str):
     simulation_settings_filepath = base_path / "simulation_settings.json"
     calendar_filepath = base_path / "school_work_calendar.csv"
 
-    init_vals_dict = clt.load_json_new_dict(init_vals_filepath)
-    params_dict = clt.load_json_new_dict(params_filepath)
-    mixing_params_dict = clt.load_json_new_dict(mixing_params_filepath)
-    simulation_settings_dict = clt.load_json_new_dict(simulation_settings_filepath)
+    state = clt.make_dataclass_from_json(init_vals_filepath,
+                                         flu.FluSubpopState)
+    params = clt.make_dataclass_from_json(params_filepath, flu.FluSubpopParams)
+    mixing_params = clt.make_dataclass_from_json(mixing_params_filepath, flu.FluMixingParams)
+    settings = clt.make_dataclass_from_json(simulation_settings_filepath, flu.SimulationSettings)
 
     calendar_df = pd.read_csv(calendar_filepath, index_col=0)
     humidity_df = pd.read_csv(base_path / "absolute_humidity_austin_2023_2024.csv", index_col=0)
     vaccines_df = pd.read_csv(base_path / "daily_vaccines_constant.csv", index_col = 0)
 
-    schedules_info = {}
-    schedules_info["flu_contact_matrix"] = calendar_df
-    schedules_info["daily_vaccines"] = vaccines_df
-    schedules_info["absolute_humidity"] = humidity_df
+    schedules_info = flu.FluSubpopSchedules(absolute_humidity=humidity_df,
+                                            flu_contact_matrix=calendar_df,
+                                            daily_vaccines=vaccines_df)
 
-    return init_vals_dict, params_dict, mixing_params_dict, \
-           simulation_settings_dict, schedules_info
+    return state, params, mixing_params, \
+           settings, schedules_info
 
 
 # Factory function
@@ -63,20 +63,18 @@ def make_subpop_model():
                            timesteps_per_day: int = 7,
                            case_id_str: str = "caseA"):
 
-        init_vals_dict, params_dict, mixing_params_dict, \
-        simulation_settings_dict, schedules_info = subpop_inputs(case_id_str)
+        init_vals, params, mixing_params, simulation_settings, schedules_info = \
+            subpop_inputs(case_id_str)
 
-        simulation_settings_dict["timesteps_per_day"] = timesteps_per_day
-
-        # Modify transition type
-        simulation_settings_dict["transition_type"] = transition_type
+        simulation_settings = clt.updated_dataclass(simulation_settings, {"timesteps_per_day": timesteps_per_day,
+                                                                          "transition_type": transition_type})
 
         starting_random_seed = 123456789123456789
         bit_generator = np.random.MT19937(starting_random_seed)
 
-        model = flu.FluSubpopModel(init_vals_dict,
-                                   params_dict,
-                                   simulation_settings_dict,
+        model = flu.FluSubpopModel(init_vals,
+                                   params,
+                                   simulation_settings,
                                    np.random.Generator(bit_generator.jumped(num_jumps)),
                                    schedules_info,
                                    name)

@@ -24,6 +24,7 @@ import copy
 import pytest
 
 from flu_fixtures import subpop_inputs, make_subpop_model
+from clt_toolkit import updated_dataclass
 
 base_path = clt.utils.PROJECT_ROOT / "tests" / "test_input_files"
 
@@ -347,8 +348,8 @@ def test_metapop_no_travel(make_subpop_model, transition_type, inputs_id):
     subpopB = make_subpop_model("B", transition_type, num_jumps = 1, timesteps_per_day = 1, case_id_str = inputs_id)
 
     metapopAB_model = flu.FluMetapopModel([subpopA, subpopB],
-                                          {"travel_proportions": np.zeros((2, 2)),
-                                           "num_locations": 2})
+                                          flu.FluMixingParams(travel_proportions=np.zeros((2, 2)),
+                                                              num_locations=2))
 
     metapopAB_model.simulate_until_day(1)
 

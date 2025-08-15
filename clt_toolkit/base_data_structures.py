@@ -56,7 +56,7 @@ class SimulationSettings:
     save_transition_variables_history: bool = False
 
 
-@dataclass
+@dataclass(frozen=True)
 class SubpopParams(ABC):
     """
     Data container for pre-specified and fixed epidemiological
