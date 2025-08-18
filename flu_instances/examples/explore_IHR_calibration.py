@@ -55,7 +55,7 @@ L = 3
 
 # Turn this into a utility function and put it somewhere...
 #   that is not here :P
-def updated_dict(base_dict, updates):
+def copy_with_updates(base_dict, updates):
     return {**base_dict, **updates}
 
 
@@ -76,12 +76,12 @@ def enable_grad(container: flu.FluFullMetapopParamsTensors):
 bit_generator = np.random.MT19937(88888)
 jumped_bit_generator = bit_generator.jumped(1)
 
-subpopA_params_dict = updated_dict(common_subpop_params_dict,
-                                   {"beta_baseline": 1.5})
-subpopB_params_dict = updated_dict(common_subpop_params_dict,
-                                   {"beta_baseline": 2.5})
-subpopC_params_dict = updated_dict(common_subpop_params_dict,
-                                   {"beta_baseline": 2.5})
+subpopA_params_dict = copy_with_updates(common_subpop_params_dict,
+                                        {"beta_baseline": 1.5})
+subpopB_params_dict = copy_with_updates(common_subpop_params_dict,
+                                        {"beta_baseline": 2.5})
+subpopC_params_dict = copy_with_updates(common_subpop_params_dict,
+                                        {"beta_baseline": 2.5})
 
 subpopA = flu.FluSubpopModel(subpopA_init_vals_dict,
                              subpopA_params_dict,

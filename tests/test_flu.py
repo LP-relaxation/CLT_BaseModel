@@ -174,9 +174,8 @@ def test_subpop_no_transmission_when_beta_zero(make_subpop_model, transition_typ
     """
 
     subpop_model = make_subpop_model("subpop_model", transition_type)
-
     subpop_model.reset_simulation()
-    subpop_model.params.beta_baseline = 0
+    subpop_model.modify_params({"beta_baseline": 0})
     subpop_model.simulate_until_day(300)
 
     S_history = subpop_model.compartments["S"].history_vals_list
@@ -194,7 +193,7 @@ def test_subpop_dead_compartment_monotonic(make_subpop_model, transition_type):
     subpop_model = make_subpop_model("subpop_model", transition_type)
 
     subpop_model.reset_simulation()
-    subpop_model.params.beta = 2
+    subpop_model.modify_params({"beta_baseline": 1.1})
     subpop_model.simulate_until_day(300)
 
     D_history = subpop_model.compartments["D"].history_vals_list
@@ -211,7 +210,6 @@ def test_subpop_population_is_constant(make_subpop_model, transition_type, input
     """
 
     subpop_model = make_subpop_model("subpop_model", transition_type, case_id_str = inputs_id)
-    subpop_model.params.beta = 0.25
 
     for day in range(300):
         subpop_model.simulate_until_day(day)

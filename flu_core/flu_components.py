@@ -669,6 +669,13 @@ class FluSubpopModel(clt.SubpopModel):
         #   creates deep copies.
         super().__init__(state, params, simulation_settings, RNG, name)
 
+    def modify_params(self, updates_dict):
+
+        self.params = clt.updated_dataclass(self.params, updates_dict)
+
+        if self.metapop_model:
+            self.metapop_model.update_travel_params_tensors()
+
     def create_compartments(self) -> sc.objdict[str, clt.Compartment]:
 
         # Create `Compartment` instances S-E-IA-IP-IS-H-R-D (7 compartments total),
@@ -851,6 +858,15 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         self.full_metapop_params_tensors = None
         self.full_metapop_state_tensors = None
         self.full_metapop_schedule_tensors = None
+
+    def modify_mixing_params(self, updates_dict):
+
+        self.mixing_params = clt.updated_dataclass(self.mixing_params, updates_dict)
+        self.update_travel_params_tensors()
+
+        nonlocal_travel_prop = self.travel_params_tensors.travel_proportions.clone().fill_diagonal_(0.0)
+
+        self.precomputed.sum_residents_nonlocal_travel_prop = nonlocal_travel_prop.sum(dim=1)
 
     def compute_total_pop_LAR(self):
 
