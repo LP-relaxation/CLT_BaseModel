@@ -32,18 +32,23 @@ calendar_df = pd.read_csv(texas_files_path / "school_work_calendar.csv", index_c
 humidity_df = pd.read_csv(texas_files_path / "absolute_humidity_austin_2023_2024.csv", index_col=0)
 vaccines_df = pd.read_csv(texas_files_path / "daily_vaccines_constant.csv", index_col=0)
 
-schedules_info = {}
-schedules_info["flu_contact_matrix"] = calendar_df
-schedules_info["daily_vaccines"] = vaccines_df
-schedules_info["absolute_humidity"] = humidity_df
+schedules_info = flu.FluSubpopSchedules(absolute_humidity=humidity_df,
+                                        flu_contact_matrix=calendar_df,
+                                        daily_vaccines=vaccines_df)
 
-subpopA_init_vals_dict = clt.load_json_new_dict(subpopA_init_vals_filepath)
-subpopB_init_vals_dict = clt.load_json_new_dict(subpopB_init_vals_filepath)
-subpopC_init_vals_dict = clt.load_json_new_dict(subpopB_init_vals_filepath)
+subpopA_init_vals = clt.make_dataclass_from_json(subpopA_init_vals_filepath,
+                                                 flu.FluSubpopState)
+subpopB_init_vals = clt.make_dataclass_from_json(subpopB_init_vals_filepath,
+                                                 flu.FluSubpopState)
+subpopC_init_vals = clt.make_dataclass_from_json(subpopB_init_vals_filepath,
+                                                 flu.FluSubpopState)
 
-common_subpop_params_dict = clt.load_json_new_dict(common_subpop_params_filepath)
-mixing_params_dict = clt.load_json_new_dict(mixing_params_filepath)
-simulation_settings_dict = clt.load_json_new_dict(simulation_settings_filepath)
+common_subpop_params = clt.make_dataclass_from_json(common_subpop_params_filepath,
+                                                    flu.FluSubpopParams)
+mixing_params = clt.make_dataclass_from_json(mixing_params_filepath,
+                                             flu.FluMixingParams)
+simulation_settings = clt.make_dataclass_from_json(simulation_settings_filepath,
+                                                   flu.SimulationSettings)
 
 L = 3
 
@@ -55,8 +60,8 @@ L = 3
 
 # Turn this into a utility function and put it somewhere...
 #   that is not here :P
-def copy_with_updates(base_dict, updates):
-    return {**base_dict, **updates}
+def copy_with_updates(base, updates):
+    return {**base, **updates}
 
 
 # Same with this...
@@ -76,37 +81,37 @@ def enable_grad(container: flu.FluFullMetapopParamsTensors):
 bit_generator = np.random.MT19937(88888)
 jumped_bit_generator = bit_generator.jumped(1)
 
-subpopA_params_dict = copy_with_updates(common_subpop_params_dict,
-                                        {"beta_baseline": 1.5})
-subpopB_params_dict = copy_with_updates(common_subpop_params_dict,
-                                        {"beta_baseline": 2.5})
-subpopC_params_dict = copy_with_updates(common_subpop_params_dict,
-                                        {"beta_baseline": 2.5})
+subpopA_params = clt.updated_dataclass(common_subpop_params,
+                                       {"beta_baseline": 1.5})
+subpopB_params = clt.updated_dataclass(common_subpop_params,
+                                       {"beta_baseline": 2.5})
+subpopC_params = clt.updated_dataclass(common_subpop_params,
+                                       {"beta_baseline": 2.5})
 
-subpopA = flu.FluSubpopModel(subpopA_init_vals_dict,
-                             subpopA_params_dict,
-                             simulation_settings_dict,
+subpopA = flu.FluSubpopModel(subpopA_init_vals,
+                             subpopA_params,
+                             simulation_settings,
                              np.random.Generator(bit_generator),
                              schedules_info,
                              name="subpopA")
 
-subpopB = flu.FluSubpopModel(subpopB_init_vals_dict,
-                             subpopB_params_dict,
-                             simulation_settings_dict,
+subpopB = flu.FluSubpopModel(subpopB_init_vals,
+                             subpopB_params,
+                             simulation_settings,
                              np.random.Generator(jumped_bit_generator),
                              schedules_info,
                              name="subpopB")
 
-subpopC = flu.FluSubpopModel(subpopC_init_vals_dict,
-                             subpopC_params_dict,
-                             simulation_settings_dict,
+subpopC = flu.FluSubpopModel(subpopC_init_vals,
+                             subpopC_params,
+                             simulation_settings,
                              np.random.Generator(jumped_bit_generator),
                              schedules_info,
                              name="subpopC")
 
 # Combine two subpopulations into one metapopulation model (travel model)
 flu_demo_model = flu.FluMetapopModel([subpopA, subpopB, subpopC],
-                                     mixing_params_dict)
+                                     mixing_params)
 
 d = flu_demo_model.get_flu_torch_inputs()
 
