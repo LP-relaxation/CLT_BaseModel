@@ -37,4 +37,4 @@ jobs:
 
       # Step 4: Run Pytest
       - name: Run tests
-        run: pytest tests/test_flu.py tests/test_flu_travel.py
+        run: pytest tests/test_flu_metapop.py tests/test_flu_subpop.py tests/test_flu_travel.py
