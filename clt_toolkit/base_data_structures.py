@@ -6,19 +6,20 @@ import datetime
 
 
 class TransitionTypes(str, Enum):
-    BINOMIAL = "binomial"
-    BINOMIAL_DETERMINISTIC = "binomial_deterministic"
-    BINOMIAL_TAYLOR_APPROX = "binomial_taylor_approx"
-    BINOMIAL_TAYLOR_APPROX_DETERMINISTIC = "binomial_taylor_approx_deterministic"
+    BINOM = "binom"
+    BINOM_DETERMINISTIC = "binom_deterministic"
+    BINOM_DETERMINISTIC_NO_ROUND = "binom_deterministic_no_round"
+    BINOM_TAYLOR_APPROX = "binom_taylor_approx"
+    BINOM_TAYLOR_APPROX_DETERMINISTIC = "binom_taylor_approx_deterministic"
     POISSON = "poisson"
     POISSON_DETERMINISTIC = "poisson_deterministic"
 
 
 class JointTransitionTypes(str, Enum):
-    MULTINOMIAL = "multinomial"
-    MULTINOMIAL_DETERMINISTIC = "multinomial_deterministic"
-    MULTINOMIAL_TAYLOR_APPROX = "multinomial_taylor_approx"
-    MULTINOMIAL_TAYLOR_APPROX_DETERMINISTIC = "multinomial_taylor_approx_deterministic"
+    MULTINOM = "multinom"
+    MULTINOM_DETERMINISTIC = "multinom_deterministic"
+    MULTINOM_TAYLOR_APPROX = "multinom_taylor_approx"
+    MULTINOM_TAYLOR_APPROX_DETERMINISTIC = "multinom_taylor_approx_deterministic"
     POISSON = "poisson"
     POISSON_DETERMINISTIC = "poisson_deterministic"
 
@@ -49,7 +50,7 @@ class SimulationSettings:
     """
 
     timesteps_per_day: int = 7
-    transition_type: str = TransitionTypes.BINOMIAL
+    transition_type: str = TransitionTypes.BINOM
     start_real_date: datetime.time = datetime.datetime.strptime("2024-10-31",
                                                                 "%Y-%m-%d").date()
     save_daily_history: bool = True

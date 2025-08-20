@@ -52,6 +52,7 @@ simulation_settings = clt.make_dataclass_from_json(simulation_settings_filepath,
 
 L = 3
 
+
 #################################################
 ############# UTILITY FUNCTIONS #################
 #################################################
@@ -80,6 +81,9 @@ def enable_grad(container: flu.FluFullMetapopParamsTensors):
 
 bit_generator = np.random.MT19937(88888)
 jumped_bit_generator = bit_generator.jumped(1)
+
+simulation_settings = clt.updated_dataclass(simulation_settings,
+                                            {"timesteps_per_day": 2})
 
 subpopA_params = clt.updated_dataclass(common_subpop_params,
                                        {"beta_baseline": 1.5})
@@ -134,21 +138,21 @@ opt_params = copy.deepcopy(params)
 # There's definitely room for improvement/clarity here...
 # WE MUST TELL TORCH TO TRACK THE GRADIENT ON THE PARAMETERS WE WANT TO
 #   OPTIMIZE! see `requires_grad = True`
-opt_params.beta_baseline_raw = torch.tensor([1.0, 1.0, 1.0], dtype=torch.float32, requires_grad=True)
+opt_params.beta_baseline_raw = torch.tensor([1.0, 2.0, 2.0], dtype=torch.float64, requires_grad=True)
 
-opt_params.IS_to_H_adjusted_prop_raw = torch.tensor([[0.02],
-                                                     [0.02],
-                                                     [0.02],
-                                                     [0.02],
-                                                     [0.02]], dtype=torch.float32, requires_grad=True)
+opt_params.IS_to_H_adjusted_prop_raw = torch.tensor([[0.001],
+                                                     [0.001],
+                                                     [0.001],
+                                                     [0.001],
+                                                     [0.001]], dtype=torch.float64, requires_grad=True)
 
 # Generate "true" history
-true_admits_history = flu.simulate_hospital_admits(state,
-                                                   params,
-                                                   precomputed,
-                                                   schedules,
-                                                   100,
-                                                   2).clone().detach()
+true_admits_history = flu.torch_simulation_hospital_admits(state,
+                                                           params,
+                                                           precomputed,
+                                                           schedules,
+                                                           100,
+                                                           2).clone().detach()
 
 ############################################
 ############# OPTIMIZATION #################
@@ -157,8 +161,13 @@ true_admits_history = flu.simulate_hospital_admits(state,
 # Could potentially wrap this in something nice...
 
 # opt_params.beta_baseline_raw (L-dimensional)
-optimizer = torch.optim.Adam([opt_params.beta_baseline_raw,
-                              opt_params.IS_to_H_adjusted_prop_raw], lr=0.01)
+# optimizer = torch.optim.Adam([opt_params.beta_baseline_raw,
+#                              opt_params.IS_to_H_adjusted_prop_raw], lr=0.01)
+# optimizer = torch.optim.Adam([
+#     {"params": opt_params.beta_baseline_raw, "lr": 1e-1},
+#     {"params": opt_params.IS_to_H_adjusted_prop_raw, "lr": 1e-3}
+# ])
+optimizer = torch.optim.Adam([opt_params.beta_baseline_raw], lr=0.01)
 
 beta_baseline_opt_history = []
 IS_to_H_adjusted_prop_history = []
@@ -168,19 +177,25 @@ fitting_start_time = time.time()
 for i in range(int(2e3)):
     optimizer.zero_grad()
     opt_params.beta_baseline = opt_params.beta_baseline_raw.view(L, 1, 1).expand(L, 5, 1)
-    opt_params.IS_to_H_adjusted_prop = opt_params.IS_to_H_adjusted_prop_raw.view(1, 5, 1).expand(L, 5, 1)
-    sim_result = flu.simulate_hospital_admits(init_state, opt_params, precomputed, schedules, 100, 2)
+    # opt_params.IS_to_H_adjusted_prop = opt_params.IS_to_H_adjusted_prop_raw.view(1, 5, 1).expand(L, 5, 1)
+    sim_result = flu.torch_simulation_hospital_admits(init_state, opt_params, precomputed, schedules, 100, 2)
     loss = torch.nn.functional.mse_loss(sim_result, true_admits_history)
     loss.backward()
+    # torch.nn.utils.clip_grad_norm_([opt_params.beta_baseline_raw,
+    #                                 opt_params.IS_to_H_adjusted_prop_raw], max_norm=1.0)
     optimizer.step()
-    if i % 50 == 0:
+    with torch.no_grad():
+        opt_params.beta_baseline_raw.clamp_(1.0, 3.0)
+        opt_params.IS_to_H_adjusted_prop_raw.clamp_(0.0, 0.2)
+    if i % 10 == 0:
+    # if True:
         print(time.time() - fitting_start_time)
         print("Loss function: " + str(loss))
         print("Estimated betas: " + str(opt_params.beta_baseline_raw.clone()))
-        print("Estimated IHR: " + str(opt_params.IS_to_H_adjusted_prop_raw.clone()))
+        # print("Estimated IHR: " + str(opt_params.IS_to_H_adjusted_prop_raw.clone()))
         loss_history.append(loss)
         beta_baseline_opt_history.append(opt_params.beta_baseline_raw.clone())
-        IS_to_H_adjusted_prop_history.append(opt_params.IS_to_H_adjusted_prop_raw.clone())
+        # IS_to_H_adjusted_prop_history.append(opt_params.IS_to_H_adjusted_prop_raw.clone())
     if loss < 1e-2:
         break
 
@@ -197,7 +212,7 @@ breakpoint()
 
 # Optional -- can simulate with fitted parameters and plot corresponding output
 # Commented out for now but can un-comment
-# fitted_admits_history = flu.simulate_hospital_admits(init_state, opt_params, precomputed, schedules, 100, 2)
+# fitted_admits_history = flu.torch_simulation_hospital_admits(init_state, opt_params, precomputed, schedules, 100, 2)
 
 # plt.clf()
 # plt.plot(torch.sum(true_admits_history, dim=(1, 2)), label="True hospital admits")

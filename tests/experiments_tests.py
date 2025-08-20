@@ -22,7 +22,7 @@ humidity_filepath = base_path / "absolute_humidity_austin_2023_2024.csv"
 
 simulation_settings_dict = {}
 simulation_settings_dict["timesteps_per_day"] = 2
-simulation_settings_dict["transition_type"] = "binomial_deterministic"
+simulation_settings_dict["transition_type"] = "binom_deterministic"
 simulation_settings_dict["start_real_date"] = "2022-08-08"
 simulation_settings_dict["save_daily_history"] = False
 

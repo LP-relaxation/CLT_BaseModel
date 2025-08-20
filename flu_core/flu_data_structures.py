@@ -470,8 +470,8 @@ class FluFullMetapopStateTensors(FluTravelStateTensors):
     contain data across all subpopulations
     (collected from each location/subpopulation model).
     Note that in contrast to `FluTravelStateTensors`,
-    ALL fields in `FluSubpopState` are included --
-    this is for running the simulation via torch.
+    ALL fields in `FluSubpopState` are included -- this is
+    for running the simulation via torch.
 
     Attributes:
         flu_contact_matrix (torch.Tensor of nonnegative integers):
@@ -509,10 +509,7 @@ class FluFullMetapopStateTensors(FluTravelStateTensors):
     MV: Optional[torch.Tensor] = None
 
     absolute_humidity: Optional[float] = None
-    beta_reduce: Optional[float] = 0.0
     daily_vaccines: Optional[torch.Tensor] = None
-
-    flu_contact_matrix: Optional[torch.Tensor] = None
 
 
 @dataclass

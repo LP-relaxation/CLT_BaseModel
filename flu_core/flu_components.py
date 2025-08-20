@@ -91,7 +91,14 @@ class SusceptibleToExposed(clt.TransitionVariable):
 
         beta_adjusted = compute_beta_adjusted(state, params)
 
-        immune_force = compute_immunity_force(state, params)
+        inf_induced_inf_risk_reduce = params.inf_induced_inf_risk_reduce
+        inf_induced_proportional_risk_reduce = inf_induced_inf_risk_reduce / (1 - inf_induced_inf_risk_reduce)
+
+        vax_induced_inf_risk_reduce = params.vax_induced_inf_risk_reduce
+        vax_induced_proportional_risk_reduce = vax_induced_inf_risk_reduce / (1 - vax_induced_inf_risk_reduce)
+
+        immune_force = (1 + inf_induced_proportional_risk_reduce * state.M +
+                          vax_induced_proportional_risk_reduce * state.MV)
 
         if self.total_mixing_exposure is not None:
 
@@ -196,6 +203,7 @@ class SympToRecovered(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+
         inf_induced_hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
         inf_induced_proportional_risk_reduce = inf_induced_hosp_risk_reduce / (1 - inf_induced_hosp_risk_reduce)
 
@@ -524,29 +532,6 @@ def compute_wtd_presymp_asymp_by_age(subpop_state: FluSubpopState,
     return wtd_IP + wtd_IA
 
 
-def compute_immunity_force(subpop_state: FluSubpopState,
-                           subpop_params: FluSubpopParams) -> np.ndarray:
-    """
-    Computes a denominator that shows up repeatedly in
-    travel model calculations.
-
-    Returns:
-        A x R array -- where A is the number of age groups
-        and R is the number of risk groups -- representing
-        the force of population-level immunity against infection
-        -- used in the denominator of many computations
-    """
-
-    inf_risk_reduce = subpop_params.inf_induced_inf_risk_reduce
-    if (np.asarray(inf_risk_reduce) != 1).all():
-        proportional_risk_reduction = inf_risk_reduce / (1 - inf_risk_reduce)
-    else:
-        proportional_risk_reduction = 1
-
-    return 1 + (proportional_risk_reduction *
-                subpop_state.M)
-
-
 def compute_beta_adjusted(subpop_state: FluSubpopState,
                           subpop_params: FluSubpopParams) -> np.ndarray:
     """
@@ -568,26 +553,6 @@ def compute_pop_by_age(subpop_params: FluSubpopParams) -> np.ndarray:
     """
 
     return np.sum(subpop_params.total_pop_age_risk, axis=1, keepdims=True)
-
-
-class ForceOfInfection(clt.InteractionTerm):
-    """
-    InteractionTerm-derived class for modeling S_to_E transition rate
-        for a given subpopulation, which depends on the
-        subpopulation's contact matrix, population-level immunity,
-        travel dynamics across subpopulations, and also
-        the states of other subpopulations.
-    """
-
-    def __init__(self,
-                 subpop_name: str):
-        super().__init__()
-        self.subpop_name = subpop_name
-
-    def update_current_val(self) -> None:
-        pass
-
-        # self.current_val = None
 
 
 class FluSubpopModel(clt.SubpopModel):
@@ -1003,9 +968,9 @@ class FluMetapopModel(clt.MetapopModel, ABC):
 
         self.full_metapop_schedule_tensors = FluFullMetapopScheduleTensors()
 
-        # ah_df = subpop_model.schedules.absolute_humidity.timeseries_df
-        # fcm_df = subpop_model.schedules.flu_contact_matrix.timeseries_df
-        # dv_df = subpop_model.schedules.daily_vaccines.timeseries_df
+        L = self.precomputed.L
+        A = self.precomputed.A
+        R = self.precomputed.R
 
         for item in [("absolute_humidity", "absolute_humidity"),
                      ("flu_contact_matrix", "is_school_day"),
@@ -1024,21 +989,28 @@ class FluMetapopModel(clt.MetapopModel, ABC):
                 df["simulation_day"] = (pd.to_datetime(df["date"], format="%Y-%m-%d") - start_date).dt.days
                 df = df[df["simulation_day"] >= 0]
 
+                # Make each day's value an A x R array
+                # Pandas complains about `SettingWithCopyWarning` so we work on a copy explicitly to stop it
+                #   from complaining...
+                df = df.copy()
+                df[values_column_name] = df[values_column_name].astype(object)
+                df.loc[:, values_column_name] = df[values_column_name].apply(
+                    lambda x, A=A, R=R: np.broadcast_to(np.asarray(x).reshape(1, 1), (A, R))
+                )
+
                 metapop_vals.append(np.asarray(df[values_column_name]))
 
-            try:
-                stacked_metapop_vals = np.stack(metapop_vals, axis=1)
-            except ValueError as e:
-                # This error occurs if arrays have different lengths (ragged)
-                raise ValueError("Cannot stack: arrays have different lengths (ragged). \n"
-                                 "Make sure that the .csv inputs for each subpopulation and \n"
-                                 "each schedule are all over the same dates -- in other words, \n"
-                                 "for each .csv input, the dates column should have the same \n"
-                                 "(consecutive) entries") from e
+            # IMPORTANT: tedious array/tensor shape/size manipulation here
+            # metapop_vals: list of L arrays, each shape (num_days, A, R)
+            # We need to transpose this... to be a list of num_days tensors, of size L x A x R
 
-            # Convert each row to torch tensor and put into a list
-            setattr(self.full_metapop_schedule_tensors, values_column_name,
-                [torch.tensor(row) for row in stacked_metapop_vals])
+            num_items = metapop_vals[0].shape[0]
+
+            # This is ugly and inefficient -- but at least we only do this once, when we get the initial
+            #   state of a metapopulation model in tensor form
+            transposed_metapop_vals = [torch.tensor(np.array([metapop_vals[l][i] for l in range(L)])) for i in range(num_items)]
+
+            setattr(self.full_metapop_schedule_tensors, values_column_name, transposed_metapop_vals)
 
     def get_flu_torch_inputs(self):
 
@@ -1049,9 +1021,9 @@ class FluMetapopModel(clt.MetapopModel, ABC):
 
         d = {}
 
-        d["state_tensors"] = self.full_metapop_state_tensors
-        d["params_tensors"] = self.full_metapop_params_tensors
-        d["schedule_tensors"] = self.full_metapop_schedule_tensors
-        d["precomputed"] = self.precomputed
+        d["state_tensors"] = copy.deepcopy(self.full_metapop_state_tensors)
+        d["params_tensors"] = copy.deepcopy(self.full_metapop_params_tensors)
+        d["schedule_tensors"] = copy.deepcopy(self.full_metapop_schedule_tensors)
+        d["precomputed"] = copy.deepcopy(self.precomputed)
 
         return d

@@ -18,7 +18,7 @@ compartments_epi_metrics_dict = clt.load_json_new_dict(compartments_epi_metrics_
 params_dict = clt.load_json_new_dict(params_filepath)
 simulation_settings_dict = clt.load_json_new_dict(simulation_settings_filepath)
 
-simulation_settings_dict["transition_type"] = "binomial_deterministic"
+simulation_settings_dict["transition_type"] = "binom_deterministic"
 simulation_settings_dict["timesteps_per_day"] = 1
 
 bit_generator = np.random.MT19937(88888)

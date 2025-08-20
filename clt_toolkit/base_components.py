@@ -20,8 +20,8 @@ class SubpopModelError(Exception):
     pass
 
 
-def approx_binomial_probability_from_rate(rate: np.ndarray,
-                                          interval_length: int) -> np.ndarray:
+def approx_binom_probability_from_rate(rate: np.ndarray,
+                                       interval_length: int) -> np.ndarray:
     """
     Converts a rate (events per time) to the probability of any event
     occurring in the next time interval of length `interval_length`,
@@ -310,9 +310,9 @@ class TransitionVariable(ABC):
         """
         This method gets assigned to one of the following methods
             based on the `TransitionVariable` transition type:
-            `self.get_binomial_realization`, `self.get_binomial_taylor_approx_realization`,
-            `self.get_poisson_realization`, `self.get_binomial_deterministic_realization`,
-            `self.get_binomial_taylor_approx_deterministic_realization`,
+            `self.get_binom_realization`, `self.get_binom_taylor_approx_realization`,
+            `self.get_poisson_realization`, `self.get_binom_deterministic_realization`,
+            `self.get_binom_taylor_approx_deterministic_realization`,
             `self.get_poisson_deterministic_realization`. This is done so that
             the same method `self.get_realization` can be called regardless of
             transition type.
@@ -328,15 +328,15 @@ class TransitionVariable(ABC):
 
         pass
 
-    def get_binomial_realization(self,
-                                 RNG: np.random.Generator,
-                                 num_timesteps: int) -> np.ndarray:
+    def get_binom_realization(self,
+                              RNG: np.random.Generator,
+                              num_timesteps: int) -> np.ndarray:
         """
         Uses `RNG` to generate binomial random variable with
             number of trials equal to population count in the
             origin `Compartment` and probability computed from
             a function of the `TransitionVariable`'s current rate
-            -- see the `approx_binomial_probability_from_rate`
+            -- see the `approx_binom_probability_from_rate`
             function for details.
 
         Parameters:
@@ -354,11 +354,11 @@ class TransitionVariable(ABC):
         """
 
         return RNG.binomial(n=np.asarray(self.base_count, dtype=int),
-                            p=approx_binomial_probability_from_rate(self.current_rate, 1.0 / num_timesteps))
+                            p=approx_binom_probability_from_rate(self.current_rate, 1.0 / num_timesteps))
 
-    def get_binomial_taylor_approx_realization(self,
-                                               RNG: np.random.Generator,
-                                               num_timesteps: int) -> np.ndarray:
+    def get_binom_taylor_approx_realization(self,
+                                            RNG: np.random.Generator,
+                                            num_timesteps: int) -> np.ndarray:
         """
         Uses `RNG` to generate binomial random variable with
             number of trials equal to population count in the
@@ -405,15 +405,15 @@ class TransitionVariable(ABC):
         """
         return RNG.poisson(self.base_count * self.current_rate / float(num_timesteps))
 
-    def get_binomial_deterministic_realization(self,
-                                               RNG: np.random.Generator,
-                                               num_timesteps: int) -> np.ndarray:
+    def get_binom_deterministic_realization(self,
+                                            RNG: np.random.Generator,
+                                            num_timesteps: int) -> np.ndarray:
         """
         Deterministically returns mean of binomial distribution
             (number of trials x probability), where number of trials
             equals population count in the origin `Compartment` and
             probability is computed from a function of the `TransitionVariable`'s
-            current rate -- see the `approx_binomial_probability_from_rate`
+            current rate -- see the `approx_binom_probability_from_rate`
             function for details.
 
         Parameters:
@@ -431,12 +431,26 @@ class TransitionVariable(ABC):
         """
 
         return np.asarray(self.base_count *
-                          approx_binomial_probability_from_rate(self.current_rate, 1.0 / num_timesteps),
+                          approx_binom_probability_from_rate(self.current_rate, 1.0 / num_timesteps),
                           dtype=int)
 
-    def get_binomial_taylor_approx_deterministic_realization(self,
-                                                             RNG: np.random.Generator,
-                                                             num_timesteps: int) -> np.ndarray:
+    def get_binom_deterministic_no_round_realization(self,
+                                                     RNG: np.random.Generator,
+                                                     num_timesteps: int) -> np.ndarray:
+        """
+        See get_binom_deterministic_realization for parameters.
+
+        The same as `get_binom_deterministic_realization` except no rounding --
+            so the populations can be non-integer. This is used to test the torch
+            implementation (because that implementation does not round either).
+        """
+
+        return np.asarray(self.base_count *
+                          approx_binom_probability_from_rate(self.current_rate, 1.0 / num_timesteps))
+
+    def get_binom_taylor_approx_deterministic_realization(self,
+                                                          RNG: np.random.Generator,
+                                                          num_timesteps: int) -> np.ndarray:
         """
         Deterministically returns mean of binomial distribution
             (number of trials x probability), where number of trials
@@ -547,9 +561,9 @@ class TransitionVariableGroup:
 
         # If marginal transition type is any kind of binomial transition,
         #   then its joint transition type is a multinomial counterpart
-        # For example, if the marginal transition type is TransitionTypes.BINOMIAL_DETERMINISTIC,
-        #   then the joint transition type is JointTransitionTypes.MULTINOMIAL_DETERMINISTIC
-        transition_type = transition_type.replace("binomial", "multinomial")
+        # For example, if the marginal transition type is TransitionTypes.BINOM_DETERMINISTIC,
+        #   then the joint transition type is JointTransitionTypes.MULTINOM_DETERMINISTIC
+        transition_type = transition_type.replace("binom", "multinom")
         self._transition_type = transition_type
 
         # Dynamically assign a method to get_joint_realization attribute
@@ -589,7 +603,7 @@ class TransitionVariableGroup:
                                 num_timesteps: int) -> list:
         """
         Returns an array of probabilities used for joint binomial
-        (multinomial) transitions (`get_multinomial_realization` method).
+        (multinomial) transitions (`get_multinom_realization` method).
 
         Returns:
             contains positive floats <= 1, size equal to
@@ -602,8 +616,8 @@ class TransitionVariableGroup:
 
         total_rate = self.get_total_rate()
 
-        total_outgoing_probability = approx_binomial_probability_from_rate(total_rate,
-                                                                           1 / num_timesteps)
+        total_outgoing_probability = approx_binom_probability_from_rate(total_rate,
+                                                                        1 / num_timesteps)
 
         # Create probabilities_list, where element i corresponds to the
         #   transition variable i's current rate divided by the total rate,
@@ -644,10 +658,10 @@ class TransitionVariableGroup:
         """
         This function is dynamically assigned based on the
         `TransitionVariableGroup`'s `transition_type` -- this function is set to
-        one of the following methods: `self.get_multinomial_realization`,
-        `self.get_multinomial_taylor_approx_realization`,
-        `self.get_poisson_realization`, `self.get_multinomial_deterministic_realization`,
-        `self.get_multinomial_taylor_approx_deterministic_realization`,
+        one of the following methods: `self.get_multinom_realization`,
+        `self.get_multinom_taylor_approx_realization`,
+        `self.get_poisson_realization`, `self.get_multinom_deterministic_realization`,
+        `self.get_multinom_taylor_approx_deterministic_realization`,
         `self.get_poisson_deterministic_realization`.
 
         Parameters:
@@ -661,9 +675,9 @@ class TransitionVariableGroup:
 
         pass
 
-    def get_multinomial_realization(self,
-                                    RNG: np.random.Generator,
-                                    num_timesteps: int) -> np.ndarray:
+    def get_multinom_realization(self,
+                                 RNG: np.random.Generator,
+                                 num_timesteps: int) -> np.ndarray:
         """
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from multinomial distribution.
@@ -704,9 +718,9 @@ class TransitionVariableGroup:
 
         return realizations_array
 
-    def get_multinomial_taylor_approx_realization(self,
-                                                  RNG: np.random.Generator,
-                                                  num_timesteps: int) -> np.ndarray:
+    def get_multinom_taylor_approx_realization(self,
+                                               RNG: np.random.Generator,
+                                               num_timesteps: int) -> np.ndarray:
         """
         Returns an array of transition realizations (number transitioning
         to outgoing compartments) sampled from multinomial distribution
@@ -797,11 +811,11 @@ class TransitionVariableGroup:
 
         return realizations_array
 
-    def get_multinomial_deterministic_realization(self,
-                                                  RNG: np.random.Generator,
-                                                  num_timesteps: int) -> np.ndarray:
+    def get_multinom_deterministic_realization(self,
+                                               RNG: np.random.Generator,
+                                               num_timesteps: int) -> np.ndarray:
         """
-        Deterministic counterpart to `self.get_multinomial_realization` --
+        Deterministic counterpart to `self.get_multinom_realization` --
         uses mean (n x p, i.e. total counts x probability array) as realization
         rather than randomly sampling.
 
@@ -826,11 +840,25 @@ class TransitionVariableGroup:
         probabilities_array = self.get_probabilities_array(num_timesteps)
         return np.asarray(self.origin.current_val * probabilities_array, dtype=int)
 
-    def get_multinomial_taylor_approx_deterministic_realization(self,
-                                                                RNG: np.random.Generator,
-                                                                num_timesteps: int) -> np.ndarray:
+    def get_multinom_deterministic_no_round_realization(self,
+                                                        RNG: np.random.Generator,
+                                                        num_timesteps: int) -> np.ndarray:
         """
-        Deterministic counterpart to `self.get_multinomial_taylor_approx_realization` --
+        See `get_multinom_deterministic_realization` for parameters.
+
+        The same as `get_multinom_deterministic_realization` except no rounding --
+        so the populations can be non-integer. This is used to test the torch
+        implementation (because that implementation does not round either).
+        """
+
+        probabilities_array = self.get_probabilities_array(num_timesteps)
+        return np.asarray(self.origin.current_val * probabilities_array)
+
+    def get_multinom_taylor_approx_deterministic_realization(self,
+                                                             RNG: np.random.Generator,
+                                                             num_timesteps: int) -> np.ndarray:
+        """
+        Deterministic counterpart to `self.get_multinom_taylor_approx_realization` --
         uses mean (n x p, i.e. total counts x probability array) as realization
         rather than randomly sampling.
 
@@ -890,7 +918,7 @@ class TransitionVariableGroup:
         """
 
         # Since the ith element in probabilities_array corresponds to the ith transition variable
-        #   in transition_variables, the ith element in multinomial_realizations_list
+        #   in transition_variables, the ith element in multinom_realizations_list
         #   also corresponds to the ith transition variable in transition_variables
         # Update the current realization of the transition variables contained in this group
         for ix in range(len(self.transition_variables)):
@@ -1561,6 +1589,7 @@ class SubpopModel(ABC):
         """
 
         for timestep in range(num_timesteps):
+
             self.update_transition_rates()
 
             self.sample_transitions()

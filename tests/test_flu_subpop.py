@@ -1,20 +1,3 @@
-# Note: pytest fixtures are AMAZING! For those unfamiliar
-#   with fixtures, please read more (for example, here:
-#   https://docs.pytest.org/en/6.2.x/fixture.html)
-#   -- fixtures are recreated for each test, which means that
-#   each test gets a fresh instant and we do not have to
-#   "reset" the simulation (or state) in between tests.
-#   There are many other benefits as well...
-
-# WARNING:
-#   If there are too few timesteps_per_day (in each SubpopModel's
-#   SimulationSettings), then it is possible for Binomial Taylor Approximation
-#   (both stochastic and deterministic) to fail. This is because
-#   the input into the "probability parameter" for the numpy
-#   random binomial draw may be not be in [0,1]. Thus, the
-#   Binomial Taylor Approximation transition type may not reliably
-#   pass all tests with arbitrary SimulationSettings values.
-
 import flu_core as flu
 import clt_toolkit as clt
 
@@ -23,39 +6,10 @@ import pandas as pd
 import copy
 import pytest
 
-from flu_fixtures import subpop_inputs, make_subpop_model
-from clt_toolkit import updated_dataclass
+from helpers import binom_transition_types_list, binom_random_transition_types_list, \
+    binom_no_taylor_transition_types_list, inputs_id_list, check_state_variables_same_history
 
 base_path = clt.utils.PROJECT_ROOT / "tests" / "test_input_files"
-
-import sys
-
-# WARNING:
-#   Currently excluding Poisson transition types from automatic
-#   test run. Poisson transition types are not always well-behaved
-#   -- this is because the Poisson distribution is unbounded.
-#   For example, values of beta_baseline that are too high
-#   can result in negative compartment populations.
-#   Similarly, if num_timesteps is small, this can result
-#   in negative compartment populations. Sometimes tests fail because
-#   these choices of parameter values and parameter initial values
-#   are unsuitable for well-behaved Poisson random variables.
-binomial_transition_types_list = [clt.TransitionTypes.BINOMIAL,
-                                  clt.TransitionTypes.BINOMIAL_DETERMINISTIC,
-                                  clt.TransitionTypes.BINOMIAL_TAYLOR_APPROX,
-                                  clt.TransitionTypes.BINOMIAL_TAYLOR_APPROX_DETERMINISTIC]
-
-binomial_random_transition_types_list = [clt.TransitionTypes.BINOMIAL,
-                                         clt.TransitionTypes.BINOMIAL_TAYLOR_APPROX]
-
-inputs_id_list = ["caseA", "caseB_subpop1"]
-
-
-def check_state_variables_same_history(subpop_model_A: clt.SubpopModel,
-                                       subpop_model_B: clt.SubpopModel):
-    for name in subpop_model_A.all_state_variables.keys():
-        assert np.array_equal(np.array(subpop_model_A.all_state_variables[name].history_vals_list),
-                              np.array(subpop_model_B.all_state_variables[name].history_vals_list))
 
 
 def test_num_timesteps(make_subpop_model):
@@ -68,14 +22,14 @@ def test_num_timesteps(make_subpop_model):
     """
 
     few_timesteps_model = make_subpop_model("few_timesteps",
-                                            clt.TransitionTypes.BINOMIAL_DETERMINISTIC,
+                                            clt.TransitionTypes.BINOM_DETERMINISTIC,
                                             timesteps_per_day = 2)
 
     few_timesteps_model.prepare_daily_state()
     few_timesteps_model._simulate_timesteps(1)
 
     many_timesteps_model = make_subpop_model("many_timesteps",
-                                             clt.TransitionTypes.BINOMIAL_DETERMINISTIC,
+                                             clt.TransitionTypes.BINOM_DETERMINISTIC,
                                              timesteps_per_day = 20)
 
     many_timesteps_model.prepare_daily_state()
@@ -104,7 +58,7 @@ def test_subpop_correct_object_count(make_subpop_model):
     assert len(model.dynamic_vals) == 1
 
 
-@pytest.mark.parametrize("transition_type", binomial_transition_types_list)
+@pytest.mark.parametrize("transition_type", binom_transition_types_list)
 def test_subpop_constructor_no_unintended_sharing(make_subpop_model, transition_type):
     """
     Regression test: there was a previous bug where the same
@@ -143,7 +97,7 @@ def test_subpop_constructor_no_unintended_sharing(make_subpop_model, transition_
                         getattr(init_vals, key)).all()
 
 
-@pytest.mark.parametrize("transition_type", binomial_random_transition_types_list)
+@pytest.mark.parametrize("transition_type", binom_random_transition_types_list)
 def test_subpop_constructor_reproducible_results(make_subpop_model, transition_type):
     """
     If the flu model constructor creates two identical models
@@ -167,7 +121,7 @@ def test_subpop_constructor_reproducible_results(make_subpop_model, transition_t
     check_state_variables_same_history(first_model, second_model)
 
 
-@pytest.mark.parametrize("transition_type", binomial_random_transition_types_list)
+@pytest.mark.parametrize("transition_type", binom_random_transition_types_list)
 def test_subpop_no_transmission_when_beta_zero(make_subpop_model, transition_type):
     """
     If the transmission rate beta_baseline = 0, then S should not decrease over time
@@ -183,7 +137,7 @@ def test_subpop_no_transmission_when_beta_zero(make_subpop_model, transition_typ
     assert np.sum((np.diff(np.sum(S_history, axis=(1, 2))) >= 0)) == len(S_history) - 1
 
 
-@pytest.mark.parametrize("transition_type", binomial_transition_types_list)
+@pytest.mark.parametrize("transition_type", binom_transition_types_list)
 def test_subpop_dead_compartment_monotonic(make_subpop_model, transition_type):
     """
     People do not rise from the dead; the dead compartment
@@ -201,7 +155,7 @@ def test_subpop_dead_compartment_monotonic(make_subpop_model, transition_type):
     assert np.sum(np.diff(np.sum(D_history, axis=(1, 2))) >= 0) == len(D_history) - 1
 
 
-@pytest.mark.parametrize("transition_type", binomial_transition_types_list)
+@pytest.mark.parametrize("transition_type", binom_transition_types_list)
 @pytest.mark.parametrize("inputs_id", inputs_id_list)
 def test_subpop_population_is_constant(make_subpop_model, transition_type, inputs_id):
     """
@@ -222,7 +176,7 @@ def test_subpop_population_is_constant(make_subpop_model, transition_type, input
                       np.sum(subpop_model.params.total_pop_age_risk)) < 1e-6
 
 
-@pytest.mark.parametrize("transition_type", binomial_random_transition_types_list)
+@pytest.mark.parametrize("transition_type", binom_random_transition_types_list)
 @pytest.mark.parametrize("inputs_id", inputs_id_list)
 def test_subpop_reset_reproducible_results(make_subpop_model, transition_type, inputs_id):
     """
@@ -256,7 +210,7 @@ def test_subpop_reset_reproducible_results(make_subpop_model, transition_type, i
                               np.array(reset_model_history_dict[name]))
 
 
-@pytest.mark.parametrize("transition_type", binomial_transition_types_list)
+@pytest.mark.parametrize("transition_type", binom_transition_types_list)
 def test_compartments_integer_population(make_subpop_model, transition_type):
     """
     Compartment populations should be integer-valued.
@@ -272,7 +226,7 @@ def test_compartments_integer_population(make_subpop_model, transition_type):
                     np.asarray(compartment.current_val, dtype=int)).all()
 
 
-@pytest.mark.parametrize("transition_type", binomial_transition_types_list)
+@pytest.mark.parametrize("transition_type", binom_transition_types_list)
 def test_transition_format(make_subpop_model, transition_type):
     """
     Transition variables' transition rates and
@@ -307,55 +261,3 @@ def test_transition_format(make_subpop_model, transition_type):
                 assert isinstance(element, float)
 
 
-# See note at beginning of document on why taylor approximation is excluded --
-#   it's badly behaved for only 1 timestep per day (p < 0 or p > 1 for the
-#   binomial probability -- so the test could "fail" for reasons unrelated to the actual test
-binomial_no_taylor_transition_types_list = [clt.TransitionTypes.BINOMIAL,
-                                            clt.TransitionTypes.BINOMIAL_DETERMINISTIC]
-
-
-@pytest.mark.parametrize("transition_type", binomial_no_taylor_transition_types_list)
-@pytest.mark.parametrize("inputs_id", inputs_id_list)
-def test_metapop_no_travel(make_subpop_model, transition_type, inputs_id):
-    """
-    If two subpopulations comprise a MetapopModel (travel model), then
-    if there is no travel between the two subpopulations, the
-    MetapopModel should behave exactly like two INDEPENDENTLY RUN
-    versions of the SubpopModel instances.
-
-    We can "turn travel off" in multiple ways:
-    - Setting pairwise travel proportions to 0 (so that 0% of
-        subpopulation i travels to subpopulation j, for each
-        distinct i,j subpopulation pair, i != j)
-    - Or setting the mobility_modifier to 0 for each
-        subpopulation
-    We test both of these options, one at a time
-
-    Note -- this test will only pass when timesteps_per_day on
-    each SimulationSettings is 1. This is because, for the sake of efficiency,
-    for MetapopModel instances, each InteractionTerm is updated
-    only ONCE PER DAY rather than after every single discretized timestep.
-    In contrast, independent SubpopModel instances (not linked by any
-    metapopulation/travel model) do not have any interaction terms.
-    The S_to_E transition variable rate does not depend on any
-    interaction terms, and depends on state variables that get updated
-    at every discretized timestep.
-    """
-
-    subpopA = make_subpop_model("A", transition_type, timesteps_per_day = 1, case_id_str = inputs_id)
-    subpopB = make_subpop_model("B", transition_type, num_jumps = 1, timesteps_per_day = 1, case_id_str = inputs_id)
-
-    metapopAB_model = flu.FluMetapopModel([subpopA, subpopB],
-                                          flu.FluMixingParams(travel_proportions=np.zeros((2, 2)),
-                                                              num_locations=2))
-
-    metapopAB_model.simulate_until_day(1)
-
-    subpopA_independent = make_subpop_model("A_independent", transition_type, timesteps_per_day = 1, case_id_str = inputs_id)
-    subpopB_independent = make_subpop_model("B_independent", transition_type, num_jumps = 1, timesteps_per_day = 1, case_id_str = inputs_id)
-
-    subpopA_independent.simulate_until_day(1)
-    subpopB_independent.simulate_until_day(1)
-
-    check_state_variables_same_history(subpopA, subpopA_independent)
-    check_state_variables_same_history(subpopB, subpopB_independent)
