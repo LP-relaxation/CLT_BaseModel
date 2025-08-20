@@ -155,7 +155,7 @@ def test_subpop_dead_compartment_monotonic(make_subpop_model, transition_type):
     assert np.sum(np.diff(np.sum(D_history, axis=(1, 2))) >= 0) == len(D_history) - 1
 
 
-@pytest.mark.parametrize("transition_type", binom_transition_types_list)
+@pytest.mark.parametrize("transition_type", binom_random_transition_types_list)
 @pytest.mark.parametrize("inputs_id", inputs_id_list)
 def test_subpop_population_is_constant(make_subpop_model, transition_type, inputs_id):
     """
@@ -210,7 +210,7 @@ def test_subpop_reset_reproducible_results(make_subpop_model, transition_type, i
                               np.array(reset_model_history_dict[name]))
 
 
-@pytest.mark.parametrize("transition_type", binom_transition_types_list)
+@pytest.mark.parametrize("transition_type", binom_random_transition_types_list + ["poisson"])
 def test_compartments_integer_population(make_subpop_model, transition_type):
     """
     Compartment populations should be integer-valued.

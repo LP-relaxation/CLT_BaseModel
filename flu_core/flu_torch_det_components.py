@@ -343,21 +343,24 @@ def advance_timestep(state: FluFullMetapopStateTensors,
 
     MV_change = compute_MV_change(state, params, precomputed, schedules, day_counter, dt)
 
-    S_new = state.S + R_to_S - S_to_E
+    S_new = torch.nn.functional.softplus(state.S + R_to_S - S_to_E)
 
-    E_new = state.E + S_to_E - E_to_IP - E_to_IA
+    E_new = torch.nn.functional.softplus(state.E + S_to_E - E_to_IP - E_to_IA)
 
-    IP_new = state.IP + E_to_IP - IP_to_IS
+    IP_new = torch.nn.functional.softplus(state.IP + E_to_IP - IP_to_IS)
 
-    IS_new = state.IS + IP_to_IS - IS_to_R - IS_to_H
+    IS_new = torch.nn.functional.softplus(state.IS + IP_to_IS - IS_to_R - IS_to_H)
 
-    IA_new = state.IA + E_to_IA - IA_to_R
+    if (IS_to_H < 0).any():
+        breakpoint()
 
-    H_new = state.H + IS_to_H - H_to_R - H_to_D
+    IA_new = torch.nn.functional.softplus(state.IA + E_to_IA - IA_to_R)
 
-    R_new = state.R + IS_to_R + IA_to_R + H_to_R - R_to_S
+    H_new = torch.nn.functional.softplus(state.H + IS_to_H - H_to_R - H_to_D)
 
-    D_new = state.D + H_to_D
+    R_new = torch.nn.functional.softplus(state.R + IS_to_R + IA_to_R + H_to_R - R_to_S)
+
+    D_new = torch.nn.functional.softplus(state.D + H_to_D)
 
     M_new = state.M + M_change
 

@@ -138,13 +138,13 @@ opt_params = copy.deepcopy(params)
 # There's definitely room for improvement/clarity here...
 # WE MUST TELL TORCH TO TRACK THE GRADIENT ON THE PARAMETERS WE WANT TO
 #   OPTIMIZE! see `requires_grad = True`
-opt_params.beta_baseline_raw = torch.tensor([1.0, 2.0, 2.0], dtype=torch.float64, requires_grad=True)
+opt_params.beta_baseline_raw = torch.tensor([1.4, 2.0, 2.0], dtype=torch.float64, requires_grad=True)
 
-opt_params.IS_to_H_adjusted_prop_raw = torch.tensor([[0.001],
-                                                     [0.001],
-                                                     [0.001],
-                                                     [0.001],
-                                                     [0.001]], dtype=torch.float64, requires_grad=True)
+# opt_params.IS_to_H_adjusted_prop_raw = torch.tensor([[0.001],
+#                                                      [0.001],
+#                                                      [0.001],
+#                                                      [0.001],
+#                                                      [0.001]], dtype=torch.float64, requires_grad=True)
 
 # Generate "true" history
 true_admits_history = flu.torch_simulation_hospital_admits(state,
@@ -174,24 +174,26 @@ IS_to_H_adjusted_prop_history = []
 loss_history = []
 fitting_start_time = time.time()
 
-for i in range(int(2e3)):
+for i in range(int(5e3)):
     optimizer.zero_grad()
     opt_params.beta_baseline = opt_params.beta_baseline_raw.view(L, 1, 1).expand(L, 5, 1)
     # opt_params.IS_to_H_adjusted_prop = opt_params.IS_to_H_adjusted_prop_raw.view(1, 5, 1).expand(L, 5, 1)
     sim_result = flu.torch_simulation_hospital_admits(init_state, opt_params, precomputed, schedules, 100, 2)
     loss = torch.nn.functional.mse_loss(sim_result, true_admits_history)
+    # breakpoint()
     loss.backward()
     # torch.nn.utils.clip_grad_norm_([opt_params.beta_baseline_raw,
     #                                 opt_params.IS_to_H_adjusted_prop_raw], max_norm=1.0)
     optimizer.step()
-    with torch.no_grad():
-        opt_params.beta_baseline_raw.clamp_(1.0, 3.0)
-        opt_params.IS_to_H_adjusted_prop_raw.clamp_(0.0, 0.2)
-    if i % 10 == 0:
+    # with torch.no_grad():
+        # opt_params.beta_baseline_raw.clamp_(1.0, 3.0)
+        # opt_params.IS_to_H_adjusted_prop_raw.clamp_(0.0, 0.2)
+    if i % 50 == 0:
     # if True:
         print(time.time() - fitting_start_time)
         print("Loss function: " + str(loss))
         print("Estimated betas: " + str(opt_params.beta_baseline_raw.clone()))
+        print("Grad " + str(opt_params.beta_baseline_raw.grad))
         # print("Estimated IHR: " + str(opt_params.IS_to_H_adjusted_prop_raw.clone()))
         loss_history.append(loss)
         beta_baseline_opt_history.append(opt_params.beta_baseline_raw.clone())
@@ -204,11 +206,17 @@ print(time.time() - fitting_start_time)
 print(opt_params.beta_baseline)
 
 np.savetxt("caseABC_sameIHR_beta.csv", np.stack([t.detach().numpy() for t in beta_baseline_opt_history]), delimiter=",")
-np.savetxt("caseABC_sameIHR_IHR.csv", np.stack([t.detach().numpy().squeeze() for t in IS_to_H_adjusted_prop_history]),
-           delimiter=",")
-np.savetxt("caseABC_sameIHR_mse.csv", np.stack([t.detach().numpy() for t in loss_history]), delimiter=",")
+# np.savetxt("caseABC_sameIHR_IHR.csv", np.stack([t.detach().numpy().squeeze() for t in IS_to_H_adjusted_prop_history]),
+#           delimiter=",")
+# np.savetxt("caseABC_sameIHR_mse.csv", np.stack([t.detach().numpy() for t in loss_history]), delimiter=",")
 
 breakpoint()
+
+# 1.5520, 2.1708, 1.8934
+opt_params.beta_baseline_raw = torch.tensor([1.55, 2.17, 1.89])
+opt_params.beta_baseline = opt_params.beta_baseline_raw.view(L, 1, 1).expand(L, 5, 1)
+
+sh, th = flu.torch_simulate_full_history(init_state, opt_params, precomputed, schedules, 100, 2)
 
 # Optional -- can simulate with fitted parameters and plot corresponding output
 # Commented out for now but can un-comment

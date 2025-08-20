@@ -8,7 +8,7 @@ import datetime
 from .utils import updated_dataclass
 from .base_data_structures import SubpopState, SubpopParams, SimulationSettings, \
     TransitionTypes, JointTransitionTypes
-
+import torch
 
 class MetapopModelError(Exception):
     """Custom exceptions for metapopulation simulation model errors."""
@@ -1713,6 +1713,20 @@ class SubpopModel(ABC):
 
         for compartment in self.compartments.values():
             compartment.update_current_val()
+
+            # By construction (using binomial/multinomial with or without taylor expansion),
+            #   more people cannot leave the compartment than are in the compartment
+            # However, for Poisson any for ANY deterministic version, it is possible
+            #   to have more people leaving the compartment than are in the compartment,
+            #   and hence negative-valued compartments
+            # We use this function to fix this, and also use a differentiable torch
+            #   function to be consistent with the torch implementation (this still
+            #   allows us to take derivatives in the torch implementation)
+            # The syntax is janky here -- we want everything as an array, but
+            #   we need to pass a tensor to the torch functional
+            if "deterministic" in self.simulation_settings.transition_type:
+                compartment.current_val = \
+                        np.array(torch.nn.functional.softplus(torch.tensor(compartment.current_val)))
 
             # After updating the compartment's current value,
             #   reset its inflow and outflow attributes, to

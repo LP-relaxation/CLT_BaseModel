@@ -45,7 +45,7 @@ Note that many of the fixed parameters will likely be common across city models,
     - Again, computed the rate-adjusted proportion using formula given in mathematical formulation.
 - `inf_induced_saturation`, `vax_induced_saturation` -- Anass Analysis 2025
 - `inf_induced_inf_risk_reduce`, `vax_induced_inf_risk_reduce` -- Anass Analysis 2025
-- `inf_induced_hosp_risk_reduce` -- Anass Analysis 08/09/2025, analysis in PDF posted in Slack: (the values of k/(k-1) equal) "6.81 for H1N1 and 9.09 for H3N2" -- according to the [CDC](https://www.cdc.gov/flu/whats-new/flu-summary-2023-2024.html) H1N1 was dominant in 2023-2024 so we'll use the first one -- solving for k, that means the risk reduction is 1.17 roughly.
+- `inf_induced_hosp_risk_reduce` -- Anass Analysis 08/09/2025, analysis in PDF posted in Slack: (the values of k/(k-1) equal) "6.81 for H1N1 and 9.09 for H3N2" -- according to the [CDC](https://www.cdc.gov/flu/whats-new/flu-summary-2023-2024.html) H1N1 was dominant in 2023-2024 so we'll use the first one -- solving for k, that means the risk reduction is 0.87 roughly.
 
 ## Parameters that need to be changed or fit
 - `mobility_modifier` -- need to be replaced by mobility data-driven estimates
