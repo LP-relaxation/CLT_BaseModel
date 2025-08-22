@@ -126,7 +126,7 @@ class SIHRSubpopParams(clt.SubpopParams):
         H_to_R_rate (positive float):
             rate at which people in H move to R --
             units of people per day.
-        I_to_H_prop (np.ndarray):
+        I_to_H_prop (np.ndarray of shape (A, R)):
             contains values in [0,1] corresponding to
             probability of going to hospital given
             infection, for a specific age-risk group
@@ -346,10 +346,7 @@ class SIHRSubpopModel(clt.SubpopModel):
 
         return schedules
 
-    def create_epi_metrics(
-            self,
-            transition_variables: sc.objdict[str, clt.TransitionVariable]) \
-            -> sc.objdict[str, clt.EpiMetric]:
+    def create_epi_metrics(self) -> sc.objdict[str, clt.EpiMetric]:
 
         epi_metrics = sc.objdict()
 
@@ -371,9 +368,7 @@ class SIHRSubpopModel(clt.SubpopModel):
 
         return compartments
 
-    def create_transition_variables(
-            self,
-            compartments: sc.objdict[str, clt.Compartment] = None) -> sc.objdict[str, clt.TransitionVariable]:
+    def create_transition_variables(self) -> sc.objdict[str, clt.TransitionVariable]:
         """
         For each transition (we have 4 total), create an instance
         of the associated `clt.TransitionVariable` subclass. To
@@ -394,10 +389,10 @@ class SIHRSubpopModel(clt.SubpopModel):
 
         transition_variables = sc.objdict()
 
-        S = compartments.S
-        I = compartments.I
-        H = compartments.H
-        R = compartments.R
+        S = self.compartments.S
+        I = self.compartments.I
+        H = self.compartments.H
+        R = self.compartments.R
 
         transition_variables.S_to_I = SusceptibleToInfected(origin=S, destination=I, transition_type=type)
         transition_variables.I_to_R = InfectedToRecovered(origin=I, destination=R, transition_type=type)
@@ -406,11 +401,7 @@ class SIHRSubpopModel(clt.SubpopModel):
 
         return transition_variables
 
-    def create_transition_variable_groups(
-            self,
-            compartments: sc.objdict[str, clt.Compartment] = None,
-            transition_variables: sc.objdict[str, clt.TransitionVariable] = None)\
-            -> sc.objdict[str, clt.TransitionVariableGroup]:
+    def create_transition_variable_groups(self) -> sc.objdict[str, clt.TransitionVariableGroup]:
         """
         When there are multiple transitions out of a single compartment,
         we need a `TransitionVariableGroup` to handle the jointly distributed
@@ -430,10 +421,10 @@ class SIHRSubpopModel(clt.SubpopModel):
 
         transition_variable_groups = sc.objdict()
 
-        transition_variable_groups.I_out = clt.TransitionVariableGroup(origin=compartments.I,
+        transition_variable_groups.I_out = clt.TransitionVariableGroup(origin=self.compartments.I,
                                                                        transition_type=transition_type,
                                                                        transition_variables=
-                                                                       (transition_variables.I_to_R,
-                                                                        transition_variables.I_to_H))
+                                                                       (self.transition_variables.I_to_R,
+                                                                        self.transition_variables.I_to_H))
 
         return transition_variable_groups

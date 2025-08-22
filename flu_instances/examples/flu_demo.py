@@ -39,7 +39,7 @@ schedules_info = flu.FluSubpopSchedules(absolute_humidity=humidity_df,
 # Note that we can also create these dictionaries directly
 #   rather than reading from a predefined input data file
 state = clt.make_dataclass_from_json(compartments_epi_metrics_init_vals_filepath,
-                                                             flu.FluSubpopState)
+                                     flu.FluSubpopState)
 params = clt.make_dataclass_from_json(subpop_params_filepath, flu.FluSubpopParams)
 mixing_params = clt.make_dataclass_from_json(mixing_params_filepath, flu.FluMixingParams)
 settings = clt.make_dataclass_from_json(simulation_settings_filepath, flu.SimulationSettings)
@@ -144,9 +144,7 @@ flu_demo_model.reset_simulation()
 #   periodicity
 num_age_groups = flu_demo_model.subpop_models.north.params.num_age_groups
 
-
 for subpop_model in flu_demo_model.subpop_models.values():
-
     subpop_model.params = clt.updated_dataclass(subpop_model.params,
                                                 {"school_contact_matrix": np.zeros((num_age_groups, num_age_groups)),
                                                  "work_contact_matrix": np.zeros((num_age_groups, num_age_groups))})

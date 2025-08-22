@@ -6,6 +6,9 @@ import datetime
 
 
 class TransitionTypes(str, Enum):
+    """
+    Defines available options for `transition_type` in `TransitionVariable`.
+    """
     BINOM = "binom"
     BINOM_DETERMINISTIC = "binom_deterministic"
     BINOM_DETERMINISTIC_NO_ROUND = "binom_deterministic_no_round"
@@ -16,6 +19,9 @@ class TransitionTypes(str, Enum):
 
 
 class JointTransitionTypes(str, Enum):
+    """
+    Defines available options for `transition_type` in `TransitionVariableGroup`.
+    """
     MULTINOM = "multinom"
     MULTINOM_DETERMINISTIC = "multinom_deterministic"
     MULTINOM_TAYLOR_APPROX = "multinom_taylor_approx"

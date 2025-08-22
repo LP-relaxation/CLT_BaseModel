@@ -58,11 +58,12 @@ def create_dict_of_tensors(d: dict,
     return {k: to_tensor(k, v) for k, v in d.items()}
 
 
-def compute_beta_adjusted(_state: FluFullMetapopStateTensors,
+def compute_beta_adjusted(state: FluFullMetapopStateTensors,
                           params: FluFullMetapopParamsTensors,
                           schedules: FluFullMetapopScheduleTensors,
                           day_counter: int) -> torch.Tensor:
-    absolute_humidity = schedules.absolute_humidity[day_counter]
+
+    absolute_humidity = state.absolute_humidity[day_counter]
     beta_adjusted = params.beta_baseline * (1 + params.humidity_impact * np.exp(-180 * absolute_humidity))
 
     return beta_adjusted
@@ -244,7 +245,7 @@ def compute_M_change(state: FluFullMetapopStateTensors, params: FluFullMetapopPa
     # Note: already includes dt
     R_to_S = state.R * torch_approx_binom_probability_from_rate(params.R_to_S_rate, dt)
 
-    M_change = (R_to_S / precomputed.total_pop_LAR) * \
+    M_change = (R_to_S / precomputed.total_pop_LAR_tensor) * \
                (1 - params.inf_induced_saturation * state.M - params.vax_induced_saturation * state.MV) - \
                params.inf_induced_immune_wane * state.M * dt
 
@@ -259,7 +260,7 @@ def compute_MV_change(state: FluFullMetapopStateTensors,
                       schedules: FluFullMetapopScheduleTensors,
                       day_counter: int,
                       dt: float) -> torch.Tensor:
-    MV_change = state.daily_vaccines / precomputed.total_pop_LAR - \
+    MV_change = state.daily_vaccines / precomputed.total_pop_LAR_tensor - \
                 params.vax_induced_immune_wane * state.MV
 
     return MV_change * dt

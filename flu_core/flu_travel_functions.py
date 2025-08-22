@@ -5,6 +5,15 @@ from .flu_data_structures import FluTravelStateTensors, \
     FluTravelParamsTensors, FluPrecomputedTensors
 
 
+# Dimensions
+#   L (int):
+#       number of locations/subpopulations
+#   A (int):
+#       number of age groups
+#   R (int):
+#       number of risk groups
+
+
 def compute_wtd_infected(state: FluTravelStateTensors, params: FluTravelParamsTensors) -> torch.Tensor:
     return params.IA_relative_inf * state.IA + params.IP_relative_inf + state.IP + state.IS
 
@@ -39,7 +48,7 @@ def compute_active_pop_LAR(state: FluTravelStateTensors,
     #   function signature consistency with other
     #   similar computation functions
 
-    return precomputed.total_pop_LAR - state.IS - state.H
+    return precomputed.total_pop_LAR_tensor - state.IS - state.H
 
 
 def compute_effective_pop_LA(state: FluTravelStateTensors,
@@ -166,6 +175,7 @@ def compute_residents_traveling_exposure(flu_contact_matrix: torch.Tensor,
 def compute_total_mixing_exposure(state: FluTravelStateTensors,
                                   params: FluTravelParamsTensors,
                                   precomputed: FluPrecomputedTensors) -> torch.Tensor:
+
     L, A, R = precomputed.L, precomputed.A, precomputed.R
 
     mobility_modifier = params.mobility_modifier
@@ -208,8 +218,6 @@ def compute_total_mixing_exposure(state: FluTravelStateTensors,
                                             wtd_infectious_ratio_LLA,
                                             l,
                                             k)
-
-        # breakpoint()
 
         normalized_total_mixing_exposure = relative_suscept * raw_total_mixing_exposure
 

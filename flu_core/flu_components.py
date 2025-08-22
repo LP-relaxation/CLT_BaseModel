@@ -82,6 +82,10 @@ class SusceptibleToExposed(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            (np.ndarray of shape (A, R))
+        """
 
         # If `total_mixing_exposure` has not been updated,
         #   then there is no travel model -- so, simulate
@@ -98,7 +102,7 @@ class SusceptibleToExposed(clt.TransitionVariable):
         vax_induced_proportional_risk_reduce = vax_induced_inf_risk_reduce / (1 - vax_induced_inf_risk_reduce)
 
         immune_force = (1 + inf_induced_proportional_risk_reduce * state.M +
-                          vax_induced_proportional_risk_reduce * state.MV)
+                        vax_induced_proportional_risk_reduce * state.MV)
 
         if self.total_mixing_exposure is not None:
 
@@ -130,6 +134,9 @@ class RecoveredToSusceptible(clt.TransitionVariable):
     TransitionVariable-derived class for movement from the
     "R" to "S" compartment. The functional form is the same across
     subpopulations.
+
+    Returns:
+        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
@@ -148,6 +155,9 @@ class ExposedToAsymp(clt.TransitionVariable):
     Each ExposedToAsymp instance forms a TransitionVariableGroup with
     a corresponding ExposedToPresymp instance (these two
     transition variables are jointly distributed).
+
+    Returns:
+        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
@@ -166,6 +176,9 @@ class ExposedToPresymp(clt.TransitionVariable):
     Each ExposedToPresymp instance forms a TransitionVariableGroup with
     a corresponding ExposedToAsymp instance (these two
     transition variables are jointly distributed).
+
+    Returns:
+        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
@@ -180,6 +193,9 @@ class PresympToSymp(clt.TransitionVariable):
     TransitionVariable-derived class for movement from the
     "IP" to "IS" compartment. The functional form is the same across
     subpopulations.
+
+    Returns:
+        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
@@ -198,12 +214,14 @@ class SympToRecovered(clt.TransitionVariable):
     Each SympToRecovered instance forms a TransitionVariableGroup with
     a corresponding SympToHosp instance (these two
     transition variables are jointly distributed).
+
+    Returns:
+        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
-
         inf_induced_hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
         inf_induced_proportional_risk_reduce = inf_induced_hosp_risk_reduce / (1 - inf_induced_hosp_risk_reduce)
 
@@ -221,6 +239,9 @@ class AsympToRecovered(clt.TransitionVariable):
     TransitionVariable-derived class for movement from the
     "IA" to "R" compartment. The functional form is the same across
     subpopulations.
+
+    Returns:
+        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
@@ -239,6 +260,9 @@ class HospToRecovered(clt.TransitionVariable):
     Each HospToRecovered instance forms a TransitionVariableGroup with
     a corresponding HospToDead instance (these two
     transition variables are jointly distributed).
+
+    Returns:
+        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
@@ -272,6 +296,9 @@ class SympToHosp(clt.TransitionVariable):
 
     The rate of SympToHosp decreases as population-level immunity
     against hospitalization increases.
+
+    Returns:
+        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
@@ -515,12 +542,7 @@ def compute_wtd_presymp_asymp_by_age(subpop_state: FluSubpopState,
         respectively, and then summed over risk groups.
 
     Returns:
-        np.ndarray:
-            A x 1 array -- where A is the number of age
-            groups -- the ith element corresponds to the
-            weighted sum of presymptomatic and asymptomatic
-            individuals, also summed across all risk groups,
-            for age group i.
+        (np.ndarray of shape (A, R))
     """
 
     # sum over risk groups
@@ -559,9 +581,9 @@ class FluSubpopModel(clt.SubpopModel):
     """
     Class for creating ImmunoSEIRS flu model with predetermined fixed
     structure -- initial values and epidemiological structure are
-    populated by user-specified JSON files.
+    populated by user-specified `JSON` files.
 
-    Key method create_transmission_model returns a SubpopModel
+    Key method create_transmission_model returns a `SubpopModel`
     instance with S-E-I-H-R-D compartments and M
     and MV epi metrics.
     
@@ -594,9 +616,9 @@ class FluSubpopModel(clt.SubpopModel):
         - MV is a VaxInducedImmunity instance
 
     Transition rates and update formulas are specified in
-        corresponding classes.
+    corresponding classes.
 
-    See parent class SubpopModel's docstring for additional attributes.
+    See parent class `SubpopModel`'s docstring for additional attributes.
     """
 
     def __init__(self,
@@ -628,23 +650,52 @@ class FluSubpopModel(clt.SubpopModel):
         self.schedules_spec = schedules_spec
 
         # IMPORTANT NOTE: as always, we must be careful with mutable objects
-        #   and generally use deep copies to avoid modification of the same
-        #   object. But in this function call, using deep copies is unnecessary
-        #   (redundant) because the parent class SubpopModel's __init__()
-        #   creates deep copies.
+        # and generally use deep copies to avoid modification of the same
+        # object. But in this function call, using deep copies is unnecessary
+        # (redundant) because the parent class `SubpopModel`'s `__init__`
+        # creates deep copies.
         super().__init__(state, params, simulation_settings, RNG, name)
 
-    def modify_params(self, updates_dict):
+    def modify_params(self,
+                      updates_dict: dict):
+        """
+        `SubpopParams` is a frozen dataclass to avoid users
+        naively changing parameter values and getting undesirable results.
 
+        In a `FluMetapopModel`, subpopulation parameters are combined into
+        (L, A, R) tensors across L subpopulations. This method lets users
+        safely modify a single subpopulation field; the metapopulation-wide
+        tensors are updated automatically afterward.
+
+        Parameter:
+            updates_dict (dict):
+                Dictionary specifying values to update in a
+                `FluSubpopParams` instance -- keys must match the
+                field names of `FluSubpopParams`. 
+        """
+
+        # Since `SubpopParams` is frozen, we return a new instance
+        #   with the reflected updates
         self.params = clt.updated_dataclass(self.params, updates_dict)
 
         if self.metapop_model:
             self.metapop_model.update_travel_params_tensors()
 
+            # Adding this for extra safety in case the user does not
+            # call `get_flu_torch_inputs` for accessing the
+            # `FullMetapopParams` instance.
+
+            # If this attribute is not `None`, it means we are using
+            # the `torch` implementation, and we should update the
+            # corresponding `FullMetapopParams` instance with the new
+            # `FluMixingParams` values.
+            if self._full_metapop_params_tensors:
+                self.update_full_metapop_params_tensors()
+
     def create_compartments(self) -> sc.objdict[str, clt.Compartment]:
 
-        # Create `Compartment` instances S-E-IA-IP-IS-H-R-D (7 compartments total),
-        #   save in sc.objdict, and return objdict
+        # Create `Compartment` instances S-E-IA-IP-IS-H-R-D (7 compartments total)
+        # Save instances in `sc.objdict` and return objdict
 
         compartments = sc.objdict()
 
@@ -655,7 +706,7 @@ class FluSubpopModel(clt.SubpopModel):
 
     def create_dynamic_vals(self) -> sc.objdict[str, clt.DynamicVal]:
         """
-        Create all `DynamicVal` instances, save in sc.objdict, and return objdict
+        Create all `DynamicVal` instances, save in `sc.objdict`, and return objdict
         """
 
         dynamic_vals = sc.objdict()
@@ -667,7 +718,7 @@ class FluSubpopModel(clt.SubpopModel):
 
     def create_schedules(self) -> sc.objdict[str, clt.Schedule]:
         """
-        Create all `Schedule` instances, save in sc.objdict, and return objdict
+        Create all `Schedule` instances, save in `sc.objdict`, and return objdict
         """
 
         schedules = sc.objdict()
@@ -688,30 +739,28 @@ class FluSubpopModel(clt.SubpopModel):
 
         return schedules
 
-    def create_transition_variables(self,
-                                    compartments: sc.objdict[str, clt.Compartment]) -> \
-            sc.objdict[str, clt.TransitionVariable]:
+    def create_transition_variables(self) -> sc.objdict[str, clt.TransitionVariable]:
         """
         Create all `TransitionVariable` instances,
-            save in sc.objdict, and return objdict
+        save in `sc.objdict`, and return objdict
         """
 
-        # NOTE: see the parent class `SubpopModel`'s `__init__()` --
-        #   `create_transition_variables` is called after
-        #   `self.simulation_settings` is assigned
+        # NOTE: see the parent class `SubpopModel`'s `__init__` --
+        # `create_transition_variables` is called after
+        # `simulation_settings` is assigned
 
         transition_type = self.simulation_settings.transition_type
 
         transition_variables = sc.objdict()
 
-        S = compartments.S
-        E = compartments.E
-        IP = compartments.IP
-        IS = compartments.IS
-        IA = compartments.IA
-        H = compartments.H
-        R = compartments.R
-        D = compartments.D
+        S = self.compartments.S
+        E = self.compartments.E
+        IP = self.compartments.IP
+        IS = self.compartments.IS
+        IA = self.compartments.IA
+        H = self.compartments.H
+        R = self.compartments.R
+        D = self.compartments.D
 
         transition_variables.R_to_S = RecoveredToSusceptible(R, S, transition_type)
         transition_variables.S_to_E = SusceptibleToExposed(S, E, transition_type)
@@ -726,55 +775,49 @@ class FluSubpopModel(clt.SubpopModel):
 
         return transition_variables
 
-    def create_transition_variable_groups(
-            self,
-            compartments: sc.objdict[str, clt.Compartment],
-            transition_variables: sc.objdict[str, clt.TransitionVariable]) \
-            -> sc.objdict[str, clt.TransitionVariableGroup]:
+    def create_transition_variable_groups(self) -> sc.objdict[str, clt.TransitionVariableGroup]:
         """
         Create all transition variable groups described in docstring (2 transition
-        variable groups total), save in sc.objdict, return
+        variable groups total), save in `sc.objdict`, return objdict
         """
 
         # Shortcuts for attribute access
-        # NOTE: see the parent class SubpopModel's __init__() --
-        #   create_transition_variable_groups is called after
-        #   self.simulation_settings is assigned
+        # NOTE: see the parent class `SubpopModel`'s `__init__` --
+        # `create_transition_variable_groups` is called after
+        # `simulation_settings` is assigned
 
         transition_type = self.simulation_settings.transition_type
 
         transition_variable_groups = sc.objdict()
 
-        transition_variable_groups.E_out = clt.TransitionVariableGroup(compartments.E,
+        transition_variable_groups.E_out = clt.TransitionVariableGroup(self.compartments.E,
                                                                        transition_type,
-                                                                       (transition_variables.E_to_IP,
-                                                                        transition_variables.E_to_IA))
+                                                                       (self.transition_variables.E_to_IP,
+                                                                        self.transition_variables.E_to_IA))
 
-        transition_variable_groups.IS_out = clt.TransitionVariableGroup(compartments.IS,
+        transition_variable_groups.IS_out = clt.TransitionVariableGroup(self.compartments.IS,
                                                                         transition_type,
-                                                                        (transition_variables.IS_to_R,
-                                                                         transition_variables.IS_to_H))
+                                                                        (self.transition_variables.IS_to_R,
+                                                                         self.transition_variables.IS_to_H))
 
-        transition_variable_groups.H_out = clt.TransitionVariableGroup(compartments.H,
+        transition_variable_groups.H_out = clt.TransitionVariableGroup(self.compartments.H,
                                                                        transition_type,
-                                                                       (transition_variables.H_to_R,
-                                                                        transition_variables.H_to_D))
+                                                                       (self.transition_variables.H_to_R,
+                                                                        self.transition_variables.H_to_D))
 
         return transition_variable_groups
 
-    def create_epi_metrics(self,
-                           transition_variables: sc.objdict[str, clt.TransitionVariable]) \
-            -> sc.objdict[str, clt.EpiMetric]:
+    def create_epi_metrics(self) -> sc.objdict[str, clt.EpiMetric]:
         """
         Create all epi metric described in docstring (2 state
-        variables total), save in sc.objdict, and return objdict
+        variables total), save in `sc.objdict`, and return objdict
         """
 
         epi_metrics = sc.objdict()
 
         epi_metrics.M = \
             InfInducedImmunity(getattr(self.state, "M"),
-                               transition_variables.R_to_S)
+                               self.transition_variables.R_to_S)
 
         epi_metrics.MV = \
             VaxInducedImmunity(getattr(self.state, "MV"))
@@ -796,12 +839,12 @@ class FluMetapopModel(clt.MetapopModel, ABC):
                          mixing_params,
                          name)
 
+        # Confirm validity and consistency of `FluMixingParams`
         try:
             num_locations = mixing_params.num_locations
         except KeyError:
             raise FluMetapopModelError("'mixing_params' must contain the key 'num_locations'. \n"
                                        "Please specify it before continuing.")
-
         if num_locations != len(subpop_models):
             raise FluMetapopModelError("'num_locations' should equal the number of items in \n"
                                        "'subpop_models'. Please amend before continuing.")
@@ -809,22 +852,39 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         self.travel_state_tensors = FluTravelStateTensors()
         self.update_travel_state_tensors()
 
+        # `FluMixingParams` info is stored on `FluTravelParamsTensors` --
+        # this order of operations below is important, because
+        # `mixing_params` attribute must be defined before `update_travel_params_tensors()`
+        # is called.
         self.mixing_params = mixing_params
-
         self.travel_params_tensors = FluTravelParamsTensors()
         self.update_travel_params_tensors()
 
-        total_pop_LAR = self.compute_total_pop_LAR()
+        total_pop_LAR_tensor = self.compute_total_pop_LAR_tensor()
 
-        self.precomputed = FluPrecomputedTensors(total_pop_LAR,
+        self.precomputed = FluPrecomputedTensors(total_pop_LAR_tensor,
                                                  self.travel_params_tensors)
 
         # Generally not used unless using torch version
-        self.full_metapop_params_tensors = None
-        self.full_metapop_state_tensors = None
-        self.full_metapop_schedule_tensors = None
+        self._full_metapop_params_tensors = None
+        self._full_metapop_state_tensors = None
+        self._full_metapop_schedule_tensors = None
 
-    def modify_mixing_params(self, updates_dict):
+    def modify_mixing_params(self,
+                             updates_dict: dict):
+        """
+        `FluMixingParams` is a frozen dataclass to avoid users
+        naively changing parameter values and getting undesirable results.
+
+        This method lets users safely modify a `FluMixingParams` field;
+        the metapopulation-wide tensors are updated automatically afterward.
+
+        Parameter:
+            updates_dict (dict):
+                Dictionary specifying values to update in a
+                `FluSubpopParams` instance -- keys must match the
+                field names of `FluSubpopParams`. 
+        """
 
         self.mixing_params = clt.updated_dataclass(self.mixing_params, updates_dict)
         self.update_travel_params_tensors()
@@ -833,16 +893,37 @@ class FluMetapopModel(clt.MetapopModel, ABC):
 
         self.precomputed.sum_residents_nonlocal_travel_prop = nonlocal_travel_prop.sum(dim=1)
 
-    def compute_total_pop_LAR(self):
+        # Adding this for extra safety in case the user does not
+        # call `get_flu_torch_inputs` for accessing the
+        # `FullMetapopParams` instance.
+
+        # If this attribute is not `None`, it means we are using
+        # the `torch` implementation, and we should update the
+        # corresponding `FullMetapopParams` instance with the new
+        # `FluMixingParams` values.
+        if self._full_metapop_params_tensors:
+            self.update_full_metapop_params_tensors()
+
+    def compute_total_pop_LAR_tensor(self) -> torch.tensor:
+        """
+        For each subpopulation, sum initial values of population
+        in each compartment for age-risk groups. Store all information
+        as tensor and return tensor.
+
+        Parameter:
+            (torch.tensor of size (L, A, R)):
+                Total population (across all compartments) for
+                location-age-risk (l, a, r).
+        """
 
         # ORDER MATTERS! USE ORDERED DICTIONARY HERE
         #   to preserve correct index order in tensors!
         #   See `update_travel_params_tensors` for detailed note.
         subpop_models_ordered = self._subpop_models_ordered
 
-        total_pop_LAR = torch.zeros(self.travel_params_tensors.num_locations,
-                                    self.travel_params_tensors.num_age_groups,
-                                    self.travel_params_tensors.num_risk_groups)
+        total_pop_LAR_tensor = torch.zeros(self.travel_params_tensors.num_locations,
+                                           self.travel_params_tensors.num_age_groups,
+                                           self.travel_params_tensors.num_risk_groups)
 
         # All subpop models should have the same compartments' keys
         for name in subpop_models_ordered[0].compartments.keys():
@@ -853,12 +934,19 @@ class FluMetapopModel(clt.MetapopModel, ABC):
                 compartment = getattr(model.compartments, name)
                 metapop_vals.append(compartment.current_val)
 
-            total_pop_LAR = total_pop_LAR + torch.tensor(np.asarray(metapop_vals))
+            total_pop_LAR_tensor = total_pop_LAR_tensor + torch.tensor(np.asarray(metapop_vals))
 
-        return total_pop_LAR
+        return total_pop_LAR_tensor
 
-    def _update_state_tensors(self,
-                              target: FluTravelStateTensors) -> FluTravelStateTensors:
+    def update_state_tensors(self,
+                             target: FluTravelStateTensors) -> None:
+        """
+        Update `target` instance in-place with current simulation
+        values. Each field of `target` corresponds to a field in
+        `FluSubpopState`, and contains either a tensor of size
+        (L, A, R) or a tensor of size (L), where (l, a, r) refers to
+        location-age-risk.
+        """
 
         # ORDER MATTERS! USE ORDERED DICTIONARY HERE
         #   to preserve correct index order in tensors!
@@ -883,23 +971,53 @@ class FluMetapopModel(clt.MetapopModel, ABC):
                 current_val = getattr(model.state, name)
                 metapop_vals.append(current_val)
 
+            # Probably want to update this to be cleaner...
+            # `SubpopState` fields that correspond to `Schedule` instances
+            # have initial values of `None` -- but we cannot build a tensor
+            # with `None` values, so we convert values to 0s.
             if any(v is None for v in metapop_vals):
                 setattr(target, name, torch.tensor(np.full(np.shape(metapop_vals), 0.0)))
             else:
                 setattr(target, name, torch.tensor(np.asarray(metapop_vals)))
 
-    def update_travel_state_tensors(self) -> None:
+            # Only fields corresponding to `Schedule` instances can be
+            # size (L) -- this is because the schedule value may be scalar for
+            # each subpopulation. Other fields should all be size (L, A, R). 
 
-        self._update_state_tensors(self.travel_state_tensors)
+    def update_travel_state_tensors(self) -> None:
+        """
+        Update `travel_state_tensors` attribute in-place.
+        `FluTravelStateTensors` only has fields corresponding
+        to state variables relevant for the travel model.
+        Converts subpopulation-specific state to
+        tensors of size (L, A, R) for location-age-risk
+        (except for a few exceptions that have different dimensions).
+        """
+
+        self.update_state_tensors(self.travel_state_tensors)
 
     def update_full_metapop_state_tensors(self) -> None:
+        """
+        Update `_full_metapop_state_tensors` attribute in-place.
+        `FluFullMetapopStateTensors` has fields corresponding
+        to all state variables in the simulation.
+        Converts subpopulation-specific state to
+        tensors of size (L, A, R) for location-age-risk
+        (except for a few exceptions that have different dimensions).
+        """
 
-        if self.full_metapop_state_tensors is None:
-            self.full_metapop_state_tensors = FluFullMetapopStateTensors()
-        self._update_state_tensors(self.full_metapop_state_tensors)
+        if self._full_metapop_state_tensors is None:
+            self._full_metapop_state_tensors = FluFullMetapopStateTensors()
+        self.update_state_tensors(self._full_metapop_state_tensors)
 
-    def _update_params_tensors(self,
-                               target: FluTravelParamsTensors) -> FluTravelParamsTensors:
+    def update_params_tensors(self,
+                              target: FluTravelParamsTensors) -> FluTravelParamsTensors:
+        """
+        Update `target` in-place. Converts subpopulation-specific
+        parameters to tensors of size (L, A, R) for location-age-risk,
+        except for `num_locations` and `travel_proportions`, which
+        have size 1 and (L, L) respectively.
+        """
 
         # USE THE ORDERED DICTIONARY HERE FOR SAFETY!
         #   AGAIN, ORDER MATTERS BECAUSE ORDER DETERMINES
@@ -934,19 +1052,45 @@ class FluMetapopModel(clt.MetapopModel, ABC):
 
                 setattr(target, name, torch.tensor(metapop_vals))
 
+        # Convert all tensors to correct size!
         target.standardize_shapes()
 
     def update_travel_params_tensors(self) -> None:
+        """
+        Update `travel_params_tensors` attribute in-place.
+        `FluTravelParamsTensors` only has fields corresponding
+        to parameters relevant for the travel model.
+        Converts subpopulation-specific parameters to
+        tensors of size (L, A, R) for location-age-risk
+        (except for a few exceptions that have different dimensions).
+        """
 
-        self._update_params_tensors(target=self.travel_params_tensors)
+        self.update_params_tensors(target=self.travel_params_tensors)
 
     def update_full_metapop_params_tensors(self) -> None:
+        """
+        Update `_full_metapop_params_tensors` attribute in-place.
+        `FluFullMetapopParamsTensors` has fields corresponding
+        to all parameters in the simulation. Converts subpopulation-specific
+        parameters to tensors of size (L, A, R) for location-age-risk
+        (except for a few exceptions that have different dimensions).
+        """
 
-        if self.full_metapop_params_tensors is None:
-            self.full_metapop_params_tensors = FluFullMetapopParamsTensors()
-        self._update_params_tensors(target=self.full_metapop_params_tensors)
+        if self._full_metapop_params_tensors is None:
+            self._full_metapop_params_tensors = FluFullMetapopParamsTensors()
+        self.update_params_tensors(target=self._full_metapop_params_tensors)
 
     def apply_inter_subpop_updates(self) -> None:
+        """
+        Update the `FluTravelStateTensors` according to the simulation state
+        and compute the total mixing exposure, which includes across-subpopulation
+        mixing/travel. Update the `total_mixing_exposure` attribute on each
+        subpopulation's `SusceptibleToExposed` instance accordingly, so each
+        of these transition variables can compute its transition rate.
+
+        See `apply_inter_subpop_updates` on `MetapopModel` base class
+        for logic of how/when this is called in the simulation.
+        """
 
         self.update_travel_state_tensors()
 
@@ -960,18 +1104,38 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         #   determines the order (index) in any metapopulation tensors
         subpop_models = self._subpop_models_ordered
 
+        # Updates `total_mixing_exposure` attribute on each `SusceptibleToExposed`
+        # instance -- this value captures across-population travel/mixing.
         for i in range(len(subpop_models)):
             subpop_models.values()[i].transition_variables.S_to_E.total_mixing_exposure = \
                 total_mixing_exposure[i, :, :]
 
     def setup_full_metapop_schedule_tensors(self):
+        """
+        Creates `FluFullMetapopScheduleTensors` instance and assigns to
+        `_full_metapop_schedule_tensors` attribute.
 
-        self.full_metapop_schedule_tensors = FluFullMetapopScheduleTensors()
+        For the metapopulation model's L locations/subpopulations, for each day,
+        each value-related column in each schedule is either a float or
+        array of size (A, R) for age-risk groups.
+
+        We aggregate and reformat this schedule information and put it
+        into a `FluFullMetapopScheduleTensors` instance, where fields
+        correspond to a schedule value, and values are lists of tensors of
+        size (L, A, R). The ith element of each list corresponds to the
+        ith simulation day.
+        """
+
+        self._full_metapop_schedule_tensors = FluFullMetapopScheduleTensors()
 
         L = self.precomputed.L
         A = self.precomputed.A
         R = self.precomputed.R
 
+        # Note: there is probably a more consistent way to do this,
+        # because now `flu_contact_matrix` has two values: "is_school_day"
+        # and "is_work_day" -- other schedules' dataframes only have one
+        # relevant column value rather than two
         for item in [("absolute_humidity", "absolute_humidity"),
                      ("flu_contact_matrix", "is_school_day"),
                      ("flu_contact_matrix", "is_work_day"),
@@ -985,6 +1149,9 @@ class FluMetapopModel(clt.MetapopModel, ABC):
             for subpop_model in self._subpop_models_ordered.values():
                 df = subpop_model.schedules[schedule_name].timeseries_df
 
+                # Using the `start_real_date` specification given in subpop's `SimulationSettings`,
+                # extract the relevant part of the dataframe with dates >= the simulation start date.
+                # Note that `start_real_date` should be the same for each subpopulation
                 start_date = datetime.datetime.strptime(subpop_model.simulation_settings.start_real_date, "%Y-%m-%d")
                 df["simulation_day"] = (pd.to_datetime(df["date"], format="%Y-%m-%d") - start_date).dt.days
                 df = df[df["simulation_day"] >= 0]
@@ -1003,27 +1170,38 @@ class FluMetapopModel(clt.MetapopModel, ABC):
             # IMPORTANT: tedious array/tensor shape/size manipulation here
             # metapop_vals: list of L arrays, each shape (num_days, A, R)
             # We need to transpose this... to be a list of num_days tensors, of size L x A x R
-
             num_items = metapop_vals[0].shape[0]
 
             # This is ugly and inefficient -- but at least we only do this once, when we get the initial
             #   state of a metapopulation model in tensor form
-            transposed_metapop_vals = [torch.tensor(np.array([metapop_vals[l][i] for l in range(L)])) for i in range(num_items)]
+            transposed_metapop_vals = [torch.tensor(np.array([metapop_vals[l][i] for l in range(L)])) for i in
+                                       range(num_items)]
 
-            setattr(self.full_metapop_schedule_tensors, values_column_name, transposed_metapop_vals)
+            setattr(self._full_metapop_schedule_tensors, values_column_name, transposed_metapop_vals)
 
-    def get_flu_torch_inputs(self):
+    def get_flu_torch_inputs(self) -> dict:
+        """
+        Prepares and returns metapopulation simulation data in tensor format
+        that can be directly used for `torch` implementation.
+
+        Returns:
+             d (dict):
+                Has keys "state_tensors", "params_tensors", "schedule_tensors",
+                and "precomputed". Corresponds to `FluFullMetapopStateTensors`,
+                `FluFullMetapopParamsTensors`, `FluFullMetapopScheduleTensors`,
+                and `FluPrecomputedTensors` instances respectively.
+        """
 
         self.update_full_metapop_state_tensors()
         self.update_full_metapop_params_tensors()
-        self.full_metapop_params_tensors.standardize_shapes()
+        self._full_metapop_params_tensors.standardize_shapes()
         self.setup_full_metapop_schedule_tensors()
 
         d = {}
 
-        d["state_tensors"] = copy.deepcopy(self.full_metapop_state_tensors)
-        d["params_tensors"] = copy.deepcopy(self.full_metapop_params_tensors)
-        d["schedule_tensors"] = copy.deepcopy(self.full_metapop_schedule_tensors)
+        d["state_tensors"] = copy.deepcopy(self._full_metapop_state_tensors)
+        d["params_tensors"] = copy.deepcopy(self._full_metapop_params_tensors)
+        d["schedule_tensors"] = copy.deepcopy(self._full_metapop_schedule_tensors)
         d["precomputed"] = copy.deepcopy(self.precomputed)
 
         return d

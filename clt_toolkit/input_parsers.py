@@ -9,8 +9,11 @@ class DataClassProtocol(Protocol):
 
 
 def convert_dict_vals_lists_to_arrays(d: dict) -> dict:
+    """
+    Converts dictionary of lists to dictionary of arrays
+    to support `numpy` operations.
+    """
 
-    # convert lists to numpy arrays to support numpy operations
     for key, val in d.items():
         if type(val) is list:
             d[key] = np.asarray(val)
@@ -19,6 +22,20 @@ def convert_dict_vals_lists_to_arrays(d: dict) -> dict:
 
 
 def load_json_new_dict(json_filepath: str) -> dict:
+    """
+    Loads specified `JSON` file into new dictionary.
+    Lists are automatically converted to numpy arrays for
+    computational compatibility, since `JSON` does not natively
+    support `np.ndarray`.
+
+    Args:
+        json_filepath (str):
+            Full `JSON` filepath.
+
+    Returns:
+        (dict):
+            Dictionary loaded with `JSON` information.
+    """
 
     # Note: the "with open" is important for file handling
     #   and avoiding resource leaks -- otherwise,
@@ -32,7 +49,26 @@ def load_json_new_dict(json_filepath: str) -> dict:
     return convert_dict_vals_lists_to_arrays(data)
 
 
-def load_json_augment_dict(json_filepath: str, d: dict) -> dict:
+def load_json_augment_dict(json_filepath: str,
+                           d: dict) -> dict:
+    """
+    Augments pre-existing dictionary with information
+    from `JSON` file -- if keys already exist, the previous values
+    are overriden, otherwise the new key-value pairs are added.
+    Lists are automatically converted to numpy arrays for
+    computational compatibility, since `JSON` does not natively
+    support `np.ndarray`.
+
+    Args:
+        json_filepath (str):
+            Full `JSON` filepath.
+        d (dict):
+            Dictionary to be augmented with new `JSON` values.
+
+    Returns:
+        (dict):
+            Dictionary loaded with `JSON` information.
+    """
 
     with open(json_filepath, 'r') as file:
         data = json.load(file)

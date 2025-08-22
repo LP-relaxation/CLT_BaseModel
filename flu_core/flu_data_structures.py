@@ -13,7 +13,7 @@ class FluSubpopState(clt.SubpopState):
     """
     Data container for pre-specified and fixed set of
     Compartment initial values and EpiMetric initial values
-    in FluModel flu model.
+    for `FluSubpopModel`.
 
     Each field below should be A x R np.ndarray, where
     A is the number of age groups and R is the number of risk groups.
@@ -99,7 +99,7 @@ class FluSubpopState(clt.SubpopState):
 class FluSubpopParams(clt.SubpopParams):
     """
     Data container for pre-specified and fixed epidemiological
-    parameters in FluModel flu model.
+    parameters in `FluSubpopModel`.
 
     Each field of datatype np.ndarray must be A x R,
     where A is the number of age groups and R is the number of
@@ -262,8 +262,10 @@ class FluSubpopParams(clt.SubpopParams):
 @dataclass
 class FluSubpopSchedules:
     """
-    Data container for dataframes used to specify schedules.
-    FORMAT FOR EACH DATAFRAME IS VERY IMPORTANT -- please
+    Data container for dataframes used to specify schedules
+    for each `FluSubpopModel` instance.
+
+    THE FORMAT FOR EACH DATAFRAME IS VERY IMPORTANT -- please
     read and implement carefully.
 
     Attributes:
@@ -296,8 +298,8 @@ class FluSubpopSchedules:
 @dataclass
 class FluTravelStateTensors:
     """
-    Data container for tensors -- used to store arrays that
-    contain data across all subpopulations (collected from each
+    Data container for tensors for `FluMetapopModel` -- used to store arrays
+    that contain data across all subpopulations (collected from each
     location/subpopulation model). Note that not all fields in
     `FluSubpopState` are included -- we only include compartments
     needed for the travel model computation, for efficiency.
@@ -366,8 +368,8 @@ class FluTravelStateTensors:
 @dataclass
 class FluTravelParamsTensors:
     """
-    Data container for tensors -- used to store arrays that
-    contain data across all subpopulations (collected from parameters
+    Data container for tensors for `FluMetapopModel` -- used to store arrays
+    that contain data across all subpopulations (collected from parameters
     on each location/subpopulation model, as well as from the
     metapopulation's associated `FluMixingParams` instance).
     Note that not all fields in `FluSubpopParams` are included
@@ -386,8 +388,11 @@ class FluTravelParamsTensors:
             who travels to location j (on average).
 
     See `FluSubpopParams` docstring for other attributes.
-    Fields are analogous except they are L x A x R or scalar
-    (for location-age-risk).
+
+    Fields are analogous -- but (most) are size (L, A, R) for
+    location-age-risk or size 0 tensors. Exceptions are
+    `travel_proportions`, which is size (L, L),
+    and any of the contact matrices, which are size (L, A, A).
     """
 
     num_locations: Optional[torch.tensor] = None
@@ -408,25 +413,23 @@ class FluTravelParamsTensors:
 
     def standardize_shapes(self) -> None:
         """
-        If field is not a scalar or L x A x R, or is not a special variable
-            listed below, then apply dimension expansion so that fields are
-            L x A x R for tensor multiplication.
+        If field is size (L, A, R) for location-age-risk or size 0 tensors,
+            or is not a special variable isted below, then apply dimension
+            expansion so that fields are size (L, A, R) tensors for tensor multiplication.
 
-        Special variables that are exempted:
-            - `travel_proportions`: this must be L x L
+        Exceptions are `travel_proportions`, which is size (L, L),
+        and any of the contact matrices, which are size (L, A, A).
 
-        Valid values for the `indices_dict` are: "age", "age_risk",
-            "location", and "location_age" -- other combinations
-            are not considered because they do not make sense --
-            we assume that we only have risk IF we have age, for example
+        Not all dimension combinations are considered not all make sense --
+        we assume that we only have risk IF we have age, for example.
         """
 
         L = int(self.num_locations.item())
         A = int(self.num_age_groups.item())
         R = int(self.num_risk_groups.item())
 
-        error_str = "Each SubpopParams field's size must be scalar or L x A x R " \
-                    "(for location-age-risk groups)  -- please check files " \
+        error_str = "Each SubpopParams field must have size (L, A, R) " \
+                    "(for location-age-risk groups) or size 0 -- please check files " \
                     "and inputs, then try again."
 
         for name, value in vars(self).items():
@@ -466,10 +469,9 @@ class FluTravelParamsTensors:
 @dataclass
 class FluFullMetapopStateTensors(FluTravelStateTensors):
     """
-    Data container for tensors -- used to store arrays that
-    contain data across all subpopulations
-    (collected from each location/subpopulation model).
-    Note that in contrast to `FluTravelStateTensors`,
+    Data container for tensors for `FluMetapopModel` -- used to store arrays that
+    contain data across all subpopulations (collected from each
+    location/subpopulation model). In contrast to `FluTravelStateTensors`,
     ALL fields in `FluSubpopState` are included -- this is
     for running the simulation via torch.
 
@@ -490,10 +492,8 @@ class FluFullMetapopStateTensors(FluTravelStateTensors):
 
     See `FluSubpopState` and `FluTravelStateTensors` for other
         attributes -- other attributes here correspond to
-        `FluSubpopState`, but are L x A x R tensors -- where L is the
-        number of subpopulations, and the lth A x R sub-tensor
-        corresponds to the age-risk current value for that
-        `StateVariable`.
+        `FluSubpopState`, but are size (L, A, R) tensors for
+        location-age-risk or size 0 tensors.
     """
 
     # `IP`, `IS`, `IA`, `H`, `flu_contact_matrix` already in
@@ -515,7 +515,7 @@ class FluFullMetapopStateTensors(FluTravelStateTensors):
 @dataclass
 class FluFullMetapopParamsTensors(FluTravelParamsTensors):
     """
-    Data container for tensors -- used to store arrays that
+    Data container for tensors for `FluMetapopModel` -- used to store arrays that
     contain data across all subpopulations (collected from parameters
     on each location/subpopulation model, as well as from the
     metapopulation's associated `FluMixingParams` instance).
@@ -535,8 +535,8 @@ class FluFullMetapopParamsTensors(FluTravelParamsTensors):
             who travels to location j (on average).
 
     See `FluSubpopParams` docstring for other attributes.
-    Other fields are analogous except they are L x A x R
-    or scalar (for location-age-risk).
+    Other fields are analogous except they are size (L, A, R)
+    tensors or size 0 tensors.
     """
 
     beta_baseline: Optional[torch.Tensor] = None
@@ -581,16 +581,16 @@ class FluPrecomputedTensors:
     """
 
     def __init__(self,
-                 total_pop_LAR: torch.Tensor,
+                 total_pop_LAR_tensor: torch.Tensor,
                  params: FluTravelParamsTensors) -> None:
 
-        self.total_pop_LAR = total_pop_LAR
+        self.total_pop_LAR_tensor = total_pop_LAR_tensor
 
         self.L = int(params.num_locations.item())
         self.A = int(params.num_age_groups.item())
         self.R = int(params.num_risk_groups.item())
 
-        self.total_pop_LA = torch.sum(self.total_pop_LAR, dim=2)
+        self.total_pop_LA = torch.sum(self.total_pop_LAR_tensor, dim=2)
 
         # Remove the diagonal!
         self.nonlocal_travel_prop = params.travel_proportions.clone().fill_diagonal_(0.0)
@@ -606,11 +606,15 @@ class FluPrecomputedTensors:
 @dataclass(frozen=True)
 class FluMixingParams:
     """
+    Contains parameters corresponding to inter-subpopulation
+    (metapopulation model) specifications: the number of
+    subpopulations included, and the travel proportions between them.
+
     Params:
         num_locations (int):
             Number of locations (subpopulations) in the
             metapopulation model.
-        travel_proportions (np.ndarray):
+        travel_proportions (np.ndarray of shape (A, R)):
             L x L array of floats in [0,1], where L is the number
             of locations (subpopulations), and the i-jth element
             is the proportion of people in subpopulation i that
