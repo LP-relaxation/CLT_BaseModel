@@ -533,12 +533,12 @@ def torch_simulate_full_history(state: FluFullMetapopStateTensors,
         for timestep in range(timesteps_per_day):
             if timestep == timesteps_per_day-1:
                 state, _, tvar_history = \
-                    advance_timestep(state, params, precomputed, day, dt, save_tvar_history=True)
+                    advance_timestep(state, params, precomputed, dt, save_tvar_history=True)
                 for key in tvar_history:
                     tvar_history_dict[key].append(tvar_history[key])
             else:
                 state, _, _ = \
-                    advance_timestep(state, params, precomputed, day, dt, save_tvar_history=False)
+                    advance_timestep(state, params, precomputed, dt, save_tvar_history=False)
 
         for field in fields(state):
             if field.name == "init_vals":

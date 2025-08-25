@@ -53,28 +53,6 @@ simulation_settings = clt.make_dataclass_from_json(simulation_settings_filepath,
 L = 3
 
 
-#################################################
-############# UTILITY FUNCTIONS #################
-#################################################
-
-# TODO: NEED TO ORGANIZE!
-
-# Turn this into a utility function and put it somewhere...
-#   that is not here :P
-def copy_with_updates(base, updates):
-    return {**base, **updates}
-
-
-# Same with this...
-def enable_grad(container: flu.FluFullMetapopParamsTensors):
-    for f in fields(container):
-        val = getattr(container, f.name)
-
-        if isinstance(val, torch.Tensor):
-            if not val.requires_grad:
-                val.requires_grad_()
-
-
 ####################################################
 ############# CREATE METAPOP MODEL #################
 ####################################################
@@ -214,13 +192,13 @@ breakpoint()
 
 # 1.5520, 2.1708, 1.8934
 opt_params.beta_baseline_raw = torch.tensor([1.55, 2.17, 1.89])
-opt_params.beta_baseline = opt_params.beta_baseline_raw.view(L, 1, 1).expand(L, 5, 1)
-
+opt_params.be
 sh, th = flu.torch_simulate_full_history(init_state, opt_params, precomputed, schedules, 100, 2)
 
 # Optional -- can simulate with fitted parameters and plot corresponding output
 # Commented out for now but can un-comment
 # fitted_admits_history = flu.torch_simulation_hospital_admits(init_state, opt_params, precomputed, schedules, 100, 2)
+ta_baseline = opt_params.beta_baseline_raw.view(L, 1, 1).expand(L, 5, 1)
 
 # plt.clf()
 # plt.plot(torch.sum(true_admits_history, dim=(1, 2)), label="True hospital admits")
