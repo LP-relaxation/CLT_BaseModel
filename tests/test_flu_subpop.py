@@ -261,3 +261,25 @@ def test_transition_format(make_flu_subpop_model, transition_type):
                 assert isinstance(element, float)
 
 
+@pytest.mark.parametrize("transition_type", binom_transition_types_list)
+def test_M_no_waning_no_saturation(make_flu_subpop_model, transition_type):
+
+    """
+    From Anass:
+        I set the waning constant to zero and removed the saturation factor.
+        The equation becomes dM/dt = sigma_{R-S}(t) / N.
+        It means that the final immunity should be (1/N) integral from 0 to T of [sigma_{R-S}(t)] dt.
+    """
+
+    subpop_model = make_flu_subpop_model("subpop_model", transition_type)
+
+    subpop_model.simulation_settings = clt.updated_dataclass(subpop_model.simulation_settings,
+                                                             {"transition_variables_to_save": ["R_to_S"]})
+    subpop_model.modify_subpop_params({"inf_induced_immune_wane": 0,
+                                       "inf_induced_saturation": 0})
+
+    subpop_model.simulate_until_day(100)
+
+    assert np.all(np.isclose(subpop_model.M.current_val,
+                             np.sum(np.asarray(subpop_model.R_to_S.history_vals_list), axis=0) / subpop_model.params.total_pop_age_risk,
+                             rtol=0.02))

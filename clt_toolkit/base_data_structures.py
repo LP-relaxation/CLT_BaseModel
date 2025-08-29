@@ -50,8 +50,8 @@ class SimulationSettings:
         save_daily_history (bool):
             set to `True` to save `current_val` of `StateVariable` to history after each
             simulation day -- set to `False` if want speedier performance.
-        transition_variables_to_save (tuple):
-            Names of transition variables whose histories should be saved
+        transition_variables_to_save (tuple[str]):
+            List of names of transition variables whose histories should be saved
             during the simulation. Saving these can significantly slow
             execution, so leave this tuple empty for faster performance.
     """
@@ -61,6 +61,12 @@ class SimulationSettings:
     start_real_date: str = "2024-10-31"
     save_daily_history: bool = True
     transition_variables_to_save: tuple = ()
+
+    def __post_init__(self):
+
+        # Convert to tuple if a list is passed
+        if not isinstance(self.transition_variables_to_save, tuple):
+            object.__setattr__(self, "transition_variables_to_save", tuple(self.transition_variables_to_save))
 
 
 @dataclass(frozen=True)

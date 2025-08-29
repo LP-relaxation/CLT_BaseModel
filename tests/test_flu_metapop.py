@@ -17,6 +17,25 @@ from helpers import binom_transition_types_list, binom_random_transition_types_l
 from clt_toolkit import updated_dataclass
 
 
+def test_metapop_params_tensors_subpop_indexing(make_flu_metapop_model):
+
+    """
+    Confirm that lth element indeed refers to lth subpopulation
+        in _subpop_models_ordered
+    """
+
+    oop_model = make_flu_metapop_model("binom_deterministic_no_round")
+    d = oop_model.get_flu_torch_inputs()
+
+    params_tensors = d["params_tensors"]
+
+    # Note: may want to expand this test to check more than one parameter
+    assert np.all(np.asarray(params_tensors.total_pop_age_risk[0]) ==
+                  oop_model._subpop_models_ordered[0].params.total_pop_age_risk)
+    assert np.all(np.asarray(params_tensors.total_pop_age_risk[1]) ==
+                  oop_model._subpop_models_ordered[1].params.total_pop_age_risk)
+
+
 def test_oop_and_torch_agree(make_flu_metapop_model):
 
     """

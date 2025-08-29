@@ -1106,6 +1106,11 @@ class MetapopModel(ABC):
                 unique identifier for `MetapopModel`.
         """
 
+        settings_list = [subpop.simulation_settings for subpop in subpop_models]
+        first_settings = settings_list[0]
+        if not all(s == first_settings for s in settings_list[1:]):
+            raise MetapopModelError("Each FluSubpopModel must have same simulation settings.")
+
         # We use both an `objdict` and an `odict` (ordered):
         # - `objdict`: allows convenient dot-access for users (consistent with the rest of the model)
         # - `odict`: preserves the order of subpopulations, which is crucial because

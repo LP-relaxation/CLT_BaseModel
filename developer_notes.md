@@ -11,3 +11,6 @@ Tests to add
 - Accept-reject sampling
   - Reproducibility: running the algorithm twice (with the same RNG each time) should give the same result.
   - Make sure the sampling updates are applied correctly (e.g. to the correct subpopulation(s) and with the correct dimensions).
+
+Features to add
+- Would be nice to make the "checker" in `FluMetapopModel` `__init__` method more robust -- can check dimensions, check for nonnegativity, etc...
