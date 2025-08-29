@@ -1134,6 +1134,37 @@ class MetapopModel(ABC):
         for model in self.subpop_models.values():
             model.metapop_model = self
 
+    def __getattr__(self, name):
+        """
+        Called if normal attribute lookup fails.
+        Delegate to `subpop_models` if name matches a key.
+        """
+
+        if name in self.subpop_models:
+            return self.subpop_models[name]
+        else:
+            raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+
+    def modify_simulation_settings(self,
+                                   updates_dict: dict):
+        """
+        This method applies the changes specified in `updates_dict` to the
+        `simulation_settings` attribute of each subpopulation model.
+        `SimulationSettings` is a frozen dataclass to prevent users from
+        mutating individual subpop settings directly and making subpop
+        models have different settings within the same metapop model.
+        Instead, a new instance is created with the requested updates.
+
+        Parameters:
+            updates_dict (dict):
+                Dictionary specifying values to update in a
+                `SimulationSettings` instance -- keys must match the
+                field names of `SimulationSettings`.
+        """
+
+        for subpop_model in self.subpop_models.values():
+            subpop_model.modify_simulation_settings(updates_dict)
+
     def simulate_until_day(self,
                            simulation_end_day: int) -> None:
         """
@@ -1383,6 +1414,41 @@ class SubpopModel(ABC):
         self.state.schedules = self.schedules
 
         self.params = updated_dataclass(self.params, {"total_pop_age_risk": self.compute_total_pop_age_risk()})
+
+    def __getattr__(self, name):
+        """
+        Called if normal attribute lookup fails.
+        Delegate to `all_state_variables`, `transition_variables`,
+            or `transition_variable_groups` if name matches a key.
+        """
+
+        if name in self.all_state_variables:
+            return self.all_state_variables[name]
+        elif name in self.transition_variables:
+            return self.transition_variables[name]
+        elif name in self.transition_variable_groups:
+            return self.transition_variable_groups[name]
+        else:
+            raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+
+    def modify_simulation_settings(self,
+                                   updates_dict: dict):
+        """
+        This method lets users safely modify simulation settings;
+        if this subpop model is associated with a metapop model,
+        the same updates are applied to all subpop models on the
+        metapop model. See also `modify_simulation_settings` method on
+        `MetapopModel`.
+
+        Parameters:
+            updates_dict (dict):
+                Dictionary specifying values to update in a
+                `SimulationSettings` instance -- keys must match the
+                field names of `SimulationSettings`.
+        """
+
+        self.simulation_settings = \
+            updated_dataclass(self.simulation_settings, updates_dict)
 
     def compute_total_pop_age_risk(self) -> np.ndarray:
         """
@@ -1682,7 +1748,7 @@ class SubpopModel(ABC):
 
         RNG = self.RNG
         timesteps_per_day = self.simulation_settings.timesteps_per_day
-        save_transition_variables_history = self.simulation_settings.save_transition_variables_history
+        transition_variables_to_save = self.simulation_settings.transition_variables_to_save
 
         # Obtain transition variable realizations for jointly distributed transition variables
         #   (i.e. when there are multiple transition variable outflows from an epi compartment)
@@ -1700,9 +1766,8 @@ class SubpopModel(ABC):
             if not tvar.is_jointly_distributed:
                 tvar.current_val = tvar.get_realization(RNG, timesteps_per_day)
 
-        if save_transition_variables_history:
-            for tvar in self.transition_variables.values():
-                tvar.save_history()
+        for name in transition_variables_to_save:
+            self.transition_variables[name].save_history()
 
     def update_compartments(self) -> None:
         """

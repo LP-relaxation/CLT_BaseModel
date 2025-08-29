@@ -44,23 +44,23 @@ class SimulationSettings:
             valid value must be from `TransitionTypes`, specifying
             the probability distribution of transitions between
             compartments.
-        start_real_date (datetime.date):
-            actual date that aligns with the beginning of the simulation
+        start_real_date (str):
+            actual date in string format "YYYY-MM-DD" that aligns with the
+            beginning of the simulation.
         save_daily_history (bool):
             set to `True` to save `current_val` of `StateVariable` to history after each
             simulation day -- set to `False` if want speedier performance.
-        save_transition_variables_history (bool):
-            set to `True` to save `current_val` of `TransitionVariable` to history
-            after each TIMESTEP -- note that this makes the simulation execution time
-            extremely slow -- set to `False` if want speedier performance.
+        transition_variables_to_save (tuple):
+            Names of transition variables whose histories should be saved
+            during the simulation. Saving these can significantly slow
+            execution, so leave this tuple empty for faster performance.
     """
 
     timesteps_per_day: int = 7
     transition_type: str = TransitionTypes.BINOM
-    start_real_date: datetime.time = datetime.datetime.strptime("2024-10-31",
-                                                                "%Y-%m-%d").date()
+    start_real_date: str = "2024-10-31"
     save_daily_history: bool = True
-    save_transition_variables_history: bool = False
+    transition_variables_to_save: tuple = ()
 
 
 @dataclass(frozen=True)

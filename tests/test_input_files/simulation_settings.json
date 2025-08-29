@@ -3,5 +3,5 @@
 	"transition_type":"binom_deterministic",
 	"start_real_date": "2022-08-08",
 	"save_daily_history": true,
-	"save_transition_variables_history": true
+	"transition_variables_to_save": []
 }

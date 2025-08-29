@@ -414,7 +414,7 @@ class FluTravelParamsTensors:
     def standardize_shapes(self) -> None:
         """
         If field is size (L, A, R) for location-age-risk or size 0 tensors,
-            or is not a special variable isted below, then apply dimension
+            or is not a special variable listed below, then apply dimension
             expansion so that fields are size (L, A, R) tensors for tensor multiplication.
 
         Exceptions are `travel_proportions`, which is size (L, L),

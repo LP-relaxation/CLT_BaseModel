@@ -84,7 +84,7 @@ class SusceptibleToExposed(clt.TransitionVariable):
                          params: FluSubpopParams) -> np.ndarray:
         """
         Returns:
-            (np.ndarray of shape (A, R))
+            np.ndarray of shape (A, R)
         """
 
         # If `total_mixing_exposure` has not been updated,
@@ -134,14 +134,15 @@ class RecoveredToSusceptible(clt.TransitionVariable):
     TransitionVariable-derived class for movement from the
     "R" to "S" compartment. The functional form is the same across
     subpopulations.
-
-    Returns:
-        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.R_to_S_rate)
 
@@ -155,14 +156,15 @@ class ExposedToAsymp(clt.TransitionVariable):
     Each ExposedToAsymp instance forms a TransitionVariableGroup with
     a corresponding ExposedToPresymp instance (these two
     transition variables are jointly distributed).
-
-    Returns:
-        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.E_to_I_rate * params.E_to_IA_prop)
 
@@ -176,14 +178,16 @@ class ExposedToPresymp(clt.TransitionVariable):
     Each ExposedToPresymp instance forms a TransitionVariableGroup with
     a corresponding ExposedToAsymp instance (these two
     transition variables are jointly distributed).
-
-    Returns:
-        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
+
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.E_to_I_rate * (1 - params.E_to_IA_prop))
 
@@ -193,14 +197,15 @@ class PresympToSymp(clt.TransitionVariable):
     TransitionVariable-derived class for movement from the
     "IP" to "IS" compartment. The functional form is the same across
     subpopulations.
-
-    Returns:
-        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.IP_to_IS_rate)
 
@@ -214,14 +219,15 @@ class SympToRecovered(clt.TransitionVariable):
     Each SympToRecovered instance forms a TransitionVariableGroup with
     a corresponding SympToHosp instance (these two
     transition variables are jointly distributed).
-
-    Returns:
-        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
         inf_induced_hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
         inf_induced_proportional_risk_reduce = inf_induced_hosp_risk_reduce / (1 - inf_induced_hosp_risk_reduce)
 
@@ -239,14 +245,16 @@ class AsympToRecovered(clt.TransitionVariable):
     TransitionVariable-derived class for movement from the
     "IA" to "R" compartment. The functional form is the same across
     subpopulations.
-
-    Returns:
-        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
+
         return np.full((params.num_age_groups, params.num_risk_groups),
                        params.IA_to_R_rate)
 
@@ -260,14 +268,16 @@ class HospToRecovered(clt.TransitionVariable):
     Each HospToRecovered instance forms a TransitionVariableGroup with
     a corresponding HospToDead instance (these two
     transition variables are jointly distributed).
-
-    Returns:
-        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
+
         inf_induced_death_risk_reduce = params.inf_induced_death_risk_reduce
         vax_induced_death_risk_reduce = params.vax_induced_death_risk_reduce
 
@@ -296,14 +306,16 @@ class SympToHosp(clt.TransitionVariable):
 
     The rate of SympToHosp decreases as population-level immunity
     against hospitalization increases.
-
-    Returns:
-        (np.ndarray of shape (A, R))
     """
 
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
+
         inf_induced_hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
         inf_induced_proportional_risk_reduce = inf_induced_hosp_risk_reduce / (1 - inf_induced_hosp_risk_reduce)
 
@@ -333,6 +345,11 @@ class HospToDead(clt.TransitionVariable):
     def get_current_rate(self,
                          state: FluSubpopState,
                          params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
+
         inf_induced_death_risk_reduce = params.inf_induced_death_risk_reduce
         vax_induced_death_risk_reduce = params.vax_induced_death_risk_reduce
 
@@ -378,7 +395,12 @@ class InfInducedImmunity(clt.EpiMetric):
     def get_change_in_current_val(self,
                                   state: FluSubpopState,
                                   params: FluSubpopParams,
-                                  num_timesteps: int):
+                                  num_timesteps: int) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
+
         # Note: the current values of transition variables already include
         #   discretization (division by the number of timesteps) -- therefore,
         #   we do not divide the first part of this equation by the number of
@@ -403,6 +425,11 @@ class VaxInducedImmunity(clt.EpiMetric):
                                   state: FluSubpopState,
                                   params: FluSubpopParams,
                                   num_timesteps: int) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
+
         # Note: `state.daily_vaccines` (based on the value of the `DailyVaccines`
         #   `Schedule` is NOT divided by the number of timesteps -- so we need to
         #   do this division in the equation here.
@@ -542,7 +569,7 @@ def compute_wtd_presymp_asymp_by_age(subpop_state: FluSubpopState,
         respectively, and then summed over risk groups.
 
     Returns:
-        (np.ndarray of shape (A, R))
+        np.ndarray of shape (A, R)
     """
 
     # sum over risk groups
@@ -655,42 +682,6 @@ class FluSubpopModel(clt.SubpopModel):
         # (redundant) because the parent class `SubpopModel`'s `__init__`
         # creates deep copies.
         super().__init__(state, params, simulation_settings, RNG, name)
-
-    def modify_params(self,
-                      updates_dict: dict):
-        """
-        `SubpopParams` is a frozen dataclass to avoid users
-        naively changing parameter values and getting undesirable results.
-
-        In a `FluMetapopModel`, subpopulation parameters are combined into
-        (L, A, R) tensors across L subpopulations. This method lets users
-        safely modify a single subpopulation field; the metapopulation-wide
-        tensors are updated automatically afterward.
-
-        Parameter:
-            updates_dict (dict):
-                Dictionary specifying values to update in a
-                `FluSubpopParams` instance -- keys must match the
-                field names of `FluSubpopParams`. 
-        """
-
-        # Since `SubpopParams` is frozen, we return a new instance
-        #   with the reflected updates
-        self.params = clt.updated_dataclass(self.params, updates_dict)
-
-        if self.metapop_model:
-            self.metapop_model.update_travel_params_tensors()
-
-            # Adding this for extra safety in case the user does not
-            # call `get_flu_torch_inputs` for accessing the
-            # `FullMetapopParams` instance.
-
-            # If this attribute is not `None`, it means we are using
-            # the `torch` implementation, and we should update the
-            # corresponding `FullMetapopParams` instance with the new
-            # `FluMixingParams` values.
-            if self._full_metapop_params_tensors:
-                self.update_full_metapop_params_tensors()
 
     def create_compartments(self) -> sc.objdict[str, clt.Compartment]:
 
@@ -824,6 +815,33 @@ class FluSubpopModel(clt.SubpopModel):
 
         return epi_metrics
 
+    def modify_subpop_params(self,
+                             updates_dict: dict):
+        """
+        This method lets users safely modify a single subpopulation
+        parameters field; if this subpop model is associated with
+        a metapop model, the metapopulation-wide tensors are updated
+        automatically afterward. See also `modify_subpop_params` method on
+        `FluMetapopModel`.
+
+        Parameters:
+            updates_dict (dict):
+                Dictionary specifying values to update in a
+                `FluSubpopParams` instance -- keys must match the
+                field names of `FluSubpopParams`.
+        """
+
+        # If associated with metapop model, run this method
+        #   on the metapop model itself to handle metapopulation-wide
+        #   tensor updating
+        if self.metapop_model:
+            self.metapop_model.modify_subpop_params(self.name,
+                                                    updates_dict)
+        else:
+            # Since `SubpopParams` is frozen, we return a new instance
+            #   with the reflected updates
+            self.params = clt.updated_dataclass(self.params, updates_dict)
+
 
 class FluMetapopModel(clt.MetapopModel, ABC):
     """
@@ -870,16 +888,60 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         self._full_metapop_state_tensors = None
         self._full_metapop_schedule_tensors = None
 
+    def modify_subpop_params(self,
+                             subpop_name: str,
+                             updates_dict: dict):
+        """
+        This method lets users safely modify a single subpopulation
+        parameters field; the metapopulation-wide tensors are updated
+        automatically afterward.
+
+        In a `FluMetapopModel`, subpopulation parameters are combined into
+        (L, A, R) tensors across L subpopulations.`FluSubpopParams` is a frozen
+        dataclass to avoid users naively changing parameter values and getting
+        undesirable results -- thus, `FluSubpopParams` on a subpopulation
+        model cannot be updated directly.
+
+        Parameters:
+            subpop_name (str):
+               Value must match the `name` attribute of one of the
+               `FluSubpopModel` instances contained in this metapopulation
+                model's `subpop_models` attribute.
+            updates_dict (dict):
+                Dictionary specifying values to update in a
+                `FluSubpopParams` instance -- keys must match the
+                field names of `FluSubpopParams`.
+        """
+
+        # Since `FluSubpopParams` is frozen, we return a new instance
+        #   with the reflected updates
+        self.subpop_models[subpop_name].params = clt.updated_dataclass(
+            self.subpop_models[subpop_name].params, updates_dict
+        )
+
+        self.update_travel_params_tensors()
+
+        # Adding this for extra safety in case the user does not
+        # call `get_flu_torch_inputs` for accessing the
+        # `FullMetapopParams` instance.
+
+        # If this attribute is not `None`, it means we are using
+        # the `torch` implementation, and we should update the
+        # corresponding `FullMetapopParams` instance with the new
+        # `FluMixingParams` values.
+        if self._full_metapop_params_tensors:
+            self.update_full_metapop_params_tensors()
+
     def modify_mixing_params(self,
                              updates_dict: dict):
         """
-        `FluMixingParams` is a frozen dataclass to avoid users
-        naively changing parameter values and getting undesirable results.
-
-        This method lets users safely modify a `FluMixingParams` field;
+        This method lets users safely modify flu mixing parameters;
         the metapopulation-wide tensors are updated automatically afterward.
+        `FluMixingParams` is a frozen dataclass to avoid users
+        naively changing parameter values and getting undesirable results --
+        thus, `FluMixingParams` cannot be updated directly.
 
-        Parameter:
+        Parameters:
             updates_dict (dict):
                 Dictionary specifying values to update in a
                 `FluSubpopParams` instance -- keys must match the
@@ -910,10 +972,11 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         in each compartment for age-risk groups. Store all information
         as tensor and return tensor.
 
-        Parameter:
-            (torch.tensor of size (L, A, R)):
-                Total population (across all compartments) for
-                location-age-risk (l, a, r).
+        Returns:
+        --------
+        torch.tensor of size (L, A, R):
+            Total population (across all compartments) for
+            location-age-risk (l, a, r).
         """
 
         # ORDER MATTERS! USE ORDERED DICTIONARY HERE
@@ -1025,6 +1088,11 @@ class FluMetapopModel(clt.MetapopModel, ABC):
         #   TENSOR!
         subpop_models_ordered = self._subpop_models_ordered
 
+        # Subpop models should have the same A, R so grab
+        #   from the first subpop model
+        A = subpop_models_ordered[0].params.num_age_groups
+        R = subpop_models_ordered[0].params.num_risk_groups
+
         for field in fields(target):
 
             name = field.name
@@ -1048,7 +1116,8 @@ class FluMetapopModel(clt.MetapopModel, ABC):
                 # Converting list of arrays to tensors is slow --
                 #   better to convert to array first
                 if isinstance(metapop_vals, list):
-                    metapop_vals = np.array(metapop_vals)
+                    metapop_vals = np.asarray(metapop_vals)
+                    # metapop_vals = np.stack([clt.to_AR_array(x, A, R) for x in metapop_vals])
 
                 setattr(target, name, torch.tensor(metapop_vals))
 
@@ -1191,6 +1260,14 @@ class FluMetapopModel(clt.MetapopModel, ABC):
                 `FluFullMetapopParamsTensors`, `FluFullMetapopScheduleTensors`,
                 and `FluPrecomputedTensors` instances respectively.
         """
+
+        # Note: does not support dynamic variables (yet). If want to
+        #   run pytorch with dynamic variables, will need to create
+        #   a method similar to `setup_full_metapop_schedule_tensors`
+        #   but for dynamic variables. Also note that we cannot differentiate
+        #   with respect to dynamic variables that are discontinuous
+        #   (e.g. a 0-1 intervention) -- so we cannot optimize discontinuous
+        #   dynamic variables.
 
         self.update_full_metapop_state_tensors()
         self.update_full_metapop_params_tensors()

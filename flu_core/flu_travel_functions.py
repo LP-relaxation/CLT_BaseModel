@@ -23,7 +23,7 @@ def compute_wtd_infectious_LA(state: FluTravelStateTensors,
                               params: FluTravelParamsTensors) -> torch.Tensor:
     """
     Returns:
-        (torch.Tensor of size (L, A)):
+        torch.Tensor of size (L, A):
             Weighted infectious, summed over risk groups:
             includes presymptomatic, asymptomatic, and symptomatic,
             weighted by relative infectiousness
@@ -51,7 +51,7 @@ def compute_active_pop_LAR(state: FluTravelStateTensors,
     individuals are not mobile enough to infect others.
 
     Returns:
-        (torch.Tensor of size (L, A, R)):
+        torch.Tensor of size (L, A, R):
             Active population: those who are not
             hospitalized (i.e. those who are not too sick
             to move and travel regularly)
@@ -69,7 +69,7 @@ def compute_effective_pop_LA(state: FluTravelStateTensors,
                              precomputed: FluPrecomputedTensors) -> torch.Tensor:
     """
     Returns:
-        (torch.Tensor of size (L, A)):
+        torch.Tensor of size (L, A):
             Effective population, summed over risk groups.
             See `compute_active_pop_LAR` docstring for more
             information.
@@ -102,7 +102,7 @@ def compute_wtd_infectious_ratio_LLA(state: FluTravelStateTensors,
                                      precomputed: FluPrecomputedTensors) -> torch.Tensor:
     """
     Returns:
-        (torch.Tensor of size (L, L, A):
+        torch.Tensor of size (L, L, A):
             Element i,j,a corresponds to ratio of weighted infectious people
             in location i, age group a (summed over risk groups) to the effective
             population in location j (summed over risk groups)
@@ -130,7 +130,7 @@ def compute_local_to_local_exposure(flu_contact_matrix: torch.Tensor,
     those are factored in later.
 
     Returns:
-        (torch.Tensor of size (A)):
+        torch.Tensor of size (A):
             For a given location (specified by `location_ix`), compute
             local transmission caused by residents traveling within their
             home location, summed over risk groups.
@@ -162,7 +162,7 @@ def compute_outside_visitors_exposure(flu_contact_matrix: torch.Tensor,
     those are factored in later.
 
     Returns:
-        (torch.Tensor of size (A))
+        torch.Tensor of size (A)
     """
 
     # In location `local_ix`, we are looking at the visitors from
@@ -191,7 +191,7 @@ def compute_residents_traveling_exposure(flu_contact_matrix: torch.Tensor,
     immunity adjustments -- those are factored in later.
 
     Returns:
-        (torch.Tensor of size (A))
+        torch.Tensor of size (A)
     """
 
     # See WARNING in `compute_local_to_local_exposure()`
@@ -220,7 +220,7 @@ def compute_total_mixing_exposure(state: FluTravelStateTensors,
     unnecessary repeated multiplication by relative susceptible in each subroutine.
 
     Returns:
-        (torch.Tensor of size (L, A, R))
+        torch.Tensor of size (L, A, R)
     """
 
     L, A, R = precomputed.L, precomputed.A, precomputed.R

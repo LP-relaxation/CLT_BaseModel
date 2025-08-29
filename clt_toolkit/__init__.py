@@ -3,8 +3,9 @@
 
 from .base_components import *
 from .base_data_structures import *
-# from .experiments import *
+from .experiments import *
 from .input_parsers import *
 from .plotting import *
+from .sampling import *
 from .utils import *
 

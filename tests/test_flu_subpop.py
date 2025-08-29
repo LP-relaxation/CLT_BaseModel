@@ -12,7 +12,7 @@ from helpers import binom_transition_types_list, binom_random_transition_types_l
 base_path = clt.utils.PROJECT_ROOT / "tests" / "test_input_files"
 
 
-def test_num_timesteps(make_subpop_model):
+def test_num_timesteps(make_flu_subpop_model):
     """
     If "timesteps_per_day" in SimulationSettings increases (number of timesteps per day
         increases), then step sizes are smaller.
@@ -21,14 +21,14 @@ def test_num_timesteps(make_subpop_model):
         for more timesteps per day.
     """
 
-    few_timesteps_model = make_subpop_model("few_timesteps",
+    few_timesteps_model = make_flu_subpop_model("few_timesteps",
                                             clt.TransitionTypes.BINOM_DETERMINISTIC,
                                             timesteps_per_day = 2)
 
     few_timesteps_model.prepare_daily_state()
     few_timesteps_model._simulate_timesteps(1)
 
-    many_timesteps_model = make_subpop_model("many_timesteps",
+    many_timesteps_model = make_flu_subpop_model("many_timesteps",
                                              clt.TransitionTypes.BINOM_DETERMINISTIC,
                                              timesteps_per_day = 20)
 
@@ -40,14 +40,14 @@ def test_num_timesteps(make_subpop_model):
                 many_timesteps_model.transition_variables[name].current_val).all()
 
 
-def test_subpop_correct_object_count(make_subpop_model):
+def test_subpop_correct_object_count(make_flu_subpop_model):
     """
     For each SubpopModel, there should be 8 epi compartments,
         10 transition variables, 2 transition variable groups,
         and 3 epi metrics
     """
 
-    model = make_subpop_model("model")
+    model = make_flu_subpop_model("model")
 
     assert len(model.compartments) == 8
     assert len(model.transition_variables) == 10
@@ -59,7 +59,7 @@ def test_subpop_correct_object_count(make_subpop_model):
 
 
 @pytest.mark.parametrize("transition_type", binom_transition_types_list)
-def test_subpop_constructor_no_unintended_sharing(make_subpop_model, transition_type):
+def test_subpop_constructor_no_unintended_sharing(make_flu_subpop_model, transition_type):
     """
     Regression test: there was a previous bug where the same
         SubpopState object was being shared across multiple models created
@@ -74,8 +74,8 @@ def test_subpop_constructor_no_unintended_sharing(make_subpop_model, transition_
         created by the same constructor are indeed distinct/independent.
     """
 
-    first_model = make_subpop_model("first", transition_type)
-    second_model = make_subpop_model("second", transition_type)
+    first_model = make_flu_subpop_model("first", transition_type)
+    second_model = make_flu_subpop_model("second", transition_type)
 
     init_vals = copy.deepcopy(second_model.state)
 
@@ -98,7 +98,7 @@ def test_subpop_constructor_no_unintended_sharing(make_subpop_model, transition_
 
 
 @pytest.mark.parametrize("transition_type", binom_random_transition_types_list)
-def test_subpop_constructor_reproducible_results(make_subpop_model, transition_type):
+def test_subpop_constructor_reproducible_results(make_flu_subpop_model, transition_type):
     """
     If the flu model constructor creates two identical models
         with the same starting random number seed, they should give
@@ -112,8 +112,8 @@ def test_subpop_constructor_reproducible_results(make_subpop_model, transition_t
         should not modify objects on that constructor.
     """
 
-    first_model = make_subpop_model("first", transition_type)
-    second_model = make_subpop_model("second", transition_type)
+    first_model = make_flu_subpop_model("first", transition_type)
+    second_model = make_flu_subpop_model("second", transition_type)
 
     first_model.simulate_until_day(100)
     second_model.simulate_until_day(100)
@@ -122,14 +122,14 @@ def test_subpop_constructor_reproducible_results(make_subpop_model, transition_t
 
 
 @pytest.mark.parametrize("transition_type", binom_random_transition_types_list)
-def test_subpop_no_transmission_when_beta_zero(make_subpop_model, transition_type):
+def test_subpop_no_transmission_when_beta_zero(make_flu_subpop_model, transition_type):
     """
     If the transmission rate beta_baseline = 0, then S should not decrease over time
     """
 
-    subpop_model = make_subpop_model("subpop_model", transition_type)
+    subpop_model = make_flu_subpop_model("subpop_model", transition_type)
     subpop_model.reset_simulation()
-    subpop_model.modify_params({"beta_baseline": 0})
+    subpop_model.modify_subpop_params({"beta_baseline": 0})
     subpop_model.simulate_until_day(300)
 
     S_history = subpop_model.compartments["S"].history_vals_list
@@ -138,16 +138,16 @@ def test_subpop_no_transmission_when_beta_zero(make_subpop_model, transition_typ
 
 
 @pytest.mark.parametrize("transition_type", binom_transition_types_list)
-def test_subpop_dead_compartment_monotonic(make_subpop_model, transition_type):
+def test_subpop_dead_compartment_monotonic(make_flu_subpop_model, transition_type):
     """
     People do not rise from the dead; the dead compartment
         should not decrease over time
     """
 
-    subpop_model = make_subpop_model("subpop_model", transition_type)
+    subpop_model = make_flu_subpop_model("subpop_model", transition_type)
 
     subpop_model.reset_simulation()
-    subpop_model.modify_params({"beta_baseline": 1.1})
+    subpop_model.modify_subpop_params({"beta_baseline": 1.1})
     subpop_model.simulate_until_day(300)
 
     D_history = subpop_model.compartments["D"].history_vals_list
@@ -157,13 +157,13 @@ def test_subpop_dead_compartment_monotonic(make_subpop_model, transition_type):
 
 @pytest.mark.parametrize("transition_type", binom_random_transition_types_list)
 @pytest.mark.parametrize("inputs_id", inputs_id_list)
-def test_subpop_population_is_constant(make_subpop_model, transition_type, inputs_id):
+def test_subpop_population_is_constant(make_flu_subpop_model, transition_type, inputs_id):
     """
     The total population (summed over all compartments and age-risk groups)
         should be constant over time, equal to the initial total population.
     """
 
-    subpop_model = make_subpop_model("subpop_model", transition_type, case_id_str = inputs_id)
+    subpop_model = make_flu_subpop_model("subpop_model", transition_type, case_id_str = inputs_id)
 
     for day in range(300):
         subpop_model.simulate_until_day(day)
@@ -178,13 +178,13 @@ def test_subpop_population_is_constant(make_subpop_model, transition_type, input
 
 @pytest.mark.parametrize("transition_type", binom_random_transition_types_list)
 @pytest.mark.parametrize("inputs_id", inputs_id_list)
-def test_subpop_reset_reproducible_results(make_subpop_model, transition_type, inputs_id):
+def test_subpop_reset_reproducible_results(make_flu_subpop_model, transition_type, inputs_id):
     """
     Resetting the random number generator and simulating should
         give the same results as the initial run.
     """
 
-    subpop_model = make_subpop_model("subpop_model", transition_type, case_id_str = inputs_id)
+    subpop_model = make_flu_subpop_model("subpop_model", transition_type, case_id_str = inputs_id)
 
     subpop_model.modify_random_seed(123456789123456789)
     subpop_model.simulate_until_day(100)
@@ -211,12 +211,12 @@ def test_subpop_reset_reproducible_results(make_subpop_model, transition_type, i
 
 
 @pytest.mark.parametrize("transition_type", binom_random_transition_types_list + ["poisson"])
-def test_compartments_integer_population(make_subpop_model, transition_type):
+def test_compartments_integer_population(make_flu_subpop_model, transition_type):
     """
     Compartment populations should be integer-valued.
     """
 
-    subpop_model = make_subpop_model("subpop_model", transition_type)
+    subpop_model = make_flu_subpop_model("subpop_model", transition_type)
 
     for day in [1, 10, 100]:
         subpop_model.simulate_until_day(day)
@@ -227,7 +227,7 @@ def test_compartments_integer_population(make_subpop_model, transition_type):
 
 
 @pytest.mark.parametrize("transition_type", binom_transition_types_list)
-def test_transition_format(make_subpop_model, transition_type):
+def test_transition_format(make_flu_subpop_model, transition_type):
     """
     Transition variables' transition rates and
         current value should be A x L, where
@@ -245,7 +245,7 @@ def test_transition_format(make_subpop_model, transition_type):
         after the fact.
     """
 
-    subpop_model = make_subpop_model("subpop_model", transition_type)
+    subpop_model = make_flu_subpop_model("subpop_model", transition_type)
 
     A = subpop_model.params.num_age_groups
     L = subpop_model.params.num_risk_groups

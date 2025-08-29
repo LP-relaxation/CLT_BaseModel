@@ -548,7 +548,7 @@ def torch_simulate_full_history(state: FluFullMetapopStateTensors,
     return state_history_dict, tvar_history_dict
 
 
-def torch_simulation_hospital_admits(state: FluFullMetapopStateTensors,
+def torch_simulate_hospital_admits(state: FluFullMetapopStateTensors,
                                      params: FluFullMetapopParamsTensors,
                                      precomputed: FluPrecomputedTensors,
                                      schedules: FluFullMetapopScheduleTensors,

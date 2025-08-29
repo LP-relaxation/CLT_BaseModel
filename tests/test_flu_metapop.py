@@ -12,13 +12,12 @@ import pytest
 
 from dataclasses import fields
 
-from conftest import subpop_inputs, make_subpop_model, binom_deterministic_metapopAB
 from helpers import binom_transition_types_list, binom_random_transition_types_list, \
     binom_no_taylor_transition_types_list, inputs_id_list, check_state_variables_same_history
 from clt_toolkit import updated_dataclass
 
 
-def test_oop_and_torch_agree(binom_deterministic_metapopAB):
+def test_oop_and_torch_agree(make_flu_metapop_model):
 
     """
     Make sure that the object-oriented version of the flu model (in `flu_components.py`)
@@ -27,7 +26,7 @@ def test_oop_and_torch_agree(binom_deterministic_metapopAB):
     same model and give the same result.
     """
 
-    oop_model = binom_deterministic_metapopAB
+    oop_model = make_flu_metapop_model("binom_deterministic_no_round")
     d = oop_model.get_flu_torch_inputs()
 
     state = d["state_tensors"]
@@ -57,7 +56,7 @@ def test_oop_and_torch_agree(binom_deterministic_metapopAB):
 
 @pytest.mark.parametrize("transition_type", binom_no_taylor_transition_types_list)
 @pytest.mark.parametrize("inputs_id", inputs_id_list)
-def test_metapop_no_travel(make_subpop_model, transition_type, inputs_id):
+def test_metapop_no_travel(make_flu_subpop_model, transition_type, inputs_id):
     """
     If two subpopulations comprise a MetapopModel (travel model), then
     if there is no travel between the two subpopulations, the
@@ -83,8 +82,8 @@ def test_metapop_no_travel(make_subpop_model, transition_type, inputs_id):
     at every discretized timestep.
     """
 
-    subpopA = make_subpop_model("A", transition_type, timesteps_per_day = 1, case_id_str = inputs_id)
-    subpopB = make_subpop_model("B", transition_type, num_jumps = 1, timesteps_per_day = 1, case_id_str = inputs_id)
+    subpopA = make_flu_subpop_model("A", transition_type, timesteps_per_day = 1, case_id_str = inputs_id)
+    subpopB = make_flu_subpop_model("B", transition_type, num_jumps = 1, timesteps_per_day = 1, case_id_str = inputs_id)
 
     metapopAB_model = flu.FluMetapopModel([subpopA, subpopB],
                                           flu.FluMixingParams(travel_proportions=np.zeros((2, 2)),
@@ -92,8 +91,8 @@ def test_metapop_no_travel(make_subpop_model, transition_type, inputs_id):
 
     metapopAB_model.simulate_until_day(1)
 
-    subpopA_independent = make_subpop_model("A_independent", transition_type, timesteps_per_day = 1, case_id_str = inputs_id)
-    subpopB_independent = make_subpop_model("B_independent", transition_type, num_jumps = 1, timesteps_per_day = 1, case_id_str = inputs_id)
+    subpopA_independent = make_flu_subpop_model("A_independent", transition_type, timesteps_per_day = 1, case_id_str = inputs_id)
+    subpopB_independent = make_flu_subpop_model("B_independent", transition_type, num_jumps = 1, timesteps_per_day = 1, case_id_str = inputs_id)
 
     subpopA_independent.simulate_until_day(1)
     subpopB_independent.simulate_until_day(1)
