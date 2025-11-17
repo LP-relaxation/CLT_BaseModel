@@ -154,28 +154,13 @@ def compute_E_to_IA_rate(params: FluFullMetapopParamsTensors) -> torch.Tensor:
     return params.E_to_I_rate * params.E_to_IA_prop
 
 
-def compute_IP_to_IS(state: FluFullMetapopStateTensors,
-                     params: FluFullMetapopParamsTensors,
-                     dt: float) -> torch.Tensor:
+def compute_IP_to_ISR_rate(state: FluFullMetapopStateTensors,
+                           params: FluFullMetapopParamsTensors) -> torch.Tensor:
     """
     Returns:
         (torch.Tensor of size (L, A, R))
     """
-
-    rate = params.IP_to_IS_rate
-
-    IP_to_IS = state.IP * torch_approx_binom_probability_from_rate(rate, dt)
-
-    return IP_to_IS
-
-
-def compute_IS_to_R_rate(state: FluFullMetapopStateTensors,
-                         params: FluFullMetapopParamsTensors) -> torch.Tensor:
-    """
-    Returns:
-        (torch.Tensor of size (L, A, R))
-    """
-
+    
     inf_induced_hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
     inf_induced_proportional_risk_reduce = inf_induced_hosp_risk_reduce / (1 - inf_induced_hosp_risk_reduce)
 
@@ -185,13 +170,13 @@ def compute_IS_to_R_rate(state: FluFullMetapopStateTensors,
     immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
                       vax_induced_proportional_risk_reduce * state.MV)
 
-    rate = params.IS_to_R_rate * (1 - params.IS_to_H_adjusted_prop / immunity_force)
+    rate = params.IP_to_IS_rate * (1 - params.IP_to_ISH_prop / immunity_force)
 
     return rate
 
 
-def compute_IS_to_H_rate(state: FluFullMetapopStateTensors,
-                         params: FluFullMetapopParamsTensors) -> torch.Tensor:
+def compute_IP_to_ISH_rate(state: FluFullMetapopStateTensors,
+                           params: FluFullMetapopParamsTensors) -> torch.Tensor:
     """
     Returns:
         (torch.Tensor of size (L, A, R))
@@ -206,7 +191,7 @@ def compute_IS_to_H_rate(state: FluFullMetapopStateTensors,
     immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
                       vax_induced_proportional_risk_reduce * state.MV)
 
-    rate = params.IS_to_H_rate * params.IS_to_H_adjusted_prop / immunity_force
+    rate = params.IP_to_IS_rate * (params.IP_to_ISH_prop / immunity_force)
 
     return rate
 
@@ -226,8 +211,23 @@ def compute_IA_to_R(state: FluFullMetapopStateTensors,
     return IA_to_R
 
 
-def compute_H_to_R_rate(state: FluFullMetapopStateTensors,
-                        params: FluFullMetapopParamsTensors) -> torch.Tensor:
+def compute_ISR_to_R(state: FluFullMetapopStateTensors,
+                     params: FluFullMetapopParamsTensors,
+                     dt: float) -> torch.Tensor:
+    """
+    Returns:
+        (torch.Tensor of size (L, A, R))
+    """
+
+    rate = params.ISR_to_R_rate
+
+    ISR_to_R = state.ISR * torch_approx_binom_probability_from_rate(rate, dt)
+
+    return ISR_to_R
+
+
+def compute_ISH_to_HR_rate(state: FluFullMetapopStateTensors,
+                           params: FluFullMetapopParamsTensors) -> torch.Tensor:
     """
     Returns:
         (torch.Tensor of size (L, A, R))
@@ -245,13 +245,13 @@ def compute_H_to_R_rate(state: FluFullMetapopStateTensors,
     immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
                       vax_induced_proportional_risk_reduce * state.MV)
 
-    rate = params.H_to_R_rate * (1 - params.H_to_D_adjusted_prop / immunity_force)
+    rate = (1 - params.ISH_to_HD_prop / immunity_force) * params.ISH_to_H_rate
 
     return rate
 
 
-def compute_H_to_D_rate(state: FluFullMetapopStateTensors,
-                        params: FluFullMetapopParamsTensors) -> torch.Tensor:
+def compute_ISH_to_HD_rate(state: FluFullMetapopStateTensors,
+                           params: FluFullMetapopParamsTensors) -> torch.Tensor:
     """
     Returns:
         (torch.Tensor of size (L, A, R))
@@ -269,9 +269,39 @@ def compute_H_to_D_rate(state: FluFullMetapopStateTensors,
     immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
                       vax_induced_proportional_risk_reduce * state.MV)
 
-    rate = params.H_to_D_rate * params.H_to_D_adjusted_prop / immunity_force
+    rate = params.ISH_to_HD_prop / immunity_force * params.ISH_to_H_rate
 
     return rate
+
+
+def compute_HR_to_R(state: FluFullMetapopStateTensors,
+                    params: FluFullMetapopParamsTensors,
+                    dt: float) -> torch.Tensor:
+    """
+    Returns:
+        (torch.Tensor of size (L, A, R))
+    """
+    
+    rate = params.HR_to_R_rate
+
+    HR_to_R = state.HR * torch_approx_binom_probability_from_rate(rate, dt)
+
+    return HR_to_R
+
+
+def compute_HD_to_D(state: FluFullMetapopStateTensors,
+                    params: FluFullMetapopParamsTensors,
+                    dt: float) -> torch.Tensor:
+    """
+    Returns:
+        (torch.Tensor of size (L, A, R))
+    """
+    
+    rate = params.HD_to_D_rate
+
+    HD_to_D = state.HD * torch_approx_binom_probability_from_rate(rate, dt)
+
+    return HD_to_D
 
 
 def compute_R_to_S(state: FluFullMetapopStateTensors,
@@ -408,8 +438,8 @@ def advance_timestep(state: FluFullMetapopStateTensors,
             history. If `save_calibration_targets` is `False`,
             then the corresponding `dict` is empty, and similarly with
             `save_tvar_history`.
-    """
-
+    """ 
+    
     S_to_E = compute_S_to_E(state, params, precomputed, dt)
 
     # Deterministic multinomial implementation to match
@@ -417,46 +447,54 @@ def advance_timestep(state: FluFullMetapopStateTensors,
     E_to_IP_rate = compute_E_to_IP_rate(params)
     E_to_IA_rate = compute_E_to_IA_rate(params)
     E_outgoing_total_rate = E_to_IP_rate + E_to_IA_rate
-    E_to_IA = state.E * (E_to_IA_rate / E_outgoing_total_rate) * \
-              torch_approx_binom_probability_from_rate(E_outgoing_total_rate, dt)
-    E_to_IP = state.E * (E_to_IP_rate / E_outgoing_total_rate) * \
-              torch_approx_binom_probability_from_rate(E_outgoing_total_rate, dt)
+    E_outgoing_total = state.E * \
+        torch_approx_binom_probability_from_rate(E_outgoing_total_rate, dt)
+    E_to_IA = E_outgoing_total * (E_to_IA_rate / E_outgoing_total_rate)              
+    E_to_IP = E_outgoing_total * (E_to_IP_rate / E_outgoing_total_rate)
 
     IA_to_R = compute_IA_to_R(state, params, dt)
-
-    IP_to_IS = compute_IP_to_IS(state, params, dt)
+    
+    # Deterministic multinomial implementation to match
+    #   object-oriented version
+    IP_to_ISR_rate = compute_IP_to_ISR_rate(state, params)
+    IP_to_ISH_rate = compute_IP_to_ISH_rate(state, params)
+    IP_outgoing_total_rate = IP_to_ISR_rate + IP_to_ISH_rate
+    IP_outgoing_total = state.IP * \
+        torch_approx_binom_probability_from_rate(IP_outgoing_total_rate, dt)
+    IP_to_ISR = IP_outgoing_total * (IP_to_ISR_rate / IP_outgoing_total_rate)
+    IP_to_ISH = IP_outgoing_total * (IP_to_ISH_rate / IP_outgoing_total_rate)
+                
+    ISR_to_R = compute_ISR_to_R(state, params, dt)
+    
+    # Deterministic multinomial implementation to match
+    #   object-oriented version
+    ISH_to_HR_rate = compute_ISH_to_HR_rate(state, params)
+    ISH_to_HD_rate = compute_ISH_to_HD_rate(state, params)
+    ISH_outgoing_total_rate = ISH_to_HR_rate + ISH_to_HD_rate
+    ISH_outgoing_total = state.ISH * \
+        torch_approx_binom_probability_from_rate(ISH_outgoing_total_rate, dt)
+    ISH_to_HR = ISH_outgoing_total * (ISH_to_HR_rate / ISH_outgoing_total_rate)
+    ISH_to_HD = ISH_outgoing_total * (ISH_to_HD_rate / ISH_outgoing_total_rate)
 
     # Deterministic multinomial implementation to match
     #   object-oriented version
-    IS_to_R_rate = compute_IS_to_R_rate(state, params)
-    IS_to_H_rate = compute_IS_to_H_rate(state, params)
-    IS_outgoing_total_rate = IS_to_R_rate + IS_to_H_rate
-    IS_to_R = state.IS * (IS_to_R_rate / IS_outgoing_total_rate) * \
-              torch_approx_binom_probability_from_rate(IS_outgoing_total_rate, dt)
-    IS_to_H = state.IS * (IS_to_H_rate / IS_outgoing_total_rate) * \
-              torch_approx_binom_probability_from_rate(IS_outgoing_total_rate, dt)
-
-    # Deterministic multinomial implementation to match
-    #   object-oriented version
-    H_to_R_rate = compute_H_to_R_rate(state, params)
-    H_to_D_rate = compute_H_to_D_rate(state, params)
-    H_outgoing_total_rate = H_to_R_rate + H_to_D_rate
-    H_to_R = state.H * (H_to_R_rate / H_outgoing_total_rate) * torch_approx_binom_probability_from_rate(
-        H_outgoing_total_rate, dt)
-    H_to_D = state.H * (H_to_D_rate / H_outgoing_total_rate) * torch_approx_binom_probability_from_rate(
-        H_outgoing_total_rate, dt)
+    HR_to_R = compute_HR_to_R(state, params, dt)
+    HD_to_D = compute_HD_to_D(state, params, dt)
 
     R_to_S = compute_R_to_S(state, params, dt)
-
+    
+    
     # Make sure compartments are nonnegative
     S_new = torch.nn.functional.softplus(state.S + R_to_S - S_to_E)
     E_new = torch.nn.functional.softplus(state.E + S_to_E - E_to_IP - E_to_IA)
-    IP_new = torch.nn.functional.softplus(state.IP + E_to_IP - IP_to_IS)
-    IS_new = torch.nn.functional.softplus(state.IS + IP_to_IS - IS_to_R - IS_to_H)
+    IP_new = torch.nn.functional.softplus(state.IP + E_to_IP - IP_to_ISR - IP_to_ISH)
+    ISR_new = torch.nn.functional.softplus(state.ISR + IP_to_ISR - ISR_to_R)
+    ISH_new = torch.nn.functional.softplus(state.ISH + IP_to_ISH - ISH_to_HR - ISH_to_HD)
     IA_new = torch.nn.functional.softplus(state.IA + E_to_IA - IA_to_R)
-    H_new = torch.nn.functional.softplus(state.H + IS_to_H - H_to_R - H_to_D)
-    R_new = torch.nn.functional.softplus(state.R + IS_to_R + IA_to_R + H_to_R - R_to_S)
-    D_new = torch.nn.functional.softplus(state.D + H_to_D)
+    HR_new = torch.nn.functional.softplus(state.HR + ISH_to_HR - HR_to_R)
+    HD_new = torch.nn.functional.softplus(state.HD + ISH_to_HD - HD_to_D)
+    R_new = torch.nn.functional.softplus(state.R + ISR_to_R + IA_to_R + HR_to_R - R_to_S)
+    D_new = torch.nn.functional.softplus(state.D + HD_to_D)
 
     # Update immunity variables
     M_change = compute_M_change(state, params, precomputed, dt)
@@ -467,9 +505,11 @@ def advance_timestep(state: FluFullMetapopStateTensors,
     state_new = FluFullMetapopStateTensors(S=S_new,
                                            E=E_new,
                                            IP=IP_new,
-                                           IS=IS_new,
+                                           ISR=ISR_new,
+                                           ISH=ISH_new,
                                            IA=IA_new,
-                                           H=H_new,
+                                           HR=HR_new,
+                                           HD=HD_new,
                                            R=R_new,
                                            D=D_new,
                                            M=M_new,
@@ -480,7 +520,7 @@ def advance_timestep(state: FluFullMetapopStateTensors,
 
     calibration_targets = {}
     if save_calibration_targets:
-        calibration_targets["IS_to_H"] = IS_to_H
+        calibration_targets["ISH_to_H"] = ISH_to_HR + ISH_to_HD
 
     transition_variables = {}
     if save_tvar_history:
@@ -488,11 +528,13 @@ def advance_timestep(state: FluFullMetapopStateTensors,
         transition_variables["E_to_IP"] = E_to_IP
         transition_variables["E_to_IA"] = E_to_IA
         transition_variables["IA_to_R"] = IA_to_R
-        transition_variables["IP_to_IS"] = IP_to_IS
-        transition_variables["IS_to_R"] = IS_to_R
-        transition_variables["IS_to_H"] = IS_to_H
-        transition_variables["H_to_R"] = H_to_R
-        transition_variables["H_to_D"] = H_to_D
+        transition_variables["IP_to_ISR"] = IP_to_ISR
+        transition_variables["IP_to_ISH"] = IP_to_ISH
+        transition_variables["ISR_to_R"] = ISR_to_R
+        transition_variables["ISH_to_HR"] = ISH_to_HR
+        transition_variables["ISH_to_HD"] = ISH_to_HD
+        transition_variables["HR_to_R"] = HR_to_R
+        transition_variables["HD_to_D"] = HD_to_D
         transition_variables["R_to_S"] = R_to_S
         transition_variables["M_change"] = M_change
         transition_variables["MV_change"] = MV_change
@@ -531,6 +573,10 @@ def torch_simulate_full_history(state: FluFullMetapopStateTensors,
         state = update_state_with_schedules(state, params, schedules, day)
 
         for timestep in range(timesteps_per_day):
+            # TODO double check whether this split makes sense
+            #   to get the total transition variables we should need to save values
+            #   at each timestep when there are several steps per day
+            #   (these variables may not be used anywhere right now)
             if timestep == timesteps_per_day-1:
                 state, _, tvar_history = \
                     advance_timestep(state, params, precomputed, dt, save_tvar_history=True)
@@ -571,7 +617,8 @@ def torch_simulate_hospital_admits(state: FluFullMetapopStateTensors,
     for day in range(num_days):
         state = update_state_with_schedules(state, params, schedules, day)
         for timestep in range(timesteps_per_day):
-            state, calibration_targets, _ = advance_timestep(state, params, precomputed, day, dt)
-        hospital_admits_history.append(calibration_targets["IS_to_H"].clone())
+            state, calibration_targets, _ = \
+                advance_timestep(state, params, precomputed, dt, save_calibration_targets=True)
+        hospital_admits_history.append(calibration_targets["ISH_to_H"].clone())
 
     return torch.stack(hospital_admits_history)

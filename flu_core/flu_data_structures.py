@@ -33,15 +33,25 @@ class FluSubpopState(clt.SubpopState):
         IP (np.ndarray of nonnegative integers):
             infected pre-symptomatic compartment for age-risk groups
             (holds current_val of Compartment "IP").
-        IS (np.ndarray of nonnegative integers):
-            infected symptomatic compartment for age-risk groups
-            (holds current_val of Compartment "IS").
+        ISR (np.ndarray of nonnegative integers):
+            infected symptomatic (that will recover) compartment
+            for age-risk groups
+            (holds current_val of Compartment "ISR").
+        ISH (np.ndarray of nonnegative integers):
+            infected symptomatic compartment (that will be hospitalized)
+            for age-risk groups
+            (holds current_val of Compartment "ISH").
         IA (np.ndarray of nonnegative integers):
             infected asymptomatic compartment for age-risk groups
             (holds current_val of Compartment "IA").
-        H (np.ndarray of nonnegative integers):
-            hospital compartment for age-risk groups
-            (holds current_val of Compartment "H").
+        HR (np.ndarray of nonnegative integers):
+            hospital compartment (that will recover)
+            for age-risk groups
+            (holds current_val of Compartment "HR").
+        HD (np.ndarray of nonnegative integers):
+            hospital compartment (that will die)
+            for age-risk groups
+            (holds current_val of Compartment "HD").
         R (np.ndarray of nonnegative integers):
             recovered compartment for age-risk groups
             (holds current_val of Compartment "R").
@@ -79,9 +89,11 @@ class FluSubpopState(clt.SubpopState):
     S: Optional[np.ndarray] = None
     E: Optional[np.ndarray] = None
     IP: Optional[np.ndarray] = None
-    IS: Optional[np.ndarray] = None
+    ISR: Optional[np.ndarray] = None
+    ISH: Optional[np.ndarray] = None
     IA: Optional[np.ndarray] = None
-    H: Optional[np.ndarray] = None
+    HR: Optional[np.ndarray] = None
+    HD: Optional[np.ndarray] = None
     R: Optional[np.ndarray] = None
     D: Optional[np.ndarray] = None
 
@@ -164,27 +176,27 @@ class FluSubpopParams(clt.SubpopParams):
         IP_to_IS_rate (positive float):
             rate a which people in IP (infected pre-symptomatic)
             move to IS (infected symptomatic)
-        IS_to_R_rate (positive float):
+        ISR_to_R_rate (positive float):
             rate at which people in IS (infected symptomatic)
             move to R.
         IA_to_R_rate (positive float):
             rate at which people in IA (infected asymptomatic)
             move to R
-        IS_to_H_rate (positive float):
+        ISH_to_H_rate (positive float):
             rate at which people in IS (infected symptomatic)
             move to H.
-        H_to_R_rate (positive float):
+        HR_to_R_rate (positive float):
             rate at which people in H move to R.
-        H_to_D_rate (positive float):
+        HD_to_D_rate (positive float):
             rate at which people in H move to D.
         E_to_IA_prop (np.ndarray of positive floats in [0,1]):
             proportion exposed who are asymptomatic based on
             age-risk groups.
-        IS_to_H_adjusted_prop (np.ndarray of positive floats in [0,1]):
-            rate-adjusted proportion infected who are hospitalized
+        IP_to_ISH_prop (np.ndarray of positive floats in [0,1]):
+            proportion infected who are hospitalized
             based on age-risk groups.
-        H_to_D_adjusted_prop (np.ndarray of positive floats in [0,1]):
-            rate-adjusted proportion hospitalized who die based on
+        ISH_to_HD_prop (np.ndarray of positive floats in [0,1]):
+            proportion hospitalized who die based on
             age-risk groups.
         IP_relative_inf (positive float):
             relative infectiousness of pre-symptomatic to symptomatic
@@ -237,15 +249,15 @@ class FluSubpopParams(clt.SubpopParams):
     R_to_S_rate: Optional[float] = None
     E_to_I_rate: Optional[float] = None
     IP_to_IS_rate: Optional[float] = None
-    IS_to_R_rate: Optional[float] = None
+    ISR_to_R_rate: Optional[float] = None
     IA_to_R_rate: Optional[float] = None
-    IS_to_H_rate: Optional[float] = None
-    H_to_R_rate: Optional[float] = None
-    H_to_D_rate: Optional[float] = None
+    ISH_to_H_rate: Optional[float] = None
+    HR_to_R_rate: Optional[float] = None
+    HD_to_D_rate: Optional[float] = None
+    
     E_to_IA_prop: Optional[np.ndarray] = None
-
-    IS_to_H_adjusted_prop: Optional[np.ndarray] = None
-    H_to_D_adjusted_prop: Optional[np.ndarray] = None
+    IP_to_ISH_prop: Optional[torch.Tensor] = None
+    ISH_to_HD_prop: Optional[torch.Tensor] = None
 
     IP_relative_inf: Optional[float] = None
     IA_relative_inf: Optional[float] = None
@@ -310,20 +322,30 @@ class FluTravelStateTensors:
             groups -- the lth element holds current_val of
             Compartment "IP" on the lth location / subpopulation
             on the associated `MetapopModel`.
-        IS (torch.Tensor of nonnegative integers):
-            symptomatic infected compartment for location-age-risk
-            groups -- the lth element holds current_val of
-            Compartment "IS" on the lth location / subpopulation
-            on the associated `MetapopModel`.
+        ISR (torch.Tensor of nonnegative integers):
+            symptomatic infected compartment (that will recover)
+            for location-age-risk groups -- the lth element holds
+            current_val of Compartment "ISR" on the lth 
+            location / subpopulation on the associated `MetapopModel`.
+        ISH (torch.Tensor of nonnegative integers):
+            symptomatic infected compartment (that will be hospitalized)
+            for location-age-risk groups -- the lth element holds
+            current_val of Compartment "ISH" on the lth 
+            location / subpopulation on the associated `MetapopModel`.
         IA (torch.Tensor of nonnegative integers):
             asymptomatic infected compartment for location-age-risk
             groups -- the lth element holds current_val of
             Compartment "IA" on the lth location / subpopulation
             on the associated `MetapopModel`.
-        H (torch.Tensor of nonnegative integers):
-            hospital compartment for location-age-risk
+        HR (torch.Tensor of nonnegative integers):
+            hospital compartment (that will recover) for location-age-risk
             groups -- the lth element holds current_val of
-            Compartment "H" on the lth location / subpopulation
+            Compartment "HR" on the lth location / subpopulation
+            on the associated `MetapopModel`.
+        HD (torch.Tensor of nonnegative integers):
+            hospital compartment (that will die) for location-age-risk
+            groups -- the lth element holds current_val of
+            Compartment "HD" on the lth location / subpopulation
             on the associated `MetapopModel`.
         flu_contact_matrix (torch.Tensor of nonnegative integers):
             contact matrix for location-age-risk groups -- the
@@ -335,15 +357,17 @@ class FluTravelStateTensors:
             the date is a work or school day)
         init_vals (dict):
             dictionary of torch.Tensor instances, where keys
-            correspond to "IP", "IS", "IA", and "H", and values
-            correspond to their initial values for location-age-risk
-            groups.
+            correspond to "IP", "ISR", "ISH", "IA", "HR", and "HD", and 
+            values correspond to their initial values for
+            location-age-risk groups.
     """
 
     IP: torch.Tensor = None
-    IS: torch.Tensor = None
+    ISR: torch.Tensor = None
+    ISH: torch.Tensor = None
     IA: torch.Tensor = None
-    H: torch.Tensor = None
+    HR: torch.Tensor = None
+    HD: torch.Tensor = None
 
     flu_contact_matrix: torch.Tensor = None
 
@@ -428,7 +452,7 @@ class FluTravelParamsTensors:
         A = int(self.num_age_groups.item())
         R = int(self.num_risk_groups.item())
 
-        error_str = "Each SubpopParams field must have size (L, A, R) " \
+        error_str = " Each SubpopParams field must have size (L, A, R) " \
                     "(for location-age-risk groups) or size 0 -- please check files " \
                     "and inputs, then try again."
 
@@ -464,6 +488,10 @@ class FluTravelParamsTensors:
 
             elif value.size() == torch.Size([A, R]):
                 setattr(self, name, value.view(1, A, R).expand(L, A, R))
+            
+            else:
+                value_size = str(value.size())
+                raise Exception(str(name) + ' with size ' + value_size + error_str)
 
 
 @dataclass
@@ -486,7 +514,7 @@ class FluFullMetapopStateTensors(FluTravelStateTensors):
             the date is a work or school day)
         init_vals (dict):
             dictionary of torch.Tensor instances, where keys
-            correspond to "IP", "IS", "IA", and "H", and values
+            correspond to "IP", "ISR", "ISH" "IA", "HR", and "HD", and values
             correspond to their initial values for location-age-risk
             groups.
 
@@ -496,7 +524,7 @@ class FluFullMetapopStateTensors(FluTravelStateTensors):
         location-age-risk or size 0 tensors.
     """
 
-    # `IP`, `IS`, `IA`, `H`, `flu_contact_matrix` already in
+    # `IP`, `ISR`, `ISH`, `IA`, `HR`, `HD`, `flu_contact_matrix` already in
     #   parent class
     # Same with `init_vals`
 
@@ -557,15 +585,15 @@ class FluFullMetapopParamsTensors(FluTravelParamsTensors):
     R_to_S_rate: Optional[torch.Tensor] = None
     E_to_I_rate: Optional[torch.Tensor] = None
     IP_to_IS_rate: Optional[torch.Tensor] = None
-    IS_to_R_rate: Optional[torch.Tensor] = None
-    IA_to_R_rate: Optional[torch.Tensor] = None
-    IS_to_H_rate: Optional[torch.Tensor] = None
-    H_to_R_rate: Optional[torch.Tensor] = None
-    H_to_D_rate: Optional[torch.Tensor] = None
+    ISR_to_R_rate: Optional[float] = None
+    IA_to_R_rate: Optional[float] = None
+    ISH_to_H_rate: Optional[float] = None
+    HR_to_R_rate: Optional[float] = None
+    HD_to_D_rate: Optional[float] = None
+    
     E_to_IA_prop: Optional[torch.Tensor] = None
-
-    IS_to_H_adjusted_prop: Optional[torch.Tensor] = None
-    H_to_D_adjusted_prop: Optional[torch.Tensor] = None
+    IP_to_ISH_prop: Optional[torch.Tensor] = None
+    ISH_to_HD_prop: Optional[torch.Tensor] = None
 
     IP_relative_inf: Optional[torch.Tensor] = None
     IA_relative_inf: Optional[torch.Tensor] = None

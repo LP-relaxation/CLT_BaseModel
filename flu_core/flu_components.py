@@ -120,7 +120,7 @@ class SusceptibleToExposed(clt.TransitionVariable):
             # Super confusing syntax... but this is the pain of having A x R,
             #   but having the contact matrix (contact patterns) be for
             #   ONLY age groups
-            wtd_infectious_prop = np.divide(np.sum(state.IS, axis=1, keepdims=True) + wtd_presymp_asymp_by_age,
+            wtd_infectious_prop = np.divide(np.sum(sum([state.ISR, state.ISH]), axis=1, keepdims=True) + wtd_presymp_asymp_by_age, # Remy TODO check the sum works
                                             compute_pop_by_age(params))
 
             raw_total_exposure = np.matmul(state.flu_contact_matrix, wtd_infectious_prop)
@@ -192,32 +192,14 @@ class ExposedToPresymp(clt.TransitionVariable):
                        params.E_to_I_rate * (1 - params.E_to_IA_prop))
 
 
-class PresympToSymp(clt.TransitionVariable):
+class PresympToSympRecover(clt.TransitionVariable):
     """
     TransitionVariable-derived class for movement from the
-    "IP" to "IS" compartment. The functional form is the same across
+    "IP" to "ISR" compartment. The functional form is the same across
     subpopulations.
-    """
-
-    def get_current_rate(self,
-                         state: FluSubpopState,
-                         params: FluSubpopParams) -> np.ndarray:
-        """
-        Returns:
-            np.ndarray of shape (A, R)
-        """
-        return np.full((params.num_age_groups, params.num_risk_groups),
-                       params.IP_to_IS_rate)
-
-
-class SympToRecovered(clt.TransitionVariable):
-    """
-    TransitionVariable-derived class for movement from the
-    "IS" to "R" compartment. The functional form is the same across
-    subpopulations.
-
-    Each SympToRecovered instance forms a TransitionVariableGroup with
-    a corresponding SympToHosp instance (these two
+    
+    Each PresympToSympRecover instance forms a TransitionVariableGroup with
+    a corresponding PresympToSympHospital instance (these two
     transition variables are jointly distributed).
     """
 
@@ -237,8 +219,131 @@ class SympToRecovered(clt.TransitionVariable):
         immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
                           vax_induced_proportional_risk_reduce * state.MV)
 
-        return np.asarray((1 - params.IS_to_H_adjusted_prop / immunity_force) * params.IS_to_R_rate)
+        return np.asarray((1 - params.IP_to_ISH_prop / immunity_force) * params.IP_to_IS_rate)
 
+
+class PresympToSympHospital(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "IP" to "ISH" compartment. The functional form is the same across
+    subpopulations.
+    
+    Each PresympToSympHospital instance forms a TransitionVariableGroup with
+    a corresponding PresympToSympRecover instance (these two
+    transition variables are jointly distributed).
+    """
+
+    def get_current_rate(self,
+                         state: FluSubpopState,
+                         params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
+        inf_induced_hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
+        inf_induced_proportional_risk_reduce = inf_induced_hosp_risk_reduce / (1 - inf_induced_hosp_risk_reduce)
+
+        vax_induced_hosp_risk_reduce = params.vax_induced_hosp_risk_reduce
+        vax_induced_proportional_risk_reduce = vax_induced_hosp_risk_reduce / (1 - vax_induced_hosp_risk_reduce)
+
+        immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
+                          vax_induced_proportional_risk_reduce * state.MV)
+
+        return np.asarray((params.IP_to_ISH_prop / immunity_force) * params.IP_to_IS_rate)
+
+
+class SympRecoverToRecovered(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "ISR" to "R" compartment. The functional form is the same across
+    subpopulations.
+    """
+
+    def get_current_rate(self,
+                         state: FluSubpopState,
+                         params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
+        
+        return np.full((params.num_age_groups, params.num_risk_groups),
+                       params.ISR_to_R_rate)
+
+
+class SympHospitalToHospRecover(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "ISH" to "HR" compartment. The functional form is the same across
+    subpopulations.
+    
+    Each SympHospitalToHospRecover instance forms a TransitionVariableGroup with
+    a corresponding SympHospitalToHospDead instance (these two
+    transition variables are jointly distributed).
+    """
+
+    def get_current_rate(self,
+                         state: FluSubpopState,
+                         params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
+        
+        inf_induced_death_risk_reduce = params.inf_induced_death_risk_reduce
+        vax_induced_death_risk_reduce = params.vax_induced_death_risk_reduce
+
+        inf_induced_proportional_risk_reduce = \
+            inf_induced_death_risk_reduce / (1 - inf_induced_death_risk_reduce)
+
+        vax_induced_proportional_risk_reduce = \
+            vax_induced_death_risk_reduce / (1 - vax_induced_death_risk_reduce)
+
+        immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
+                          vax_induced_proportional_risk_reduce * state.MV)
+
+        return np.full((params.num_age_groups, params.num_risk_groups),
+                       (1 - params.ISH_to_HD_prop / immunity_force) * params.ISH_to_H_rate)
+
+
+class SympHospitalToHospDead(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "ISH" to "HD" compartment. The functional form is the same across
+    subpopulations.
+    
+    Each SympHospitalToHospDead instance forms a TransitionVariableGroup with
+    a corresponding SympHospitalToHospRecover instance (these two
+    transition variables are jointly distributed).
+    
+    The rate of SympHospitalToHospDead decreases as population-level immunity
+    against hospitalization increases.
+    """
+
+    def get_current_rate(self,
+                         state: FluSubpopState,
+                         params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
+        
+        inf_induced_death_risk_reduce = params.inf_induced_death_risk_reduce
+        vax_induced_death_risk_reduce = params.vax_induced_death_risk_reduce
+
+        inf_induced_proportional_risk_reduce = \
+            inf_induced_death_risk_reduce / (1 - inf_induced_death_risk_reduce)
+
+        vax_induced_proportional_risk_reduce = \
+            vax_induced_death_risk_reduce / (1 - vax_induced_death_risk_reduce)
+
+        immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
+                          vax_induced_proportional_risk_reduce * state.MV)
+
+        return np.full((params.num_age_groups, params.num_risk_groups),
+                       (params.ISH_to_HD_prop / immunity_force) * params.ISH_to_H_rate)
+        
+        
 
 class AsympToRecovered(clt.TransitionVariable):
     """
@@ -259,15 +364,11 @@ class AsympToRecovered(clt.TransitionVariable):
                        params.IA_to_R_rate)
 
 
-class HospToRecovered(clt.TransitionVariable):
+class HospRecoverToRecovered(clt.TransitionVariable):
     """
     TransitionVariable-derived class for movement from the
-    "H" to "R" compartment. The functional form is the same across
+    "HR" to "R" compartment. The functional form is the same across
     subpopulations.
-
-    Each HospToRecovered instance forms a TransitionVariableGroup with
-    a corresponding HospToDead instance (these two
-    transition variables are jointly distributed).
     """
 
     def get_current_rate(self,
@@ -277,92 +378,28 @@ class HospToRecovered(clt.TransitionVariable):
         Returns:
             np.ndarray of shape (A, R)
         """
+        
+        return np.full((params.num_age_groups, params.num_risk_groups),
+                       params.HR_to_R_rate)
 
-        inf_induced_death_risk_reduce = params.inf_induced_death_risk_reduce
-        vax_induced_death_risk_reduce = params.vax_induced_death_risk_reduce
 
-        inf_induced_proportional_risk_reduce = \
-            inf_induced_death_risk_reduce / (1 - inf_induced_death_risk_reduce)
+class HospDeadToDead(clt.TransitionVariable):
+    """
+    TransitionVariable-derived class for movement from the
+    "HD" to "D" compartment. The functional form is the same across
+    subpopulations.
+    """
 
-        vax_induced_proportional_risk_reduce = \
-            vax_induced_death_risk_reduce / (1 - vax_induced_death_risk_reduce)
-
-        immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
-                          vax_induced_proportional_risk_reduce * state.MV)
+    def get_current_rate(self,
+                         state: FluSubpopState,
+                         params: FluSubpopParams) -> np.ndarray:
+        """
+        Returns:
+            np.ndarray of shape (A, R)
+        """
 
         return np.full((params.num_age_groups, params.num_risk_groups),
-                       (1 - params.H_to_D_adjusted_prop / immunity_force) * params.H_to_R_rate)
-
-
-class SympToHosp(clt.TransitionVariable):
-    """
-    TransitionVariable-derived class for movement from the
-    "IS" to "H" compartment. The functional form is the same across
-    subpopulations.
-
-    Each SympToHosp instance forms a TransitionVariableGroup with
-    a corresponding SympToRecovered instance (these two
-    transition variables are jointly distributed).
-
-    The rate of SympToHosp decreases as population-level immunity
-    against hospitalization increases.
-    """
-
-    def get_current_rate(self,
-                         state: FluSubpopState,
-                         params: FluSubpopParams) -> np.ndarray:
-        """
-        Returns:
-            np.ndarray of shape (A, R)
-        """
-
-        inf_induced_hosp_risk_reduce = params.inf_induced_hosp_risk_reduce
-        inf_induced_proportional_risk_reduce = inf_induced_hosp_risk_reduce / (1 - inf_induced_hosp_risk_reduce)
-
-        vax_induced_hosp_risk_reduce = params.vax_induced_hosp_risk_reduce
-        vax_induced_proportional_risk_reduce = vax_induced_hosp_risk_reduce / (1 - vax_induced_hosp_risk_reduce)
-
-        immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
-                          vax_induced_proportional_risk_reduce * state.MV)
-
-        return np.asarray(params.IS_to_H_rate * params.IS_to_H_adjusted_prop / immunity_force)
-
-
-class HospToDead(clt.TransitionVariable):
-    """
-    TransitionVariable-derived class for movement from the
-    "H" to "D" compartment. The functional form is the same across
-    subpopulations.
-
-    Each HospToDead instance forms a TransitionVariableGroup with
-    a corresponding HospToRecovered instance (these two
-    transition variables are jointly distributed).
-
-    The rate of HospToDead decreases as population-level immunity
-    against hospitalization increases.
-    """
-
-    def get_current_rate(self,
-                         state: FluSubpopState,
-                         params: FluSubpopParams) -> np.ndarray:
-        """
-        Returns:
-            np.ndarray of shape (A, R)
-        """
-
-        inf_induced_death_risk_reduce = params.inf_induced_death_risk_reduce
-        vax_induced_death_risk_reduce = params.vax_induced_death_risk_reduce
-
-        inf_induced_proportional_risk_reduce = \
-            inf_induced_death_risk_reduce / (1 - inf_induced_death_risk_reduce)
-
-        vax_induced_proportional_risk_reduce = \
-            vax_induced_death_risk_reduce / (1 - vax_induced_death_risk_reduce)
-
-        immunity_force = (1 + inf_induced_proportional_risk_reduce * state.M +
-                          vax_induced_proportional_risk_reduce * state.MV)
-
-        return np.asarray(params.H_to_D_adjusted_prop * params.H_to_D_rate / immunity_force)
+                       params.HD_to_D_rate)
 
 
 class InfInducedImmunity(clt.EpiMetric):
@@ -457,7 +494,7 @@ class BetaReduce(clt.DynamicVal):
         self.permanent_lockdown = False
 
     def update_current_val(self, state, params):
-        if np.sum(state.IS) / np.sum(params.total_pop_age_risk) > 0.05:
+        if np.sum(sum([state.ISR, state.ISH])) / np.sum(params.total_pop_age_risk) > 0.05:
             self.current_val = .5
             self.permanent_lockdown = True
         else:
@@ -618,25 +655,29 @@ class FluSubpopModel(clt.SubpopModel):
         - S <- S + R_to_S - S_to_E
         - E <- E + S_to_E - E_to_IP - E_to_IA
         - IA <- IA + E_to_IA - IA_to_R 
-        - IP <- IP + E_to_IP - IP_to_IS
-        - IS <- IS + IP_to_IS - IS_to_R - IS_to_H
-        - H <- H + IS_to_H - H_to_R - H_to_D
-        - R <- R + IS_to_R + H_to_R - R_to_S
-        - D <- D + H_to_D
+        - IP <- IP + E_to_IP - IP_to_ISR - IP_to_ISH
+        - ISR <- ISR + IP_to_ISR - ISR_to_R
+        - ISH <- ISH + IP_to_ISH - ISH_to_HR - ISH_to_HD
+        - HR <- HR + ISH_to_HR - HR_to_R
+        - HD <- HD + ISH_to_HD - HD_to_D
+        - R <- R + ISR_to_R + HR_to_R - R_to_S
+        - D <- D + HD_to_D
 
     The following are TransitionVariable instances:
         - R_to_S is a RecoveredToSusceptible instance
         - S_to_E is a SusceptibleToExposed instance
-        - IP_to_IS is a PresympToSymp instance
-        - IS_to_H is a SympToHosp instance
-        - IS_to_R is a SympToRecovered instance
-        - H_to_R is a HospToRecovered instance
-        - H_to_D is a HospToDead instance
+        - IP_to_ISR is a PresympToSympRecover instance
+        - IP_to_ISH is a PresympToSympHospital instance
+        - ISH_to_HR is a SympHospitalToHospRecover instance
+        - ISH_to_HD is a SympHospitalToHospDead instance
+        - ISR_to_R is a SympRecoverToRecovered instance
+        - HR_to_R is a HospRecoverToRecovered instance 
+        - HD_to_D is a HospDeadToDead instance
 
     There are three TransitionVariableGroups:
         - E_out (handles E_to_IP and E_to_IA)
-        - IS_out (handles IS_to_H and IS_to_R)
-        - H_out (handles H_to_R and H_to_D)
+        - IP_out (handles IP_to_ISR and IP_to_ISH)
+        - ISH_out (handles ISH_to_HR and ISH_to_HD)
 
     The following are EpiMetric instances:
         - M is a InfInducedImmunity instance
@@ -690,7 +731,7 @@ class FluSubpopModel(clt.SubpopModel):
 
         compartments = sc.objdict()
 
-        for name in ("S", "E", "IP", "IS", "IA", "H", "R", "D"):
+        for name in ("S", "E", "IP", "ISR", "ISH", "IA", "HR", "HD", "R", "D"):
             compartments[name] = clt.Compartment(getattr(self.state, name))
 
         return compartments
@@ -747,28 +788,32 @@ class FluSubpopModel(clt.SubpopModel):
         S = self.compartments.S
         E = self.compartments.E
         IP = self.compartments.IP
-        IS = self.compartments.IS
+        ISR = self.compartments.ISR
+        ISH = self.compartments.ISH
         IA = self.compartments.IA
-        H = self.compartments.H
+        HR = self.compartments.HR
+        HD = self.compartments.HD
         R = self.compartments.R
         D = self.compartments.D
 
         transition_variables.R_to_S = RecoveredToSusceptible(R, S, transition_type)
         transition_variables.S_to_E = SusceptibleToExposed(S, E, transition_type)
-        transition_variables.IP_to_IS = PresympToSymp(IP, IS, transition_type)
+        transition_variables.IP_to_ISR = PresympToSympRecover(IP, ISR, transition_type, True)
+        transition_variables.IP_to_ISH = PresympToSympHospital(IP, ISH, transition_type, True)
         transition_variables.IA_to_R = AsympToRecovered(IA, R, transition_type)
         transition_variables.E_to_IP = ExposedToPresymp(E, IP, transition_type, True)
         transition_variables.E_to_IA = ExposedToAsymp(E, IA, transition_type, True)
-        transition_variables.IS_to_R = SympToRecovered(IS, R, transition_type, True)
-        transition_variables.IS_to_H = SympToHosp(IS, H, transition_type, True)
-        transition_variables.H_to_R = HospToRecovered(H, R, transition_type, True)
-        transition_variables.H_to_D = HospToDead(H, D, transition_type, True)
+        transition_variables.ISR_to_R = SympRecoverToRecovered(ISR, R, transition_type)
+        transition_variables.ISH_to_HR = SympHospitalToHospRecover(ISH, HR, transition_type, True)
+        transition_variables.ISH_to_HD = SympHospitalToHospDead(ISH, HD, transition_type, True)
+        transition_variables.HR_to_R = HospRecoverToRecovered(HR, R, transition_type)
+        transition_variables.HD_to_D = HospDeadToDead(HD, D, transition_type)
 
         return transition_variables
 
     def create_transition_variable_groups(self) -> sc.objdict[str, clt.TransitionVariableGroup]:
         """
-        Create all transition variable groups described in docstring (2 transition
+        Create all transition variable groups described in docstring (3 transition
         variable groups total), save in `sc.objdict`, return objdict
         """
 
@@ -786,15 +831,15 @@ class FluSubpopModel(clt.SubpopModel):
                                                                        (self.transition_variables.E_to_IP,
                                                                         self.transition_variables.E_to_IA))
 
-        transition_variable_groups.IS_out = clt.TransitionVariableGroup(self.compartments.IS,
+        transition_variable_groups.IP_out = clt.TransitionVariableGroup(self.compartments.IP,
                                                                         transition_type,
-                                                                        (self.transition_variables.IS_to_R,
-                                                                         self.transition_variables.IS_to_H))
+                                                                        (self.transition_variables.IP_to_ISR,
+                                                                         self.transition_variables.IP_to_ISH))
 
-        transition_variable_groups.H_out = clt.TransitionVariableGroup(self.compartments.H,
-                                                                       transition_type,
-                                                                       (self.transition_variables.H_to_R,
-                                                                        self.transition_variables.H_to_D))
+        transition_variable_groups.ISH_out = clt.TransitionVariableGroup(self.compartments.ISH,
+                                                                         transition_type,
+                                                                         (self.transition_variables.ISH_to_HR,
+                                                                          self.transition_variables.ISH_to_HD))
 
         return transition_variable_groups
 

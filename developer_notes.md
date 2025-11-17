@@ -1,4 +1,8 @@
-# For future developers
+# Journal
+## 2025 11 17 - Adding ghost compartments
+Updated website notation and made code updates in a lot of places.
+
+# For future developers (from LP)
 
 Technical notes
 - After making changes, please make sure ALL tests in `tests/` folder pass, and add new tests for new code.
