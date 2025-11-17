@@ -386,9 +386,11 @@ def update_state_with_schedules(state: FluFullMetapopStateTensors,
         S=state.S,
         E=state.E,
         IP=state.IP,
-        IS=state.IS,
+        ISR=state.ISR,
+        ISH=state.ISH,
         IA=state.IA,
-        H=state.H,
+        HR=state.HR,
+        HD=state.HD,
         R=state.R,
         D=state.D,
         M=state.M,
@@ -557,7 +559,7 @@ def torch_simulate_full_history(state: FluFullMetapopStateTensors,
 
     Returns:
         (Tuple[dict, dict]):
-            Returns hospital admits (the IS to H transition variable value)
+            Returns compartment states and transition variables
             for day, location, age, risk, in tensor format.
     """
 
@@ -606,8 +608,9 @@ def torch_simulate_hospital_admits(state: FluFullMetapopStateTensors,
 
     Returns:
         (torch.Tensor of size (num_days, L, A, R)):
-            Returns hospital admits (the IS to H transition variable value)
-            for day, location, age, risk, in tensor format.
+            Returns hospital admits (the ISH to HR and HD 
+            transition variable values) for day, location,
+            age, risk, in tensor format.
     """
 
     hospital_admits_history = []
