@@ -49,8 +49,8 @@ def test_subpop_correct_object_count(make_flu_subpop_model):
 
     model = make_flu_subpop_model("model")
 
-    assert len(model.compartments) == 8
-    assert len(model.transition_variables) == 10
+    assert len(model.compartments) == 10
+    assert len(model.transition_variables) == 12
     assert len(model.transition_variable_groups) == 3
 
     assert len(model.epi_metrics) == 2

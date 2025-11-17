@@ -30,7 +30,7 @@ def test_metapop_no_travel(make_flu_subpop_model, transition_type, inputs_id):
     each SimulationSettings is 1. This is because, for the sake of efficiency,
     for MetapopModel instances, each InteractionTerm is updated
     only ONCE PER DAY rather than after every single discretized timestep.
-    In contrast, independent SubpopModel instances (not linked by any
+    In contrast, independent SubpopModel instances (not linked by any``
     metapopulation/travel model) do not have any interaction terms.
     The S_to_E transition variable rate does not depend on any
     interaction terms, and depends on state variables that get updated

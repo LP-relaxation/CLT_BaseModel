@@ -16,14 +16,12 @@
 	"R_to_S_rate": 0.5,
 	"E_to_I_rate": 0.5,
 	"IP_to_IS_rate": 0.5,
-	"IS_to_H_rate": 0.5,
-	"IS_to_R_rate": 0.5,
+	"ISH_to_H_rate": 0.5,
+	"ISR_to_R_rate": 0.5,
 	"IA_to_R_rate": 0.5,
-	"H_to_R_rate": 0.5,
-	"H_to_D_rate": 0.5,
+	"HR_to_R_rate": 0.5,
+	"HD_to_D_rate": 0.5,
 	"E_to_IA_prop": 0.5,
-	"H_to_D_adjusted_prop": 0.5,
-	"IS_to_H_adjusted_prop": 0.5,
 	"IP_relative_inf": 0.5,
 	"IA_relative_inf": 0.5,
 	"relative_suscept":
@@ -42,8 +40,8 @@
   [0.2],
   [0.2]
 ],
-	"H_to_D_adjusted_prop": 0.001,
-	"IS_to_H_adjusted_prop": 0.01,
+	"ISH_to_HD_prop": 0.05,
+	"IP_to_ISH_prop": 0.01,
 	"total_contact_matrix":
 [
     [3.2, 2.5, 1.0, 0.5, 0.3],

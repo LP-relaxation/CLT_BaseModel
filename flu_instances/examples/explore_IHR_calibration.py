@@ -10,6 +10,12 @@ import numpy as np
 import copy
 from dataclasses import fields
 
+import os
+import sys
+print('os.getcwd():', os.getcwd())
+print("Python version")
+print(sys.version)
+
 import clt_toolkit as clt
 import flu_core as flu
 
@@ -165,7 +171,7 @@ print(opt_params.beta_baseline)
 
 np.savetxt("caseABC_sameIHR_beta.csv", np.stack([t.detach().numpy() for t in beta_baseline_history]), delimiter=",")
 
-breakpoint()
+# breakpoint()
 
 opt_params.beta_baseline_raw = torch.tensor([1.55, 2.17, 1.89])
 sh, th = flu.torch_simulate_full_history(init_state, opt_params, precomputed, schedules, 100, 2)

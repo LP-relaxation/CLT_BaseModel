@@ -26,26 +26,27 @@ Note that many of the fixed parameters will likely be common across city models,
 ## Fixed parameters 
 - `num_age_groups`, `num_risk_groups` -- we agreed that we have 5 age groups (0-4, 5-17, 18-49, 50-64, 65+).
 - `total_contact_matrix` -- based on total contact matrix (contact rates, not probabilities) from [MOBS](https://github.com/mobs-lab/mixing-patterns) shared by Kaiming in March 2025 CLT meeting -- currently weighted by TEXAS population distribution among age groups -- city-level models may want to replace this with their city-specific population distributions, if available. See `README.md` in `derived_inputs_computation` folder for how this is computed. 
-- `H_to_R_rate`, `H_to_D_rate` -- B+B 2025 and CLT Lit Review -- may eventually replace with city-specific hospitalization data
+- `HR_to_R_rate`, `HD_to_D_rate` -- B+B 2025 and CLT Lit Review -- may eventually replace with city-specific hospitalization data
 - `hosp_risk_reduce`, `inf_risk_reduce`, `death_risk_reduce` -- B+B 2025 
     - Assume `death_risk_reduce` is same as `hosp_risk_reduce`
 - `IA_to_R_rate` -- CLT Lit Review (Remy)
 - `IA_relative_inf`, `IP_relative_inf` -- CLT Lit Review (Remy)
 - `E_to_I_rate` -- CLT Lit Review (Remy)
 - `IP_to_IS_rate` -- CLT Lit Review (Remy)
-- `IS_to_R_rate` -- CLT Lit Review (Remy)
+- `ISR_to_R_rate` -- CLT Lit Review (Remy)
 - `E_to_IA_prop` -- CLT Lit Review (Remy)
-- `IS_to_H_rate` -- CLT Lit Review (Sonny) -- but may eventually get age-specific rates from hospital data
-- `H_to_R_rate` -- B&B 2025 -- also may eventually get from hospital data
-- `H_to_D_rate` -- B&B 2025 and CLT Lit Review -- may eventually get from hospital data
-- `IS_to_H_adjusted_prop` -— for the non-rate-adjusted proportion, used [2023-2024 CDC estimates](https://www.cdc.gov/flu-burden/php/data-vis/2023-2024.html#:~:text=The%20overall%20burden%20of%20influenza,and%2028%2C000%20flu%2Drelated%20deaths) and divided estimated hospitalizations by estimated infections for each age group —- this ends up being very similar to the table in the CLT Lit Review (Shraddha).
-    - Then computed the rate-adjusted proportion using formula given in mathematical formulation.
-    - Note: not sure if CDC methodology includes asymptomatic infections, and how much that affects our parameter value estimates — because `IS_to_H_adjusted_prop` is NOT the same as IHR because we are not considering asymptomatic people.
-- `H_to_D_adjusted_prop` — for the non-rate-adjusted proportion, used [2023-2024 CDC estimates](https://www.cdc.gov/flu-burden/php/data-vis/2023-2024.html#:~:text=The%20overall%20burden%20of%20influenza,and%2028%2C000%20flu%2Drelated%20deaths) and used estimated deaths divided by estimated hospitalizations -— replaced Jose’s write-up for simplicity.
-    - Again, computed the rate-adjusted proportion using formula given in mathematical formulation.
+- `ISH_to_H_rate` -- CLT Lit Review (Sonny) -- but may eventually get age-specific rates from hospital data
+- `HR_to_R_rate` -- B&B 2025 -- also may eventually get from hospital data
+- `HD_to_D_rate` -- B&B 2025 and CLT Lit Review -- may eventually get from hospital data
 - `inf_induced_saturation`, `vax_induced_saturation` -- Anass Analysis 2025
 - `inf_induced_inf_risk_reduce`, `vax_induced_inf_risk_reduce` -- Anass Analysis 2025
 - `inf_induced_hosp_risk_reduce` -- Anass Analysis 08/09/2025, analysis in PDF posted in Slack: (the values of k/(k-1) equal) "6.81 for H1N1 and 9.09 for H3N2" -- according to the [CDC](https://www.cdc.gov/flu/whats-new/flu-summary-2023-2024.html) H1N1 was dominant in 2023-2024 so we'll use the first one -- solving for k, that means the risk reduction is 0.87 roughly.
+
+## Fixed parameters that need to be double checked
+- The values used in the json files (eg, common_subpop_params.json) for the following two parameters should be double checked. The values were updated using the CLT Lit Review when doing ghost compartment updates on 10/7/2025. It seems the calculation based on the sources below is happening somewhere else.
+- `IP_to_ISH_prop` -— used [2023-2024 CDC estimates](https://www.cdc.gov/flu-burden/php/data-vis/2023-2024.html#:~:text=The%20overall%20burden%20of%20influenza,and%2028%2C000%20flu%2Drelated%20deaths) and divided estimated hospitalizations by estimated infections for each age group —- this ends up being very similar to the table in the CLT Lit Review (Shraddha).
+    - Note: not sure if CDC methodology includes asymptomatic infections, and how much that affects our parameter value estimates — because `IP_to_ISH_prop` is NOT the same as IHR because we are not considering asymptomatic people.
+- `ISH_to_HD_prop` — used [2023-2024 CDC estimates](https://www.cdc.gov/flu-burden/php/data-vis/2023-2024.html#:~:text=The%20overall%20burden%20of%20influenza,and%2028%2C000%20flu%2Drelated%20deaths) and used estimated deaths divided by estimated hospitalizations -— replaced Jose’s write-up for simplicity.
 
 ## Parameters that need to be changed or fit
 - `mobility_modifier` -- need to be replaced by mobility data-driven estimates
@@ -68,8 +69,8 @@ These parameters are not being included, at least in the first pass (simpler mod
 - `R`, `D` -- starting off with zero-matrices.
 
 ## Parameters that need to be changed or fit
-- `E`, `IP`, `IS`, `IA`, `H` -- B&B 2025
-	- `E` for each age-risk group is simply set to 10, and the 3 infected compartments and `H` for each age-risk group are set to 1
+- `E`, `IP`, `ISR`, `ISH`, `IA`, `HR`, `HD` -- B&B 2025
+	- `E` for each age-risk group is simply set to 10, and the 3 infected compartments and `HR`, `HD` for each age-risk group are set to 1
 	- City-level models should adjust these initial values based on population counts in their city.
 
 # `mixing_params.json`

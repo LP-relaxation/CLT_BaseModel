@@ -97,8 +97,8 @@ def sample_uniform_matrix(lb: [np.ndarray | float],
                              "upper bounds must be arrays of shape (A,). \n"
                              "Fix inputs and try again.")
 
-            U = RNG.uniform(size=lb.shape)
-            X = lb + (ub - lb) * U
+        U = RNG.uniform(size=lb.shape)
+        X = lb + (ub - lb) * U
     elif param_shape == "AR":
         if (np.shape(lb) != (A, R) or
                 np.shape(ub) != (A, R)):
@@ -196,7 +196,7 @@ def sample_uniform_metapop_params(metapop_model: MetapopModel,
 
 
 def aggregate_daily_tvar_history(metapop_model: MetapopModel,
-                                 transition_var_name: str) -> np.ndarray:
+                                 transition_var_name_list: list[str]) -> np.ndarray:
     """
     Sum the history values of a given transition variable
     across all subpopulations and across timesteps per day,
@@ -220,6 +220,7 @@ def aggregate_daily_tvar_history(metapop_model: MetapopModel,
     all_arrays = [
         np.asarray(getattr(subpop, transition_var_name).history_vals_list)
         for subpop in metapop_model.subpop_models.values()
+        for transition_var_name in transition_var_name_list
     ]
 
     # Stack along new subpop dimension (axis=0) and sum across subpops
