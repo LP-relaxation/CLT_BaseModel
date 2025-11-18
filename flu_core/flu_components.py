@@ -471,7 +471,7 @@ class VaxInducedImmunity(clt.EpiMetric):
         #   `Schedule` is NOT divided by the number of timesteps -- so we need to
         #   do this division in the equation here.
 
-        return state.daily_vaccines / (params.total_pop_age_risk * num_timesteps) - \
+        return state.daily_vaccines / (num_timesteps) - \
                params.vax_induced_immune_wane * state.MV / num_timesteps
 
 
