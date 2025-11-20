@@ -354,7 +354,7 @@ def compute_MV_change(state: FluFullMetapopStateTensors,
         (torch.Tensor of size (L, A, R))
     """
 
-    MV_change = state.daily_vaccines / precomputed.total_pop_LAR_tensor - \
+    MV_change = state.daily_vaccines - \
                 params.vax_induced_immune_wane * state.MV
 
     return MV_change * dt

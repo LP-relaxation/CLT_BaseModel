@@ -11,7 +11,7 @@ Note: the order that the parameter values are described in this README may not n
 
 # "daily_vaccines_constant.csv"
 
-***MUST BE UPDATED!*** This is a placeholder file -- notice that all "daily_vaccines" are 100. Must be updated with actual historical time series. 
+***MUST BE UPDATED!*** This is a placeholder file -- notice that all "daily_vaccines" are 0.0016%. Must be updated with actual historical time series. 
 
 # "absolute_humidity_austin_2023_2024.csv"
 

@@ -53,7 +53,8 @@ def test_oop_and_torch_agree(make_flu_metapop_model):
     schedules = d["schedule_tensors"]
     precomputed = d["precomputed"]
 
-    num_days = 10
+    days_list = [1, 5, 10, 25, 50]
+    num_days = max(days_list)
 
     torch_state_history, torch_tvar_history = flu.torch_simulate_full_history(state,
                                                                               params,
@@ -61,16 +62,24 @@ def test_oop_and_torch_agree(make_flu_metapop_model):
                                                                               schedules,
                                                                               num_days,
                                                                               1)
-
-    for day in range(1):
-        oop_model.simulate_until_day(day + 1)
-        L = oop_model.precomputed.L
-        for subpop_ix in range(L):
-            subpop_model = oop_model._subpop_models_ordered[subpop_ix]
-            for name, compartment in subpop_model.compartments.items():
-                oop_val = torch.tensor(compartment.history_vals_list[day])
-                assert torch.allclose(oop_val,
-                                      torch_state_history[name][day][subpop_ix], rtol=1e-2)
+    
+    for max_day in days_list:
+        print('max_day:', max_day)
+        for day in range(max_day):
+            oop_model = make_flu_metapop_model("binom_deterministic_no_round")
+            oop_model.simulate_until_day(day + 1)
+            L = oop_model.precomputed.L
+            for subpop_ix in range(L):
+                subpop_model = oop_model._subpop_models_ordered[subpop_ix]
+                for name, compartment in subpop_model.compartments.items():
+                    oop_val = torch.tensor(compartment.history_vals_list[day])
+                    assert torch.allclose(oop_val,
+                                        torch_state_history[name][day][subpop_ix], rtol=1e-2)
+                    
+                    # Check vaccine induced immunity epi metrics are the same too
+                    oop_MV = torch.tensor(subpop_model.state.MV)
+                    torch_MV = torch_state_history['MV'][day][subpop_ix]
+                    assert torch.allclose(oop_MV, torch_MV)
 
 
 @pytest.mark.parametrize("transition_type", binom_no_taylor_transition_types_list)
