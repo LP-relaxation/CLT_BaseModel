@@ -399,7 +399,11 @@ class TransitionVariable(ABC):
                 Poisson-distributed integers representing number
                 of individuals transitioning in each age-risk group.
         """
-        return RNG.poisson(self.base_count * self.current_rate / float(num_timesteps))
+        # Make sure random variable values are not greater than the base counts
+        value = RNG.poisson(self.base_count * self.current_rate / float(num_timesteps))
+        value = np.minimum(value, self.base_count)
+        
+        return value
 
     def get_binom_deterministic_realization(self,
                                             RNG: np.random.Generator,

@@ -276,7 +276,8 @@ def test_M_no_waning_no_saturation(make_flu_subpop_model, transition_type):
     subpop_model.simulation_settings = clt.updated_dataclass(subpop_model.simulation_settings,
                                                              {"transition_variables_to_save": ["R_to_S"]})
     subpop_model.modify_subpop_params({"inf_induced_immune_wane": 0,
-                                       "inf_induced_saturation": 0})
+                                       "inf_induced_saturation": 0,
+                                       "vax_induced_saturation": 0,})
 
     subpop_model.simulate_until_day(100)
 
