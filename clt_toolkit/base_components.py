@@ -1062,6 +1062,16 @@ class Schedule(StateVariable, ABC):
                 model's current simulation day.
         """
         pass
+    
+    def postprocess_data_input(self) -> None:
+        """
+        Subpop classes must provide a concrete implementation of
+        updating `current_val` in-place.
+        
+        Used to modify timeseries_df format, if necessary.
+        """
+        
+        pass
 
 
 class InteractionTerm(StateVariable, ABC):

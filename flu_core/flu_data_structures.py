@@ -81,9 +81,10 @@ class FluSubpopState(clt.SubpopState):
             emulates a simple staged-alert policy
         daily_vaccines (np.ndarray of positive ints):
             holds current value of DailyVaccines instance,
-            corresponding number of individuals who received influenza
-            vaccine on that day, for given age-risk group
-            (generally derived from historical data)
+            corresponding proportion of individuals in each
+            age and risk group who received influenza
+            vaccine on that day (generally derived from
+            historical data)
     """
 
     S: Optional[np.ndarray] = None
@@ -299,7 +300,7 @@ class FluSubpopSchedules:
             correspond to consecutive calendar days and must either
             be strings with `"YYYY-MM-DD"` format or `datetime.date`
             objects -- "value" entries correspond to historical
-            number vaccinated on those days
+            proportion vaccinated on those days
     """
 
     absolute_humidity: Optional[pd.DataFrame] = None
