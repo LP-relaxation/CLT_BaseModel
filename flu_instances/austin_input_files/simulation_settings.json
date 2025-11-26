@@ -1,0 +1,7 @@
+{
+	"timesteps_per_day":7,
+	"transition_type":"binom_deterministic",
+	"start_real_date": "2023-10-20",
+	"save_daily_history": true,
+        "transition_variables_to_save": ["ISH_to_HR", "ISH_to_HD", "S_to_E", "R_to_S","IA_to_R", "ISR_to_R","HR_to_R"]
+}

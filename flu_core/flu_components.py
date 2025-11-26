@@ -6,6 +6,7 @@ import pandas as pd
 import sciris as sc
 from typing import Optional
 from abc import ABC
+import json
 
 from functools import reduce
 
@@ -527,6 +528,20 @@ class DailyVaccines(clt.Schedule):
     def update_current_val(self, params, current_date: datetime.date) -> None:
         self.current_val = self.timeseries_df.loc[
             self.timeseries_df["date"] == current_date, "daily_vaccines"].values[0]
+        
+    def postprocess_data_input(self) -> None:
+        """
+            Converts daily_vaccines column from
+            a string representation of a list of lists
+            (each day) of format AxR into np.ndarray. 
+        """
+        
+        self.timeseries_df['daily_vaccines'] = \
+            self.timeseries_df['daily_vaccines'].apply(json.loads)
+        self.timeseries_df.loc[:, 'daily_vaccines'] = \
+            self.timeseries_df['daily_vaccines'].apply(
+                lambda x: np.asarray(x)
+                )
 
 
 class AbsoluteHumidity(clt.Schedule):
@@ -768,6 +783,7 @@ class FluSubpopModel(clt.SubpopModel):
                                  "`date.datetime` objects.") from e
 
             schedules[field].timeseries_df = df
+            schedules[field].postprocess_data_input()
 
         return schedules
 
@@ -1274,10 +1290,17 @@ class FluMetapopModel(clt.MetapopModel, ABC):
                 # Pandas complains about `SettingWithCopyWarning` so we work on a copy explicitly to stop it
                 #   from complaining...
                 df = df.copy()
-                df[values_column_name] = df[values_column_name].astype(object)
-                df.loc[:, values_column_name] = df[values_column_name].apply(
-                    lambda x, A=A, R=R: np.broadcast_to(np.asarray(x).reshape(1, 1), (A, R))
-                )
+                
+                if schedule_name == 'daily_vaccines':
+                    # Daily vaccines are already given as A x R arrays
+                    if df[values_column_name].values[0].shape != (A, R):
+                        raise ValueError(f"Error: daily vaccines arrays must have shape ({A}, {R}). " \
+                            f"Current input has shape {df[values_column_name].values[0].shape}.")
+                else:
+                    df[values_column_name] = df[values_column_name].astype(object)
+                    df.loc[:, values_column_name] = df[values_column_name].apply(
+                        lambda x, A=A, R=R: np.broadcast_to(np.asarray(x).reshape(1, 1), (A, R))
+                    )
 
                 metapop_vals.append(np.asarray(df[values_column_name]))
 
